@@ -485,6 +485,9 @@ public abstract class V1SchemeVerifier {
                 return;
             }
 
+            // TODO: PKCS7 class doesn't guarantee that returned certificates' getEncoded returns
+            // the original encoded form of certificates rather than the DER re-encoded form. We
+            // need to replace the PKCS7 parser/verifier.
             List<X509Certificate> certChain;
             try {
                 certChain = verifiedSignerInfo.getCertificateChain(sigBlock);

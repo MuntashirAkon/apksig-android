@@ -21,15 +21,21 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.Principal;
+import java.security.Provider;
 import java.security.PublicKey;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateNotYetValidException;
+import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
+import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 import java.util.Set;
+
+import javax.security.auth.x500.X500Principal;
 
 /**
  * {@link X509Certificate} which delegates all method invocations to the provided delegate
@@ -175,5 +181,36 @@ public class DelegatingX509Certificate extends X509Certificate {
     @Override
     public PublicKey getPublicKey() {
         return mDelegate.getPublicKey();
+    }
+
+    @Override
+    public X500Principal getIssuerX500Principal() {
+        return mDelegate.getIssuerX500Principal();
+    }
+
+    @Override
+    public X500Principal getSubjectX500Principal() {
+        return mDelegate.getSubjectX500Principal();
+    }
+
+    @Override
+    public List<String> getExtendedKeyUsage() throws CertificateParsingException {
+        return mDelegate.getExtendedKeyUsage();
+    }
+
+    @Override
+    public Collection<List<?>> getSubjectAlternativeNames() throws CertificateParsingException {
+        return mDelegate.getSubjectAlternativeNames();
+    }
+
+    @Override
+    public Collection<List<?>> getIssuerAlternativeNames() throws CertificateParsingException {
+        return mDelegate.getIssuerAlternativeNames();
+    }
+
+    @Override
+    public void verify(PublicKey key, Provider sigProvider) throws CertificateException,
+            NoSuchAlgorithmException, InvalidKeyException, SignatureException {
+        mDelegate.verify(key, sigProvider);
     }
 }
