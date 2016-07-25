@@ -120,15 +120,21 @@ public class RandomAccessFileDataSource implements DataSource {
 
         long offsetInFile = mOffset + offset;
         int remaining = size;
-        FileChannel fileChannel = mFile.getChannel();
-        while (remaining > 0) {
-            int chunkSize;
-            synchronized (mFile) {
-                fileChannel.position(offsetInFile);
-                chunkSize = fileChannel.read(dest);
+        int prevLimit = dest.limit();
+        try {
+            dest.limit(dest.position() + size);
+            FileChannel fileChannel = mFile.getChannel();
+            while (remaining > 0) {
+                int chunkSize;
+                synchronized (mFile) {
+                    fileChannel.position(offsetInFile);
+                    chunkSize = fileChannel.read(dest);
+                }
+                offsetInFile += chunkSize;
+                remaining -= chunkSize;
             }
-            offsetInFile += chunkSize;
-            remaining -= chunkSize;
+        } finally {
+            dest.limit(prevLimit);
         }
     }
 
