@@ -457,10 +457,34 @@ public abstract class V1SchemeSigner {
         Pair<String, AlgorithmId> signatureAlgs =
                 getSignerInfoSignatureAlgorithm(signerPublicKey, digestAlgorithm);
         String jcaSignatureAlgorithm = signatureAlgs.getFirst();
-        Signature signature = Signature.getInstance(jcaSignatureAlgorithm);
-        signature.initSign(signerConfig.privateKey);
-        signature.update(signatureFileBytes);
-        byte[] signatureBytes = signature.sign();
+        byte[] signatureBytes;
+        try {
+            Signature signature = Signature.getInstance(jcaSignatureAlgorithm);
+            signature.initSign(signerConfig.privateKey);
+            signature.update(signatureFileBytes);
+            signatureBytes = signature.sign();
+        } catch (InvalidKeyException e) {
+            throw new InvalidKeyException("Failed to sign using " + jcaSignatureAlgorithm, e);
+        } catch (SignatureException e) {
+            throw new SignatureException("Failed to sign using " + jcaSignatureAlgorithm, e);
+        }
+
+        try {
+            Signature signature = Signature.getInstance(jcaSignatureAlgorithm);
+            signature.initVerify(signerPublicKey);
+            signature.update(signatureFileBytes);
+            if (!signature.verify(signatureBytes)) {
+                throw new SignatureException("Signature did not verify");
+            }
+        } catch (InvalidKeyException e) {
+            throw new InvalidKeyException(
+                    "Failed to verify generated " + jcaSignatureAlgorithm + " signature using"
+                            + " public key from certificate", e);
+        } catch (SignatureException e) {
+            throw new SignatureException(
+                    "Failed to verify generated " + jcaSignatureAlgorithm + " signature using"
+                            + " public key from certificate", e);
+        }
 
         X500Name issuerName;
         try {
