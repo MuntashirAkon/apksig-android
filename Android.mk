@@ -27,3 +27,14 @@ LOCAL_SRC_FILES := $(call all-java-files-under, src/main/java)
 LOCAL_JAVACFLAGS := -XDignore.symbol.file
 
 include $(BUILD_HOST_JAVA_LIBRARY)
+
+
+# apksigner command-line tool for signing APKs and verifying their signatures
+# ============================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE := apksigner
+LOCAL_SRC_FILES := $(call all-java-files-under, src/apksigner/java)
+LOCAL_JAVA_RESOURCE_DIRS = src/apksigner/java
+LOCAL_JAR_MANIFEST := src/apksigner/apksigner.mf
+LOCAL_STATIC_JAVA_LIBRARIES := apksig
+include $(BUILD_HOST_JAVA_LIBRARY)
