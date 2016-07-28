@@ -1,0 +1,116 @@
+USAGE: apksigner sign [options] apk
+
+This signs the provided APK using one or more signers, each represented by
+an asymmetric key pair and a corresponding certificate. Typically, an APK is
+signed by just one signer. For each signer, you need to provide the signer's
+private key and certificate.
+
+By default, the tool signs the APK in a way which should make the APK verify on
+all known Android platforms. Unfortunately, this means that stronger signing
+algorithms supported only by newer platforms cannot be used. If the APK's
+minSdkVersion is higher than 1, it is best to provide the minSdkVersion to this
+tool via --min-sdk-version. This will enable the tool to use stronger signing
+algorithms when possible.
+
+
+        OPTIONS
+
+--out                 File into which to output the signed APK. By default, the
+                      APK is signed in-place, overwriting the input file.
+
+--min-sdk-version     Lowest API Level on which this APK's signatures will be
+                      verified. By default, 1 is used. The suggested strategy is
+                      to set this value to the corresponding value from the
+                      APK's AndroidManifest.xml. The higher the value, the
+                      stronger security parameters are used when signing.
+
+--max-sdk-version     Highest API Level on which this APK's signatures will be
+                      verified. By default, the highest possible value is used.
+
+--v1-signing-enabled  Whether to enable signing using JAR signing scheme (aka v1
+                      signing scheme, the one used in Android since day one). By
+                      default, signing using this scheme is enabled based on min
+                      and max SDK version (see --min-sdk-version and
+                      --max-sdk-version).
+
+--v2-signing-enabled  Whether to enable signing using APK Signature Scheme v2
+                      (aka v2 signing scheme, the one introduced in Android
+                      Nougat, API Level 24). By default, signing using this
+                      scheme is enabled based on min and max SDK version (see
+                      --min-sdk-version and --max-sdk-version).
+
+-v, --verbose         Verbose output mode
+
+-h, --help            Show help about this command and exit
+
+
+        PER-SIGNER OPTIONS
+These options specify the configuration of a particular signer. To delimit
+options of different signers, use --next-signer.
+
+--next-signer         Delimits options of two different signers. There is no
+                      need to use this option when only one signer is used.
+
+--v1-signer-name      Basename for files comprising the JAR signature scheme
+                      (aka v1 scheme) signature of this signer. By default,
+                      KeyStore key alias is used.
+
+        PER-SIGNER SIGNING KEY & CERTIFICATE OPTIONS
+--ks                  Load private key and certificate chain from the Java
+                      KeyStore initialized from the specified file. NONE means
+                      no file is needed by KeyStore, which is the case for some
+                      PKCS #11 KeyStores.
+
+--ks-key-alias        Alias under which the private key and certificate are
+                      stored in the KeyStore. This must be specified if the
+                      KeyStore contains multiple keys.
+
+--ks-pass             KeyStore password (see --ks). The following formats are
+                      supported:
+                          pass:<password> password provided inline
+                          env:<name>      password provided in the named
+                                          environment variable
+                          file:<file>     password provided in the named
+                                          file, as a single line
+                          stdin           password provided on standard input,
+                                          as a single line
+                      By default, if opening the keystore requires a password,
+                      the tool will prompt for password via console or standard
+                      input.
+                      When the same file (including standard input) is used for
+                      providing multiple passwords, the passwords are read from
+                      the file one line at a time. Passwords are read in the
+                      order in which signers are specified and, within each
+                      signer, KeyStore password is read before the key password
+                      is read.
+
+--key-pass            Password with which the private key is protected. By
+                      default it is assumed that the key is protected using the
+                      same password as the KeyStore (see --ks-pass). The
+                      following formats are supported:
+                          pass:<password> password provided inline
+                          env:<name>      password provided in the named
+                                          environment variable
+                          file:<file>     password provided in the named
+                                          file, as a single line
+                          stdin           password provided on standard input,
+                                          as a single line
+                      By default, if the key is password-protected, the tool
+                      will prompt for password via console or standard input.
+                      When the same file (including standard input) is used for
+                      providing multiple passwords, the passwords are read from
+                      the file one line at a time. Passwords are read in the
+                      order in which signers are specified and, within each
+                      signer, KeyStore password is read before the key password
+                      is read.
+
+
+        EXAMPLES
+
+1. Sign a minSdkVersion 15 APK using the one and only key in keystore
+   release.jks:
+$ apksigner sign --min-sdk-version 15 --ks release.jks app.apk
+
+2. Sign a minSdkVersion 15 APK using two keys:
+$ apksigner sign --min-sdk-version 15 --ks release.jks \
+    --next-signer --ks magic.jks app.apk
