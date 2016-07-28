@@ -36,6 +36,7 @@ import java.security.Key;
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.PrivateKey;
+import java.security.Provider;
 import java.security.PublicKey;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
@@ -143,6 +144,18 @@ public class ApkSignerTool {
             } else if ("v1-signer-name".equals(optionName)) {
                 signerParams.v1SigFileBasename =
                         optionsParser.getRequiredValue("JAR signature file basename");
+            } else if ("ks-type".equals(optionName)) {
+                signerParams.keystoreType = optionsParser.getRequiredValue("KeyStore type");
+            } else if ("ks-provider-name".equals(optionName)) {
+                signerParams.keystoreProviderName =
+                        optionsParser.getRequiredValue("JCA KeyStore Provider name");
+            } else if ("ks-provider-class".equals(optionName)) {
+                signerParams.keystoreProviderClass =
+                        optionsParser.getRequiredValue("JCA KeyStore Provider class name");
+            } else if ("ks-provider-arg".equals(optionName)) {
+                signerParams.keystoreProviderArg =
+                        optionsParser.getRequiredValue(
+                                "JCA KeyStore Provider constructor argument");
             } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
                 verbose = optionsParser.getOptionalBooleanValue(true);
             } else {
@@ -430,10 +443,14 @@ public class ApkSignerTool {
     private static class SignerParams {
         String name;
 
-        String keystoreKeyAlias;
         String keystoreFile;
+        String keystoreKeyAlias;
         String keystorePasswordSpec;
         String keyPasswordSpec;
+        String keystoreType;
+        String keystoreProviderName;
+        String keystoreProviderClass;
+        String keystoreProviderArg;
 
         String v1SigFileBasename;
 
@@ -442,10 +459,14 @@ public class ApkSignerTool {
 
         private boolean isEmpty() {
             return (name == null)
-                    && (keystoreKeyAlias == null)
                     && (keystoreFile == null)
+                    && (keystoreKeyAlias == null)
                     && (keystorePasswordSpec == null)
                     && (keyPasswordSpec == null)
+                    && (keystoreType == null)
+                    && (keystoreProviderName == null)
+                    && (keystoreProviderClass == null)
+                    && (keystoreProviderArg == null)
                     && (v1SigFileBasename == null)
                     && (privateKey == null)
                     && (certs == null);
@@ -462,7 +483,34 @@ public class ApkSignerTool {
             }
 
             // 1. Obtain a KeyStore implementation
-            KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+            String ksType = (keystoreType != null) ? keystoreType : KeyStore.getDefaultType();
+            KeyStore ks;
+            if (keystoreProviderName != null) {
+                // Use a named Provider (assumes the provider is already installed)
+                ks = KeyStore.getInstance(ksType, keystoreProviderName);
+            } else if (keystoreProviderClass != null) {
+                // Use a new Provider instance (does not require the provider to be installed)
+                Class<?> ksProviderClass = Class.forName(keystoreProviderClass);
+                if (!Provider.class.isAssignableFrom(ksProviderClass)) {
+                    throw new ParameterException(
+                            "Keystore Provider class " + keystoreProviderClass + " not subclass of "
+                                    + Provider.class.getName());
+                }
+                Provider ksProvider;
+                if (keystoreProviderArg != null) {
+                    // Single-arg Provider constructor
+                    ksProvider =
+                            (Provider) ksProviderClass.getConstructor(String.class)
+                                    .newInstance(keystoreProviderArg);
+                } else {
+                    // No-arg Provider constructor
+                    ksProvider = (Provider) ksProviderClass.newInstance();
+                }
+                ks = KeyStore.getInstance(ksType, ksProvider);
+            } else {
+                // Use the highest-priority Provider which offers the requested KeyStore type
+                ks = KeyStore.getInstance(ksType);
+            }
 
             // 2. Load the KeyStore
             char[] keystorePwd = null;

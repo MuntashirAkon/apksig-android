@@ -104,6 +104,23 @@ options of different signers, use --next-signer.
                       signer, KeyStore password is read before the key password
                       is read.
 
+--ks-type             Type/algorithm of KeyStore to use. By default, the default
+                      type is used.
+
+--ks-provider-name    Name of the JCA Provider from which to request the
+                      KeyStore implementation. By default, the highest priority
+                      provider is used. See --ks-provider-class for the
+                      alternative way to specify a provider.
+
+--ks-provider-class   Fully-qualified class name of the JCA Provider from which
+                      to request the KeyStore implementation. By default, the
+                      provider is chosen based on --ks-provider-name.
+
+--ks-provider-arg     Value to pass into the constructor of the JCA Provider
+                      class specified by --ks-provider-class. The value is
+                      passed into the constructor as java.lang.String. By
+                      default, the no-arg provider's constructor is used.
+
 
         EXAMPLES
 
