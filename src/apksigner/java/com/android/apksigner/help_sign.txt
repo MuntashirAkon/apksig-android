@@ -53,9 +53,13 @@ options of different signers, use --next-signer.
 
 --v1-signer-name      Basename for files comprising the JAR signature scheme
                       (aka v1 scheme) signature of this signer. By default,
-                      KeyStore key alias is used.
+                      KeyStore key alias or basename of key file is used.
 
         PER-SIGNER SIGNING KEY & CERTIFICATE OPTIONS
+There are two ways to provide the signer's private key and certificate: (1) Java
+KeyStore (see --ks), or (2) private key file in PKCS #8 format and certificate
+file in X.509 format (see --key and --cert).
+
 --ks                  Load private key and certificate chain from the Java
                       KeyStore initialized from the specified file. NONE means
                       no file is needed by KeyStore, which is the case for some
@@ -85,9 +89,9 @@ options of different signers, use --next-signer.
                       is read.
 
 --key-pass            Password with which the private key is protected. By
-                      default it is assumed that the key is protected using the
-                      same password as the KeyStore (see --ks-pass). The
-                      following formats are supported:
+                      default it is assumed that KeyStore keys are protected
+                      using the same password as their KeyStore (see --ks-pass).
+                      The following formats are supported:
                           pass:<password> password provided inline
                           env:<name>      password provided in the named
                                           environment variable
@@ -121,6 +125,14 @@ options of different signers, use --next-signer.
                       passed into the constructor as java.lang.String. By
                       default, the no-arg provider's constructor is used.
 
+--key                 Load private key from the specified file. If the key is
+                      password-protected, the password will be prompted via
+                      standard input unless specified otherwise using
+                      --key-pass. The file must be in PKCS #8 DER format.
+
+--cert                Load certificate chain from the specified file. The file
+                      must be in X.509 PEM or DER format.
+
 
         EXAMPLES
 
@@ -128,6 +140,11 @@ options of different signers, use --next-signer.
    release.jks:
 $ apksigner sign --min-sdk-version 15 --ks release.jks app.apk
 
-2. Sign a minSdkVersion 15 APK using two keys:
+2. Sign a minSdkVersion 15 APK using a private key and certificate stored as
+   individual files:
+$ apksigner sign --min-sdk-version 15 --key release.pk8 \
+    --cert release.x509.pem app.apk
+
+3. Sign a minSdkVersion 15 APK using two keys:
 $ apksigner sign --min-sdk-version 15 --ks release.jks \
     --next-signer --ks magic.jks app.apk
