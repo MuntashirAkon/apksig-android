@@ -55,6 +55,8 @@ import com.android.apksig.zip.ZipFormatException;
  * data.
  *
  * <p>Use {@link Builder} to obtain instances of this signer.
+ *
+ * @see <a href="https://source.android.com/security/apksigning/index.html">Application Signing</a>
  */
 public class ApkSigner {
 

@@ -48,6 +48,8 @@ import java.util.Set;
  * the verifier to be used for checking whether an APK's signatures will verify on Android.
  *
  * <p>Use {@link Builder} to obtain instances of this verifier.
+ *
+ * @see <a href="https://source.android.com/security/apksigning/index.html">Application Signing</a>
  */
 public class ApkVerifier {
 

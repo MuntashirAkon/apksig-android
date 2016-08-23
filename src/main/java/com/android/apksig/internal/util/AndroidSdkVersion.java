@@ -33,7 +33,6 @@ public abstract class AndroidSdkVersion {
     /** Android 5.0. A flat one with beautiful shadows. But still tasty. */
     public static final int LOLLIPOP = 21;
 
-    // TODO: Update Javadoc / constant name once N is assigned a proper name / version code.
-    /** Android N. */
+    /** Android 7.0. N is for Nougat. */
     public static final int N = 24;
 }

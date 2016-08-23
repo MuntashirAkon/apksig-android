@@ -60,7 +60,7 @@ import java.util.Set;
  * bit of the APK, as opposed to the JAR Signature Scheme which protects only the names and
  * uncompressed contents of ZIP entries.
  *
- * <p>TODO: Link to APK Signature Scheme v2 documentation once it's available.
+ * @see <a href="https://source.android.com/security/apksigning/v2.html">APK Signature Scheme v2</a>
  */
 public abstract class V2SchemeVerifier {
 

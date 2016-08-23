@@ -109,6 +109,8 @@ import com.android.apksig.util.DataSource;
  * not invoked. In this mode, the engine has less control over output because it cannot request that
  * some JAR entries are not output. Nevertheless, the engine will attempt to make the output APK
  * signed and will report an error if cannot do so.
+ *
+ * @see <a href="https://source.android.com/security/apksigning/index.html">Application Signing</a>
  */
 public interface ApkSignerEngine extends Closeable {
 
