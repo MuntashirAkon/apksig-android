@@ -19,9 +19,10 @@ package com.android.apksigner;
 import java.io.BufferedReader;
 import java.io.Console;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -75,7 +76,9 @@ class PasswordRetriever implements AutoCloseable {
             }
 
             if (mStdIn == null) {
-                mStdIn = new BufferedReader(new InputStreamReader(System.in));
+                mStdIn =
+                        new BufferedReader(
+                                new InputStreamReader(System.in, Charset.defaultCharset()));
             }
             System.out.println(description + ":");
             String line = mStdIn.readLine();
@@ -89,7 +92,7 @@ class PasswordRetriever implements AutoCloseable {
             File file = new File(name).getCanonicalFile();
             BufferedReader in = mFileReaders.get(file);
             if (in == null) {
-                in = new BufferedReader(new FileReader(file));
+                in = Files.newBufferedReader(file.toPath(), Charset.defaultCharset());
                 mFileReaders.put(file, in);
             }
             String line = in.readLine();
