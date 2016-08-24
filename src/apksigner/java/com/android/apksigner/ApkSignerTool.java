@@ -580,7 +580,7 @@ public class ApkSignerTool {
                                     .newInstance(keystoreProviderArg);
                 } else {
                     // No-arg Provider constructor
-                    ksProvider = (Provider) ksProviderClass.newInstance();
+                    ksProvider = (Provider) ksProviderClass.getConstructor().newInstance();
                 }
                 ks = KeyStore.getInstance(ksType, ksProvider);
             } else {
