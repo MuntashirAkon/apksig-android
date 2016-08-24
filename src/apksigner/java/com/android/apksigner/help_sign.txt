@@ -5,13 +5,6 @@ an asymmetric key pair and a corresponding certificate. Typically, an APK is
 signed by just one signer. For each signer, you need to provide the signer's
 private key and certificate.
 
-By default, the tool signs the APK in a way which should make the APK verify on
-all known Android platforms. Unfortunately, this means that stronger signing
-algorithms supported only by newer platforms cannot be used. If the APK's
-minSdkVersion is higher than 1, it is best to provide the minSdkVersion to this
-tool via --min-sdk-version. This will enable the tool to use stronger signing
-algorithms when possible.
-
 
         OPTIONS
 
@@ -19,10 +12,9 @@ algorithms when possible.
                       APK is signed in-place, overwriting the input file.
 
 --min-sdk-version     Lowest API Level on which this APK's signatures will be
-                      verified. By default, 1 is used. The suggested strategy is
-                      to set this value to the corresponding value from the
-                      APK's AndroidManifest.xml. The higher the value, the
-                      stronger security parameters are used when signing.
+                      verified. By default, the value from AndroidManifest.xml
+                      is used. The higher the value, the stronger security
+                      parameters are used when signing.
 
 --max-sdk-version     Highest API Level on which this APK's signatures will be
                       verified. By default, the highest possible value is used.
@@ -136,15 +128,11 @@ file in X.509 format (see --key and --cert).
 
         EXAMPLES
 
-1. Sign a minSdkVersion 15 APK using the one and only key in keystore
-   release.jks:
-$ apksigner sign --min-sdk-version 15 --ks release.jks app.apk
+1. Sign an APK using the one and only key in keystore release.jks:
+$ apksigner sign --ks release.jks app.apk
 
-2. Sign a minSdkVersion 15 APK using a private key and certificate stored as
-   individual files:
-$ apksigner sign --min-sdk-version 15 --key release.pk8 \
-    --cert release.x509.pem app.apk
+2. Sign an APK using a private key and certificate stored as individual files:
+$ apksigner sign --key release.pk8 --cert release.x509.pem app.apk
 
-3. Sign a minSdkVersion 15 APK using two keys:
-$ apksigner sign --min-sdk-version 15 --ks release.jks \
-    --next-signer --ks magic.jks app.apk
+3. Sign an APK using two keys:
+$ apksigner sign --ks release.jks --next-signer --ks magic.jks app.apk

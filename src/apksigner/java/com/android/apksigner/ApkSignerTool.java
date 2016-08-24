@@ -26,8 +26,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -56,6 +59,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import javax.crypto.EncryptedPrivateKeyInfo;
 import javax.crypto.SecretKey;
@@ -118,6 +123,7 @@ public class ApkSignerTool {
         boolean v1SigningEnabled = true;
         boolean v2SigningEnabled = true;
         int minSdkVersion = 1;
+        boolean minSdkVersionSpecified = false;
         int maxSdkVersion = Integer.MAX_VALUE;
         List<SignerParams> signers = new ArrayList<>(1);
         SignerParams signerParams = new SignerParams();
@@ -132,8 +138,9 @@ public class ApkSignerTool {
                 outputApk = new File(optionsParser.getRequiredValue("Output file name"));
             } else if ("min-sdk-version".equals(optionName)) {
                 minSdkVersion = optionsParser.getRequiredIntValue("Mininimum API Level");
+                minSdkVersionSpecified = true;
             } else if ("max-sdk-version".equals(optionName)) {
-                minSdkVersion = optionsParser.getRequiredIntValue("Maximum API Level");
+                maxSdkVersion = optionsParser.getRequiredIntValue("Maximum API Level");
             } else if ("v1-signing-enabled".equals(optionName)) {
                 v1SigningEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("v2-signing-enabled".equals(optionName)) {
@@ -185,12 +192,6 @@ public class ApkSignerTool {
         }
         signerParams = null;
 
-        if (minSdkVersion > maxSdkVersion) {
-            throw new ParameterException(
-                    "Min API Level (" + minSdkVersion + ") > max API Level (" + maxSdkVersion
-                            + ")");
-        }
-
         if (signers.isEmpty()) {
             throw new ParameterException("At least one signer must be specified");
         }
@@ -205,6 +206,23 @@ public class ApkSignerTool {
         File inputApk = new File(params[0]);
         if (outputApk == null) {
             outputApk = inputApk;
+        }
+
+        if (!minSdkVersionSpecified) {
+            try {
+                minSdkVersion = getMinSdkVersionFromAndroidManifest(inputApk);
+            } catch (IOException | AndroidBinXmlParser.XmlParserException e) {
+                throw new IOException(
+                        "Failed to deduce Min API Level from APK's AndroidManifest.xml"
+                                + ". Use --min-sdk-version to override.",
+                        e);
+            }
+        }
+
+        if (minSdkVersion > maxSdkVersion) {
+            throw new ParameterException(
+                    "Min API Level (" + minSdkVersion + ") > max API Level (" + maxSdkVersion
+                            + ")");
         }
 
         List<DefaultApkSignerEngine.SignerConfig> signerConfigs =
@@ -293,6 +311,7 @@ public class ApkSignerTool {
         }
 
         int minSdkVersion = 1;
+        boolean minSdkVersionSpecified = false;
         int maxSdkVersion = Integer.MAX_VALUE;
         boolean printCerts = false;
         boolean verbose = false;
@@ -303,8 +322,9 @@ public class ApkSignerTool {
             String optionOriginalForm = optionsParser.getOptionOriginalForm();
             if ("min-sdk-version".equals(optionName)) {
                 minSdkVersion = optionsParser.getRequiredIntValue("Mininimum API Level");
+                minSdkVersionSpecified = true;
             } else if ("max-sdk-version".equals(optionName)) {
-                minSdkVersion = optionsParser.getRequiredIntValue("Maximum API Level");
+                maxSdkVersion = optionsParser.getRequiredIntValue("Maximum API Level");
             } else if ("print-certs".equals(optionName)) {
                 printCerts = optionsParser.getOptionalBooleanValue(true);
             } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
@@ -320,11 +340,6 @@ public class ApkSignerTool {
                                 + " options.");
             }
         }
-        if (minSdkVersion > maxSdkVersion) {
-            throw new ParameterException(
-                    "Min API Level (" + minSdkVersion + ") > max API Level (" + maxSdkVersion
-                            + ")");
-        }
         params = optionsParser.getRemainingParams();
 
         if (params.length < 1) {
@@ -333,6 +348,23 @@ public class ApkSignerTool {
             throw new ParameterException("Unexpected parameter(s) after APK (" + params[0] + ")");
         }
         File inputApk = new File(params[0]);
+
+        if (!minSdkVersionSpecified) {
+            try {
+                minSdkVersion = getMinSdkVersionFromAndroidManifest(inputApk);
+            } catch (IOException | AndroidBinXmlParser.XmlParserException e) {
+                throw new IOException(
+                        "Failed to deduce Min API Level from APK's AndroidManifest.xml"
+                                + ". Use --min-sdk-version to override.",
+                        e);
+            }
+        }
+
+        if (minSdkVersion > maxSdkVersion) {
+            throw new ParameterException(
+                    "Min API Level (" + minSdkVersion + ") > max API Level (" + maxSdkVersion
+                            + ")");
+        }
 
         ApkVerifier.Result result =
                 new ApkVerifier.Builder(inputApk)
@@ -760,16 +792,91 @@ public class ApkSignerTool {
         }
     }
 
+    private static int getMinSdkVersionFromAndroidManifest(File apk)
+            throws IOException, AndroidBinXmlParser.XmlParserException, ParameterException {
+        ByteBuffer manifestContents;
+        try (ZipFile zip = new ZipFile(apk)) {
+            ZipEntry manifestEntry = zip.getEntry("AndroidManifest.xml");
+            if (manifestEntry == null) {
+                throw new ParameterException(
+                        "Failed to deduce min API Level: APK does not contain AndroidManifest.xml"
+                                + ". Please specify --min-sdk-version.");
+            }
+            long manifestSizeBytes = manifestEntry.getSize();
+            if (manifestSizeBytes > Integer.MAX_VALUE) {
+                throw new IOException(
+                        manifestEntry.getName() + " too large: " + manifestSizeBytes + " bytes");
+            }
+            ByteArrayOutputStream manifestBytesOut =
+                    new ByteArrayOutputStream((int) manifestSizeBytes);
+            try (InputStream manifestIn = zip.getInputStream(manifestEntry)) {
+                drain(manifestIn, manifestBytesOut);
+            }
+            byte[] manifestBytes = manifestBytesOut.toByteArray();
+            manifestContents = ByteBuffer.wrap(manifestBytes);
+        }
+
+        // The default value of minSdkVersion is 1.
+        int result = 1;
+        // Android supports multiple uses-sdk elements, each of which overwrites the current value
+        // of minSdkVersion. We thus need to process all uses-sdk elements.
+        AndroidBinXmlParser parser = new AndroidBinXmlParser(manifestContents);
+        int eventType = parser.getEventType();
+        while (eventType != AndroidBinXmlParser.EVENT_END_DOCUMENT) {
+            if ((eventType == AndroidBinXmlParser.EVENT_START_ELEMENT)
+                    && (parser.getDepth() == 2)
+                    && ("uses-sdk".equals(parser.getName()))
+                    && (parser.getNamespace().isEmpty())) {
+                // In each uses-sdk element, minSdkVersion defaults to 1
+                int minSdkVersion = 1;
+                for (int i = 0; i < parser.getAttributeCount(); i++) {
+                    if (("minSdkVersion".equals(parser.getAttributeName(i)))
+                        && ("http://schemas.android.com/apk/res/android".equals(
+                                parser.getAttributeNamespace(i)))) {
+                        int valueType = parser.getAttributeValueType(i);
+                        switch (valueType) {
+                            case AndroidBinXmlParser.VALUE_TYPE_INT:
+                                minSdkVersion = parser.getAttributeIntValue(i);
+                                break;
+                            case AndroidBinXmlParser.VALUE_TYPE_STRING:
+                                throw new ParameterException(
+                                        "Codenames in AndroidManifest.xml's minSdkVersion not"
+                                        + " supported. Use --min-sdk-version to override.");
+                            default:
+                                throw new ParameterException(
+                                        "Unsupported value type in AndroidManifest.xml's"
+                                        + " minSdkVersion. Only numeric values supported"
+                                        + ". Use --min-sdk-version to override.");
+                        }
+                        break;
+                    }
+                }
+                // Android supports multiple uses-sdk elements. For each encountered uses-sdk
+                // element, the Android runtime checks that its minSdkVersion is not higher than the
+                // runtime's API Level. Thus, the effective minSdkVersion value is the maximum over
+                // the encountered minSdKVersion values.
+                result = Math.max(result, minSdkVersion);
+            }
+            eventType = parser.next();
+        }
+
+        return result;
+    }
+
     private static byte[] readFully(File file) throws IOException {
         ByteArrayOutputStream result = new ByteArrayOutputStream();
-        byte[] buf = new byte[65536];
-        int chunkSize;
         try (FileInputStream in = new FileInputStream(file)) {
-            while ((chunkSize = in.read(buf)) != -1) {
-                result.write(buf, 0, chunkSize);
-            }
+            drain(in, result);
         }
         return result.toByteArray();
+    }
+
+    private static void drain(InputStream in, OutputStream out) throws IOException {
+        byte[] buf = new byte[65536];
+        int chunkSize;
+        while ((chunkSize = in.read(buf)) != -1) {
+            out.write(buf, 0, chunkSize);
+        }
     }
 
     /**
