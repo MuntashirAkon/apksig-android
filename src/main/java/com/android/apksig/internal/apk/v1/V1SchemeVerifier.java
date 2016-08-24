@@ -1220,7 +1220,7 @@ public abstract class V1SchemeVerifier {
         return result;
     }
 
-    private static String[] JB_MR2_AND_NEWER_DIGEST_ALGS = {
+    private static final String[] JB_MR2_AND_NEWER_DIGEST_ALGS = {
             "SHA-512",
             "SHA-384",
             "SHA-256",
@@ -1248,7 +1248,7 @@ public abstract class V1SchemeVerifier {
         }
     }
 
-    private static Map<String, String> UPPER_CASE_JCA_DIGEST_ALG_TO_CANONICAL;
+    private static final Map<String, String> UPPER_CASE_JCA_DIGEST_ALG_TO_CANONICAL;
     static {
         UPPER_CASE_JCA_DIGEST_ALG_TO_CANONICAL = new HashMap<>(8);
         UPPER_CASE_JCA_DIGEST_ALG_TO_CANONICAL.put("MD5", "MD5");
@@ -1260,7 +1260,8 @@ public abstract class V1SchemeVerifier {
         UPPER_CASE_JCA_DIGEST_ALG_TO_CANONICAL.put("SHA-512", "SHA-512");
     }
 
-    private static Map<String, Integer> MIN_SDK_VESION_FROM_WHICH_DIGEST_SUPPORTED_IN_MANIFEST;
+    private static final Map<String, Integer>
+            MIN_SDK_VESION_FROM_WHICH_DIGEST_SUPPORTED_IN_MANIFEST;
     static {
         MIN_SDK_VESION_FROM_WHICH_DIGEST_SUPPORTED_IN_MANIFEST = new HashMap<>(5);
         MIN_SDK_VESION_FROM_WHICH_DIGEST_SUPPORTED_IN_MANIFEST.put("MD5", 0);

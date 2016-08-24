@@ -454,7 +454,7 @@ class AndroidBinXmlParser {
         public static final int RES_XML_TYPE_START_ELEMENT = 0x0102;
         public static final int RES_XML_TYPE_END_ELEMENT = 0x0103;
 
-        static int HEADER_MIN_SIZE_BYTES = 8;
+        static final int HEADER_MIN_SIZE_BYTES = 8;
 
         private final int mType;
         private final ByteBuffer mHeader;
