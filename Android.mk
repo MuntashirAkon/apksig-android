@@ -37,4 +37,19 @@ LOCAL_SRC_FILES := $(call all-java-files-under, src/apksigner/java)
 LOCAL_JAVA_RESOURCE_DIRS = src/apksigner/java
 LOCAL_JAR_MANIFEST := src/apksigner/apksigner.mf
 LOCAL_STATIC_JAVA_LIBRARIES := apksig
+# Output the apksigner.jar library
 include $(BUILD_HOST_JAVA_LIBRARY)
+
+# Output the shell script wrapper around the library
+include $(CLEAR_VARS)
+LOCAL_IS_HOST_MODULE := true
+LOCAL_MODULE_CLASS := EXECUTABLES
+LOCAL_MODULE := apksigner
+
+include $(BUILD_SYSTEM)/base_rules.mk
+
+$(LOCAL_BUILT_MODULE): $(HOST_OUT_JAVA_LIBRARIES)/apksigner$(COMMON_JAVA_PACKAGE_SUFFIX)
+$(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/etc/apksigner | $(ACP)
+	@echo "Copy: $(PRIVATE_MODULE) ($@)"
+	$(copy-file-to-new-target)
+	$(hide) chmod 755 $@
