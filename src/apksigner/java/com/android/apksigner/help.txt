@@ -3,8 +3,8 @@ USAGE: apksigner <command> [options]
        apksigner --help
 
 EXAMPLE:
-       apksigner sign --min-sdk-version 15 --ks release.jks app.apk
-       apksigner verify --verbose --min-sdk-version 15 app.apk
+       apksigner sign --ks release.jks app.apk
+       apksigner verify --verbose app.apk
 
 apksigner is a tool for signing Android APK files and for checking whether
 signatures of APK files will verify on Android devices.
