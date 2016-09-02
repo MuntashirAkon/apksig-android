@@ -130,9 +130,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         mV2SignerConfigs =
                 (v2SigningEnabled)
                         ? new ArrayList<>(signerConfigs.size()) : Collections.emptyList();
-        mV1ContentDigestAlgorithm =
-                (v1SigningEnabled)
-                        ? V1SchemeSigner.getSuggestedContentDigestAlgorithm(minSdkVersion) : null;
+        DigestAlgorithm v1ContentDigestAlgorithm = null;
         for (SignerConfig signerConfig : signerConfigs) {
             List<X509Certificate> certificates = signerConfig.getCertificates();
             PublicKey publicKey = certificates.get(0).getPublicKey();
@@ -145,8 +143,20 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 v1SignerConfig.name = signerConfig.getName();
                 v1SignerConfig.privateKey = signerConfig.getPrivateKey();
                 v1SignerConfig.certificates = certificates;
-                v1SignerConfig.contentDigestAlgorithm = mV1ContentDigestAlgorithm;
                 v1SignerConfig.signatureDigestAlgorithm = v1SignatureDigestAlgorithm;
+                // For digesting contents of APK entries and of MANIFEST.MF, pick the algorithm
+                // of comparable strength to the digest algorithm used for computing the signature.
+                // When there are multiple signers, pick the strongest digest algorithm out of their
+                // signature digest algorithms. This avoids reducing the digest strength used by any
+                // of the signers to protect APK contents.
+                if (v1ContentDigestAlgorithm == null) {
+                    v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
+                } else {
+                    if (DigestAlgorithm.BY_STRENGTH_COMPARATOR.compare(
+                            v1SignatureDigestAlgorithm, v1ContentDigestAlgorithm) > 0) {
+                        v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
+                    }
+                }
                 mV1SignerConfigs.add(v1SignerConfig);
             }
 
@@ -159,6 +169,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 mV2SignerConfigs.add(v2SignerConfig);
             }
         }
+        mV1ContentDigestAlgorithm = v1ContentDigestAlgorithm;
         mSignatureExpectedOutputJarEntryNames =
                 (v1SigningEnabled)
                         ? V1SchemeSigner.getOutputEntryNames(mV1SignerConfigs)

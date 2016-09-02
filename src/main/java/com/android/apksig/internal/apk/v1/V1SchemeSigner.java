@@ -91,11 +91,6 @@ public abstract class V1SchemeSigner {
          * Digest algorithm used for the signature.
          */
         public DigestAlgorithm signatureDigestAlgorithm;
-
-        /**
-         * Digest algorithm used for digests of JAR entries and MANIFEST.MF.
-         */
-        public DigestAlgorithm contentDigestAlgorithm;
     }
 
     /** Hidden constructor to prevent instantiation. */
@@ -140,16 +135,6 @@ public abstract class V1SchemeSigner {
         } else {
             throw new InvalidKeyException("Unsupported key algorithm: " + keyAlgorithm);
         }
-    }
-
-    /**
-     * Returns the JAR signing digest algorithm to be used for JAR entry digests.
-     *
-     * @param minSdkVersion minimum API Level of the platform on which the APK may be installed (see
-     *        AndroidManifest.xml minSdkVersion attribute)
-     */
-    public static DigestAlgorithm getSuggestedContentDigestAlgorithm(int minSdkVersion) {
-        return (minSdkVersion >= 18) ? DigestAlgorithm.SHA256 : DigestAlgorithm.SHA1;
     }
 
     /**
