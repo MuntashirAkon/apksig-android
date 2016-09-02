@@ -1,0 +1,9 @@
+// Gradle project used when building the Android Plugin for Gradle
+
+apply from: "$rootDir/buildSrc/base/baseJava.gradle"
+
+apply plugin: 'maven'
+
+group = "com.android.tools.build"
+archivesBaseName = 'apksig'
+version = rootProject.ext.buildVersion
