@@ -63,7 +63,6 @@ public abstract class V1SchemeSigner {
 
     private static final Attributes.Name ATTRIBUTE_NAME_CREATED_BY =
             new Attributes.Name("Created-By");
-    private static final String ATTRIBUTE_DEFALT_VALUE_CREATED_BY = "1.0 (Android apksigner)";
     private static final String ATTRIBUTE_VALUE_MANIFEST_VERSION = "1.0";
     private static final String ATTRIBUTE_VALUE_SIGNATURE_VERSION = "1.0";
 
@@ -209,16 +208,19 @@ public abstract class V1SchemeSigner {
             DigestAlgorithm jarEntryDigestAlgorithm,
             Map<String, byte[]> jarEntryDigests,
             List<Integer> apkSigningSchemeIds,
-            byte[] sourceManifestBytes)
+            byte[] sourceManifestBytes,
+            String createdBy)
                     throws NoSuchAlgorithmException, InvalidKeyException, CertificateException,
                             SignatureException {
         if (signerConfigs.isEmpty()) {
             throw new IllegalArgumentException("At least one signer config must be provided");
         }
         OutputManifestFile manifest =
-                generateManifestFile(jarEntryDigestAlgorithm, jarEntryDigests, sourceManifestBytes);
+                generateManifestFile(
+                        jarEntryDigestAlgorithm, jarEntryDigests, sourceManifestBytes, createdBy);
 
-        return signManifest(signerConfigs, jarEntryDigestAlgorithm, apkSigningSchemeIds, manifest);
+        return signManifest(
+                signerConfigs, jarEntryDigestAlgorithm, apkSigningSchemeIds, createdBy, manifest);
     }
 
     /**
@@ -237,6 +239,7 @@ public abstract class V1SchemeSigner {
             List<SignerConfig> signerConfigs,
             DigestAlgorithm digestAlgorithm,
             List<Integer> apkSigningSchemeIds,
+            String createdBy,
             OutputManifestFile manifest)
                     throws NoSuchAlgorithmException, InvalidKeyException, CertificateException,
                             SignatureException {
@@ -248,7 +251,7 @@ public abstract class V1SchemeSigner {
         List<Pair<String, byte[]>> signatureJarEntries =
                 new ArrayList<>(2 * signerConfigs.size() + 1);
         byte[] sfBytes =
-                generateSignatureFile(apkSigningSchemeIds, digestAlgorithm, manifest);
+                generateSignatureFile(apkSigningSchemeIds, digestAlgorithm, createdBy, manifest);
         for (SignerConfig signerConfig : signerConfigs) {
             String signerName = signerConfig.name;
             byte[] signatureBlock;
@@ -301,7 +304,8 @@ public abstract class V1SchemeSigner {
     public static OutputManifestFile generateManifestFile(
             DigestAlgorithm jarEntryDigestAlgorithm,
             Map<String, byte[]> jarEntryDigests,
-            byte[] sourceManifestBytes) {
+            byte[] sourceManifestBytes,
+            String defaultCreatedBy) {
         Manifest sourceManifest = null;
         if (sourceManifestBytes != null) {
             try {
@@ -317,7 +321,7 @@ public abstract class V1SchemeSigner {
             mainAttrs.putAll(sourceManifest.getMainAttributes());
         } else {
             mainAttrs.put(Attributes.Name.MANIFEST_VERSION, ATTRIBUTE_VALUE_MANIFEST_VERSION);
-            mainAttrs.put(ATTRIBUTE_NAME_CREATED_BY, ATTRIBUTE_DEFALT_VALUE_CREATED_BY);
+            mainAttrs.put(ATTRIBUTE_NAME_CREATED_BY, defaultCreatedBy);
         }
 
         try {
@@ -364,11 +368,12 @@ public abstract class V1SchemeSigner {
     private static byte[] generateSignatureFile(
             List<Integer> apkSignatureSchemeIds,
             DigestAlgorithm manifestDigestAlgorithm,
+            String createdBy,
             OutputManifestFile manifest) throws NoSuchAlgorithmException {
         Manifest sf = new Manifest();
         Attributes mainAttrs = sf.getMainAttributes();
         mainAttrs.put(Attributes.Name.SIGNATURE_VERSION, ATTRIBUTE_VALUE_SIGNATURE_VERSION);
-        mainAttrs.put(ATTRIBUTE_NAME_CREATED_BY, ATTRIBUTE_DEFALT_VALUE_CREATED_BY);
+        mainAttrs.put(ATTRIBUTE_NAME_CREATED_BY, createdBy);
         if (!apkSignatureSchemeIds.isEmpty()) {
             // Add APK Signature Scheme v2 (and newer) signature stripping protection.
             // This attribute indicates that this APK is supposed to have been signed using one or

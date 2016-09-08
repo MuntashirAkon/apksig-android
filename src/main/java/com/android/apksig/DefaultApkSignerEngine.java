@@ -64,6 +64,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     private final boolean mV1SigningEnabled;
     private final boolean mV2SigningEnabled;
     private final boolean mOtherSignersSignaturesPreserved;
+    private final String mCreatedBy;
     private final List<V1SchemeSigner.SignerConfig> mV1SignerConfigs;
     private final DigestAlgorithm mV1ContentDigestAlgorithm;
     private final List<V2SchemeSigner.SignerConfig> mV2SignerConfigs;
@@ -112,7 +113,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             int minSdkVersion,
             boolean v1SigningEnabled,
             boolean v2SigningEnabled,
-            boolean otherSignersSignaturesPreserved) throws InvalidKeyException {
+            boolean otherSignersSignaturesPreserved,
+            String createdBy) throws InvalidKeyException {
         if (signerConfigs.isEmpty()) {
             throw new IllegalArgumentException("At least one signer config must be provided");
         }
@@ -124,6 +126,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         mV1SigningEnabled = v1SigningEnabled;
         mV2SigningEnabled = v2SigningEnabled;
         mOtherSignersSignaturesPreserved = otherSignersSignaturesPreserved;
+        mCreatedBy = createdBy;
         mV1SignerConfigs =
                 (v1SigningEnabled)
                         ? new ArrayList<>(signerConfigs.size()) : Collections.emptyList();
@@ -352,14 +355,18 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                                 mV1ContentDigestAlgorithm,
                                 mOutputJarEntryDigests,
                                 apkSigningSchemeIds,
-                                inputJarManifest);
+                                inputJarManifest,
+                                mCreatedBy);
             } catch (CertificateException e) {
                 throw new SignatureException("Failed to generate v1 signature", e);
             }
         } else {
             V1SchemeSigner.OutputManifestFile newManifest =
                     V1SchemeSigner.generateManifestFile(
-                            mV1ContentDigestAlgorithm, mOutputJarEntryDigests, inputJarManifest);
+                            mV1ContentDigestAlgorithm,
+                            mOutputJarEntryDigests,
+                            inputJarManifest,
+                            mCreatedBy);
             byte[] emittedSignatureManifest =
                     mEmittedSignatureJarEntryData.get(V1SchemeSigner.MANIFEST_ENTRY_NAME);
             if (!Arrays.equals(newManifest.contents, emittedSignatureManifest)) {
@@ -370,6 +377,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                                     mV1SignerConfigs,
                                     mV1ContentDigestAlgorithm,
                                     apkSigningSchemeIds,
+                                    mCreatedBy,
                                     newManifest);
                 } catch (CertificateException e) {
                     throw new SignatureException("Failed to generate v1 signature", e);
@@ -842,6 +850,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         private boolean mV1SigningEnabled = true;
         private boolean mV2SigningEnabled = true;
         private boolean mOtherSignersSignaturesPreserved;
+        private String mCreatedBy = "1.0 (Android apksig)";
 
         /**
          * Constructs a new {@code Builder}.
@@ -873,7 +882,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     mMinSdkVersion,
                     mV1SigningEnabled,
                     mV2SigningEnabled,
-                    mOtherSignersSignaturesPreserved);
+                    mOtherSignersSignaturesPreserved,
+                    mCreatedBy);
         }
 
         /**
@@ -905,6 +915,18 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
          */
         public Builder setOtherSignersSignaturesPreserved(boolean preserved) {
             mOtherSignersSignaturesPreserved = preserved;
+            return this;
+        }
+
+        /**
+         * Sets the value of the {@code Created-By} field in JAR signature files and, if not already
+         * specified there, the {@code MANIFEST.MF} file.
+         */
+        public Builder setCreatedBy(String createdBy) {
+            if (createdBy == null) {
+                throw new NullPointerException();
+            }
+            mCreatedBy = createdBy;
             return this;
         }
     }
