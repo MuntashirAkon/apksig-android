@@ -160,6 +160,11 @@ public abstract class V1SchemeSigner {
     public static boolean isJarEntryDigestNeededInManifest(String entryName) {
         // See https://docs.oracle.com/javase/8/docs/technotes/guides/jar/jar.html#Signed_JAR_File
 
+        // Entries which represent directories sould not be listed in the manifest.
+        if (entryName.endsWith("/")) {
+            return false;
+        }
+
         // Entries outside of META-INF must be listed in the manifest.
         if (!entryName.startsWith("META-INF/")) {
             return true;
