@@ -522,6 +522,7 @@ public abstract class V1SchemeVerifier {
         private static final String OID_SIG_SHA224_WITH_DSA = "2.16.840.1.101.3.4.3.1";
         private static final String OID_SIG_SHA256_WITH_DSA = "2.16.840.1.101.3.4.3.2";
 
+        private static final String OID_SIG_EC_PUBLIC_KEY = "1.2.840.10045.2.1";
         private static final String OID_SIG_SHA1_WITH_ECDSA = "1.2.840.10045.4.1";
         private static final String OID_SIG_SHA224_WITH_ECDSA = "1.2.840.10045.4.3.1";
         private static final String OID_SIG_SHA256_WITH_ECDSA = "1.2.840.10045.4.3.2";
@@ -732,6 +733,21 @@ public abstract class V1SchemeVerifier {
                     OID_DIGEST_SHA512, OID_SIG_SHA256_WITH_DSA,
                     InclusiveIntRange.fromTo(21, 23));
 
+            addSupportedSigAlg(
+                    OID_DIGEST_SHA1, OID_SIG_EC_PUBLIC_KEY,
+                    InclusiveIntRange.from(18));
+            addSupportedSigAlg(
+                    OID_DIGEST_SHA224, OID_SIG_EC_PUBLIC_KEY,
+                    InclusiveIntRange.from(21));
+            addSupportedSigAlg(
+                    OID_DIGEST_SHA256, OID_SIG_EC_PUBLIC_KEY,
+                    InclusiveIntRange.from(18));
+            addSupportedSigAlg(
+                    OID_DIGEST_SHA384, OID_SIG_EC_PUBLIC_KEY,
+                    InclusiveIntRange.from(18));
+            addSupportedSigAlg(
+                    OID_DIGEST_SHA512, OID_SIG_EC_PUBLIC_KEY,
+                    InclusiveIntRange.from(18));
 
             addSupportedSigAlg(
                     OID_DIGEST_MD5, OID_SIG_SHA1_WITH_ECDSA,

@@ -125,12 +125,7 @@ public abstract class V1SchemeSigner {
                 throw new InvalidKeyException(
                         "ECDSA signatures only supported for minSdkVersion 18 and higher");
             }
-            // Prior to API Level 21, only SHA-1 can be used with ECDSA
-            if (minSdkVersion < 21) {
-                return DigestAlgorithm.SHA1;
-            } else {
-                return DigestAlgorithm.SHA256;
-            }
+            return DigestAlgorithm.SHA256;
         } else {
             throw new InvalidKeyException("Unsupported key algorithm: " + keyAlgorithm);
         }
@@ -586,19 +581,10 @@ public abstract class V1SchemeSigner {
             }
             return Pair.of(digestPrefixForSigAlg + "withDSA", sigAlgId);
         } else if ("EC".equalsIgnoreCase(keyAlgorithm)) {
-            AlgorithmId sigAlgId;
-            switch (digestAlgorithm) {
-                case SHA1:
-                    sigAlgId = getSupportedAlgorithmId("1.2.840.10045.4.1"); // ECDSA with SHA-1
-                    break;
-                case SHA256:
-                    sigAlgId = getSupportedAlgorithmId("1.2.840.10045.4.3.2"); // ECDSA with SHA-256
-                    break;
-                default:
-                    throw new IllegalArgumentException(
-                            "Unexpected digest algorithm: " + digestAlgorithm);
-            }
-            return Pair.of(digestPrefixForSigAlg + "withECDSA", sigAlgId);
+            return Pair.of(
+                    digestPrefixForSigAlg + "withECDSA",
+                    getSupportedAlgorithmId("1.2.840.10045.2.1") // EC public key
+                    );
         } else {
             throw new InvalidKeyException("Unsupported key algorithm: " + keyAlgorithm);
         }
