@@ -594,34 +594,15 @@ public class ApkSignerTool {
             if ("NONE".equals(keystoreFile)) {
                 ks.load(null);
             } else {
-                boolean loaded = false;
-                if (keystorePasswordSpec == null) {
-                    // No password specified. Check whether the KeyStore loads without a password.
-                    try {
-                        try (FileInputStream in = new FileInputStream(keystoreFile)) {
-                            ks.load(in, null);
-                            loaded = true;
-                        }
-                    } catch (IOException e) {
-                        if (e.getCause() instanceof UnrecoverableKeyException) {
-                            // Looks like the KeyStore is password-protected
-                            loaded = false;
-                        } else {
-                            throw e;
-                        }
-                    }
-                }
-                if (!loaded) {
-                    String keystorePasswordSpec =
-                            (this.keystorePasswordSpec != null)
-                                    ?  this.keystorePasswordSpec : PasswordRetriever.SPEC_STDIN;
-                    String keystorePwdString =
-                            passwordRetriever.getPassword(
-                                    keystorePasswordSpec, "Keystore password for " + name);
-                    keystorePwd = keystorePwdString.toCharArray();
-                    try (FileInputStream in = new FileInputStream(keystoreFile)) {
-                        ks.load(in, keystorePwd);
-                    }
+                String keystorePasswordSpec =
+                        (this.keystorePasswordSpec != null)
+                                ?  this.keystorePasswordSpec : PasswordRetriever.SPEC_STDIN;
+                String keystorePwdString =
+                        passwordRetriever.getPassword(
+                                keystorePasswordSpec, "Keystore password for " + name);
+                keystorePwd = keystorePwdString.toCharArray();
+                try (FileInputStream in = new FileInputStream(keystoreFile)) {
+                    ks.load(in, keystorePwd);
                 }
             }
 

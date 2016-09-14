@@ -70,9 +70,9 @@ file in X.509 format (see --key and --cert).
                                           file, as a single line
                           stdin           password provided on standard input,
                                           as a single line
-                      By default, if opening the keystore requires a password,
-                      the tool will prompt for password via console or standard
-                      input.
+                      A password is required to open a KeyStore.
+                      By default, the tool will prompt for password via console
+                      or standard input.
                       When the same file (including standard input) is used for
                       providing multiple passwords, the passwords are read from
                       the file one line at a time. Passwords are read in the
