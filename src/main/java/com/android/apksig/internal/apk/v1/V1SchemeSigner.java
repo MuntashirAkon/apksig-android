@@ -132,6 +132,32 @@ public abstract class V1SchemeSigner {
     }
 
     /**
+     * Returns a safe version of the provided signer name.
+     */
+    public static String getSafeSignerName(String name) {
+        if (name.isEmpty()) {
+            throw new IllegalArgumentException("Empty name");
+        }
+
+        // According to https://docs.oracle.com/javase/tutorial/deployment/jar/signing.html, the
+        // name must not be longer than 8 characters and may contain only A-Z, 0-9, _, and -.
+        StringBuilder result = new StringBuilder();
+        char[] nameCharsUpperCase = name.toUpperCase(Locale.US).toCharArray();
+        for (int i = 0; i < Math.min(nameCharsUpperCase.length, 8); i++) {
+            char c = nameCharsUpperCase[i];
+            if (((c >= 'A') && (c <= 'Z'))
+                    || ((c >= '0') && (c <= '9'))
+                    || (c == '-')
+                    || (c == '_')) {
+                result.append(c);
+            } else {
+                result.append('_');
+            }
+        }
+        return result.toString();
+    }
+
+    /**
      * Returns a new {@link MessageDigest} instance corresponding to the provided digest algorithm.
      */
     private static MessageDigest getMessageDigestInstance(DigestAlgorithm digestAlgorithm)

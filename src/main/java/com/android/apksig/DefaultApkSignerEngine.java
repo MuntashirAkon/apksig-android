@@ -133,17 +133,33 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         mV2SignerConfigs =
                 (v2SigningEnabled)
                         ? new ArrayList<>(signerConfigs.size()) : Collections.emptyList();
+
+        Map<String, Integer> v1SignerNameToSignerIndex =
+                (v1SigningEnabled) ? new HashMap<>(signerConfigs.size()) : Collections.emptyMap();
         DigestAlgorithm v1ContentDigestAlgorithm = null;
-        for (SignerConfig signerConfig : signerConfigs) {
+        for (int i = 0; i < signerConfigs.size(); i++) {
+            SignerConfig signerConfig = signerConfigs.get(i);
             List<X509Certificate> certificates = signerConfig.getCertificates();
             PublicKey publicKey = certificates.get(0).getPublicKey();
 
             if (v1SigningEnabled) {
+                String v1SignerName = V1SchemeSigner.getSafeSignerName(signerConfig.getName());
+                // Check whether the signer's name is unique among all v1 signers
+                Integer indexOfOtherSignerWithSameName =
+                        v1SignerNameToSignerIndex.put(v1SignerName, i);
+                if (indexOfOtherSignerWithSameName != null) {
+                    throw new IllegalArgumentException(
+                            "Signers #" + (indexOfOtherSignerWithSameName + 1)
+                            + " and #" + (i + 1)
+                            + " have the same name: " + v1SignerName
+                            + ". v1 signer names must be unique");
+                }
+
                 DigestAlgorithm v1SignatureDigestAlgorithm =
                         V1SchemeSigner.getSuggestedSignatureDigestAlgorithm(
                                 publicKey, minSdkVersion);
                 V1SchemeSigner.SignerConfig v1SignerConfig = new V1SchemeSigner.SignerConfig();
-                v1SignerConfig.name = signerConfig.getName();
+                v1SignerConfig.name = v1SignerName;
                 v1SignerConfig.privateKey = signerConfig.getPrivateKey();
                 v1SignerConfig.certificates = certificates;
                 v1SignerConfig.signatureDigestAlgorithm = v1SignatureDigestAlgorithm;
@@ -822,6 +838,9 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     String name,
                     PrivateKey privateKey,
                     List<X509Certificate> certificates) {
+                if (name.isEmpty()) {
+                    throw new IllegalArgumentException("Empty name");
+                }
                 mName = name;
                 mPrivateKey = privateKey;
                 mCertificates = new ArrayList<>(certificates);
