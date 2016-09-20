@@ -125,6 +125,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
         mV1SigningEnabled = v1SigningEnabled;
         mV2SigningEnabled = v2SigningEnabled;
+        mV1SignaturePending = v1SigningEnabled;
+        mV2SignaturePending = v2SigningEnabled;
         mOtherSignersSignaturesPreserved = otherSignersSignaturesPreserved;
         mCreatedBy = createdBy;
         mV1SignerConfigs =
