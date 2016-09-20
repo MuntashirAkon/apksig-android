@@ -53,7 +53,7 @@ public class ApkUtils {
         }
         eocdBuf.order(ByteOrder.LITTLE_ENDIAN);
         long cdStartOffset = ZipUtils.getZipEocdCentralDirectoryOffset(eocdBuf);
-        if (cdStartOffset >= eocdOffset) {
+        if (cdStartOffset > eocdOffset) {
             throw new ZipFormatException(
                     "ZIP Central Directory start offset out of range: " + cdStartOffset
                         + ". ZIP End of Central Directory offset: " + eocdOffset);
