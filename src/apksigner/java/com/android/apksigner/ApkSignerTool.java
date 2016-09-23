@@ -296,8 +296,7 @@ public class ApkSignerTool {
             Files.move(
                     fs.getPath(tmpOutputApk.getPath()),
                     fs.getPath(outputApk.getPath()),
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.COPY_ATTRIBUTES);
+                    StandardCopyOption.REPLACE_EXISTING);
         }
 
         if (verbose) {
