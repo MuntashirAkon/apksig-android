@@ -397,6 +397,11 @@ public class LocalFileRecord {
                                         + ". Expected: " + mUncompressedDataSize + " bytes"
                                         + ", actual: " + actualUncompressedSize + " bytes");
                     }
+                } catch (IOException e) {
+                    if (e.getCause() instanceof DataFormatException) {
+                        throw new ZipFormatException("Data of entry " + mName + " malformed", e);
+                    }
+                    throw e;
                 }
             } else {
                 lfhSection.feed(dataStartOffsetInArchive, mDataSize, sink);
