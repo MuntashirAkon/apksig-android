@@ -100,13 +100,17 @@ public class ManifestParser {
     }
 
     private static Attribute parseAttr(String attr) {
-        int delimiterIndex = attr.indexOf(':');
+        // Name is separated from value by a semicolon followed by a single SPACE character.
+        // This permits trailing spaces in names and leading and trailing spaces in values.
+        // Some APK obfuscators take advantage of this fact. We thus need to preserve these unusual
+        // spaces to be able to parse such obfuscated APKs.
+        int delimiterIndex = attr.indexOf(": ");
         if (delimiterIndex == -1) {
-            return new Attribute(attr.trim(), "");
+            return new Attribute(attr, "");
         } else {
             return new Attribute(
-                    attr.substring(0, delimiterIndex).trim(),
-                    attr.substring(delimiterIndex + 1).trim());
+                    attr.substring(0, delimiterIndex),
+                    attr.substring(delimiterIndex + ": ".length()));
         }
     }
 
