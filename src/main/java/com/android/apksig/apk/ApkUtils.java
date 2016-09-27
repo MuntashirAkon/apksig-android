@@ -48,9 +48,6 @@ public class ApkUtils {
 
         ByteBuffer eocdBuf = eocdAndOffsetInFile.getFirst();
         long eocdOffset = eocdAndOffsetInFile.getSecond();
-        if (ZipUtils.isZip64EndOfCentralDirectoryLocatorPresent(apk, eocdOffset)) {
-            throw new ZipFormatException("ZIP64 APK not supported");
-        }
         eocdBuf.order(ByteOrder.LITTLE_ENDIAN);
         long cdStartOffset = ZipUtils.getZipEocdCentralDirectoryOffset(eocdBuf);
         if (cdStartOffset > eocdOffset) {

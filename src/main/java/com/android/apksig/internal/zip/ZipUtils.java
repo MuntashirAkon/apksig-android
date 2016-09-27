@@ -48,9 +48,6 @@ public abstract class ZipUtils {
     private static final int ZIP_EOCD_CENTRAL_DIR_OFFSET_FIELD_OFFSET = 16;
     private static final int ZIP_EOCD_COMMENT_LENGTH_FIELD_OFFSET = 20;
 
-    private static final int ZIP64_EOCD_LOCATOR_SIZE = 20;
-    private static final int ZIP64_EOCD_LOCATOR_SIG = 0x07064b50;
-
     private static final int UINT16_MAX_VALUE = 0xffff;
 
     /**
@@ -235,30 +232,6 @@ public abstract class ZipUtils {
         }
 
         return -1;
-    }
-
-    /**
-     * Returns {@code true} if the provided file contains a ZIP64 End of Central Directory
-     * Locator.
-     *
-     * @param zipEndOfCentralDirectoryPosition offset of the ZIP End of Central Directory record
-     *        in the file.
-     *
-     * @throws IOException if an I/O error occurs while reading the data source
-     */
-    public static final boolean isZip64EndOfCentralDirectoryLocatorPresent(
-            DataSource zip, long zipEndOfCentralDirectoryPosition) throws IOException {
-
-        // ZIP64 End of Central Directory Locator immediately precedes the ZIP End of Central
-        // Directory Record.
-        long locatorPosition = zipEndOfCentralDirectoryPosition - ZIP64_EOCD_LOCATOR_SIZE;
-        if (locatorPosition < 0) {
-            return false;
-        }
-
-        ByteBuffer sig = zip.getByteBuffer(locatorPosition, 4);
-        sig.order(ByteOrder.LITTLE_ENDIAN);
-        return sig.getInt(0) == ZIP64_EOCD_LOCATOR_SIG;
     }
 
     static void assertByteOrderLittleEndian(ByteBuffer buffer) {
