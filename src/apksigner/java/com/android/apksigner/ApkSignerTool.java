@@ -291,7 +291,7 @@ public class ApkSignerTool {
                 .setOutputApk(tmpOutputApk)
                 .build()
                 .sign();
-        if (tmpOutputApk != outputApk) {
+        if (!tmpOutputApk.getCanonicalPath().equals(outputApk.getCanonicalPath())) {
             FileSystem fs = FileSystems.getDefault();
             Files.move(
                     fs.getPath(tmpOutputApk.getPath()),
