@@ -30,7 +30,7 @@ import java.util.Map;
  * <p>For an input document, the parser outputs an event stream (see {@code EVENT_... constants} via
  * {@link #getEventType()} and {@link #next()} methods. Additional information about the current
  * event can be obtained via an assortment of getters, for example, {@link #getName()} or
- * {@link #getAttributeName(int)}.
+ * {@link #getAttributeNameResourceId(int)}.
  */
 class AndroidBinXmlParser {
 
@@ -68,6 +68,7 @@ class AndroidBinXmlParser {
     private final ByteBuffer mXml;
 
     private StringPool mStringPool;
+    private ResourceMap mResourceMap;
     private int mDepth;
     private int mCurrentEvent = EVENT_START_DOCUMENT;
 
@@ -151,26 +152,15 @@ class AndroidBinXmlParser {
     }
 
     /**
-     * Returns the local name of the specified attribute of the current element.
+     * Returns the resource ID corresponding to the name of the specified attribute of the current
+     * element or {@code 0} if the name is not associated with a resource ID.
      *
      * @throws IndexOutOfBoundsException if the index is out of range or the current event is not a
      *         {@code start element} event
      * @throws XmlParserException if a parsing error is occurred
      */
-    public String getAttributeName(int index) throws XmlParserException {
-        return getAttribute(index).getName();
-    }
-
-    /**
-     * Returns the namespace of the specified attribute of the current element or an empty string if
-     * the attribute has no namespace.
-     *
-     * @throws IndexOutOfBoundsException if the index is out of range or the current event is not a
-     *         {@code start element} event
-     * @throws XmlParserException if a parsing error is occurred
-     */
-    public String getAttributeNamespace(int index) throws XmlParserException {
-        return getAttribute(index).getNamespace();
+    public int getAttributeNameResourceId(int index) throws XmlParserException {
+        return getAttribute(index).getNameResourceId();
     }
 
     /**
@@ -233,7 +223,7 @@ class AndroidBinXmlParser {
         return getAttribute(index).getStringValue();
     }
 
-    private Attribute getAttribute(int index) throws XmlParserException {
+    private Attribute getAttribute(int index) {
         if (mCurrentEvent != EVENT_START_ELEMENT) {
             throw new IndexOutOfBoundsException("Current event not a START_ELEMENT");
         }
@@ -335,6 +325,12 @@ class AndroidBinXmlParser {
                     mCurrentElementAttributesContents = null;
                     return mCurrentEvent;
                 }
+                case Chunk.RES_XML_TYPE_RESOURCE_MAP:
+                    if (mResourceMap != null) {
+                        throw new XmlParserException("Multiple resource maps not supported");
+                    }
+                    mResourceMap = new ResourceMap(chunk);
+                    break;
             }
         }
 
@@ -342,7 +338,7 @@ class AndroidBinXmlParser {
         return mCurrentEvent;
     }
 
-    private void parseCurrentElementAttributesIfNotParsed() throws XmlParserException {
+    private void parseCurrentElementAttributesIfNotParsed() {
         if (mCurrentElementAttributes != null) {
             return;
         }
@@ -354,6 +350,7 @@ class AndroidBinXmlParser {
                             mCurrentElementAttributesContents,
                             startPosition,
                             startPosition + mCurrentElementAttrSizeBytes);
+            @SuppressWarnings("unused")
             long nsId = getUnsignedInt32(attr);
             long nameId = getUnsignedInt32(attr);
             attr.position(attr.position() + 7); // skip ignored fields
@@ -361,11 +358,11 @@ class AndroidBinXmlParser {
             long valueData = getUnsignedInt32(attr);
             mCurrentElementAttributes.add(
                     new Attribute(
-                            (nsId == NO_NAMESPACE) ? "" : mStringPool.getString(nsId),
-                            mStringPool.getString(nameId),
+                            nameId,
                             valueType,
                             (int) valueData,
-                            mStringPool));
+                            mStringPool,
+                            mResourceMap));
         }
     }
 
@@ -376,27 +373,27 @@ class AndroidBinXmlParser {
         private static final int TYPE_INT_HEX = 0x11;
         private static final int TYPE_INT_BOOLEAN = 0x12;
 
-        private final String mNamespace;
-        private final String mName;
+        private final long mNameId;
         private final int mValueType;
         private final int mValueData;
         private final StringPool mStringPool;
+        private final ResourceMap mResourceMap;
 
-        private Attribute(String namespace, String name, int valueType, int valueData,
-                StringPool stringPool) {
-            mNamespace = namespace;
-            mName = name;
+        private Attribute(
+                long nameId,
+                int valueType,
+                int valueData,
+                StringPool stringPool,
+                ResourceMap resourceMap) {
+            mNameId = nameId;
             mValueType = valueType;
             mValueData = valueData;
             mStringPool = stringPool;
+            mResourceMap = resourceMap;
         }
 
-        public String getName() {
-            return mName;
-        }
-
-        public String getNamespace() {
-            return mNamespace;
+        public int getNameResourceId() {
+            return (mResourceMap != null) ? mResourceMap.getResourceId(mNameId) : 0;
         }
 
         public int getValueType() {
@@ -453,6 +450,7 @@ class AndroidBinXmlParser {
         public static final int TYPE_RES_XML = 3;
         public static final int RES_XML_TYPE_START_ELEMENT = 0x0102;
         public static final int RES_XML_TYPE_END_ELEMENT = 0x0103;
+        public static final int RES_XML_TYPE_RESOURCE_MAP = 0x0180;
 
         static final int HEADER_MIN_SIZE_BYTES = 8;
 
@@ -698,6 +696,40 @@ class AndroidBinXmlParser {
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException("UTF-8 character encoding not supported", e);
             }
+        }
+    }
+
+    /**
+     * Resource map of a document. Resource IDs are referenced by their {@code 0}-based index in the
+     * map.
+     */
+    private static class ResourceMap {
+        private final ByteBuffer mChunkContents;
+        private final int mEntryCount;
+
+        /**
+         * Constructs a new resource map from the provided chunk.
+         *
+         * @throws XmlParserException if a parsing error occurred
+         */
+        public ResourceMap(Chunk chunk) throws XmlParserException {
+            mChunkContents = chunk.getContents().slice();
+            mChunkContents.order(chunk.getContents().order());
+            // Each entry of the map is four bytes long, containing the int32 resource ID.
+            mEntryCount = mChunkContents.remaining() /  4;
+        }
+
+        /**
+         * Returns the resource ID located at the specified {@code 0}-based index in this pool or
+         * {@code 0} if the index is out of range.
+         */
+        public int getResourceId(long index) {
+            if ((index < 0) || (index >= mEntryCount)) {
+                return 0;
+            }
+            int idx = (int) index;
+            // Each entry of the map is four bytes long, containing the int32 resource ID.
+            return mChunkContents.getInt(idx * 4);
         }
     }
 

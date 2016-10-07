@@ -778,6 +778,11 @@ public class ApkSignerTool {
         }
     }
 
+    /**
+     * Android resource ID of the {@code android:minSdkVersion} attribute in AndroidManifest.xml.
+     */
+    private static final int MIN_SDK_VERSION_ATTR_ID = 0x0101020c;
+
     private static int getMinSdkVersionFromAndroidManifest(File apk)
             throws IOException, ZipFormatException, AndroidBinXmlParser.XmlParserException,
                     ParameterException {
@@ -812,9 +817,7 @@ public class ApkSignerTool {
                 // In each uses-sdk element, minSdkVersion defaults to 1
                 int minSdkVersion = 1;
                 for (int i = 0; i < parser.getAttributeCount(); i++) {
-                    if (("minSdkVersion".equals(parser.getAttributeName(i)))
-                        && ("http://schemas.android.com/apk/res/android".equals(
-                                parser.getAttributeNamespace(i)))) {
+                    if (parser.getAttributeNameResourceId(i) == MIN_SDK_VERSION_ATTR_ID) {
                         int valueType = parser.getAttributeValueType(i);
                         switch (valueType) {
                             case AndroidBinXmlParser.VALUE_TYPE_INT:
