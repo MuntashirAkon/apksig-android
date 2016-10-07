@@ -20,7 +20,12 @@ import com.android.apksig.ApkSigner;
 import com.android.apksig.ApkSignerEngine;
 import com.android.apksig.ApkVerifier;
 import com.android.apksig.DefaultApkSignerEngine;
-
+import com.android.apksig.apk.ApkUtils;
+import com.android.apksig.internal.zip.CentralDirectoryRecord;
+import com.android.apksig.internal.zip.LocalFileRecord;
+import com.android.apksig.util.DataSource;
+import com.android.apksig.util.DataSources;
+import com.android.apksig.zip.ZipFormatException;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -30,7 +35,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -59,8 +66,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 import javax.crypto.EncryptedPrivateKeyInfo;
 import javax.crypto.SecretKey;
@@ -211,7 +216,7 @@ public class ApkSignerTool {
         if (!minSdkVersionSpecified) {
             try {
                 minSdkVersion = getMinSdkVersionFromAndroidManifest(inputApk);
-            } catch (IOException | AndroidBinXmlParser.XmlParserException e) {
+            } catch (IOException | ZipFormatException | AndroidBinXmlParser.XmlParserException e) {
                 throw new IOException(
                         "Failed to deduce Min API Level from APK's AndroidManifest.xml"
                                 + ". Use --min-sdk-version to override.",
@@ -352,7 +357,7 @@ public class ApkSignerTool {
         if (!minSdkVersionSpecified) {
             try {
                 minSdkVersion = getMinSdkVersionFromAndroidManifest(inputApk);
-            } catch (IOException | AndroidBinXmlParser.XmlParserException e) {
+            } catch (IOException | ZipFormatException | AndroidBinXmlParser.XmlParserException e) {
                 throw new IOException(
                         "Failed to deduce Min API Level from APK's AndroidManifest.xml"
                                 + ". Use --min-sdk-version to override.",
@@ -774,28 +779,24 @@ public class ApkSignerTool {
     }
 
     private static int getMinSdkVersionFromAndroidManifest(File apk)
-            throws IOException, AndroidBinXmlParser.XmlParserException, ParameterException {
-        ByteBuffer manifestContents;
-        try (ZipFile zip = new ZipFile(apk)) {
-            ZipEntry manifestEntry = zip.getEntry("AndroidManifest.xml");
-            if (manifestEntry == null) {
-                throw new ParameterException(
-                        "Failed to deduce min API Level: APK does not contain AndroidManifest.xml"
-                                + ". Please specify --min-sdk-version.");
-            }
-            long manifestSizeBytes = manifestEntry.getSize();
-            if (manifestSizeBytes > Integer.MAX_VALUE) {
-                throw new IOException(
-                        manifestEntry.getName() + " too large: " + manifestSizeBytes + " bytes");
-            }
-            ByteArrayOutputStream manifestBytesOut =
-                    new ByteArrayOutputStream((int) manifestSizeBytes);
-            try (InputStream manifestIn = zip.getInputStream(manifestEntry)) {
-                drain(manifestIn, manifestBytesOut);
-            }
-            byte[] manifestBytes = manifestBytesOut.toByteArray();
-            manifestContents = ByteBuffer.wrap(manifestBytes);
+            throws IOException, ZipFormatException, AndroidBinXmlParser.XmlParserException,
+                    ParameterException {
+        try (RandomAccessFile raf = new RandomAccessFile(apk, "r")) {
+            return getMinSdkVersionFromAndroidManifest(
+                    DataSources.asDataSource(raf, 0, raf.length()));
         }
+    }
+
+    private static int getMinSdkVersionFromAndroidManifest(DataSource apk)
+            throws IOException, ZipFormatException, AndroidBinXmlParser.XmlParserException,
+                    ParameterException {
+        byte[] manifestBytes = getAndroidManifestContents(apk);
+        if (manifestBytes == null) {
+            throw new ParameterException(
+                    "Failed to deduce min API Level: APK does not contain AndroidManifest.xml"
+                            + ". Please specify --min-sdk-version.");
+        }
+        ByteBuffer manifestContents = ByteBuffer.wrap(manifestBytes);
 
         // The default value of minSdkVersion is 1.
         int result = 1;
@@ -842,6 +843,55 @@ public class ApkSignerTool {
         }
 
         return result;
+    }
+
+    /**
+     * Returns the contents of the {@code AndroidManifest.xml} entry of the provided APK or
+     * {@code null} if there is no such entry in the APK.
+     */
+    private static byte[] getAndroidManifestContents(DataSource apk)
+            throws IOException, ZipFormatException {
+        // Locate the ZIP Central Directory
+        ApkUtils.ZipSections zipSections = ApkUtils.findZipSections(apk);
+        long cdSizeBytes = zipSections.getZipCentralDirectorySizeBytes();
+        if (cdSizeBytes > Integer.MAX_VALUE) {
+            throw new ZipFormatException("ZIP Central Directory too large: " + cdSizeBytes);
+        }
+        long cdOffset = zipSections.getZipCentralDirectoryOffset();
+
+        // Parse the ZIP Central Directory, looking for the AndroidManifest.xml entry
+        ByteBuffer cd = apk.getByteBuffer(cdOffset, (int) cdSizeBytes);
+        cd.order(ByteOrder.LITTLE_ENDIAN);
+        CentralDirectoryRecord manifestCdRecord = null;
+        int expectedCdRecordCount = zipSections.getZipCentralDirectoryRecordCount();
+        for (int i = 0; i < expectedCdRecordCount; i++) {
+            CentralDirectoryRecord cdRecord;
+            int offsetInsideCd = cd.position();
+            try {
+                cdRecord = CentralDirectoryRecord.getRecord(cd);
+            } catch (ZipFormatException e) {
+                throw new ZipFormatException(
+                        "Failed to parse ZIP Central Directory record #" + (i + 1)
+                                + " at file offset " + (cdOffset + offsetInsideCd),
+                        e);
+            }
+            String entryName = cdRecord.getName();
+            if ("AndroidManifest.xml".equals(entryName)) {
+                if (manifestCdRecord != null) {
+                    throw new ZipFormatException(
+                            "Multiple " + entryName + " entries in ZIP Central Directory");
+                }
+                manifestCdRecord = cdRecord;
+            }
+        }
+
+        if (manifestCdRecord == null) {
+            return null;
+        }
+
+        // Return the uncompressed data of the AndroidManifest.xml's Local File Header record
+        return LocalFileRecord.getUncompressedData(
+                apk, manifestCdRecord, zipSections.getZipCentralDirectoryOffset());
     }
 
     private static byte[] readFully(File file) throws IOException {
