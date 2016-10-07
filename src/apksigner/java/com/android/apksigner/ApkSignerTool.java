@@ -78,7 +78,7 @@ import javax.crypto.spec.PBEKeySpec;
  */
 public class ApkSignerTool {
 
-    private static final String VERSION = "0.0.0";
+    private static final String VERSION = "0.1";
     private static final String HELP_PAGE_GENERAL = "help.txt";
     private static final String HELP_PAGE_SIGN = "help_sign.txt";
     private static final String HELP_PAGE_VERIFY = "help_verify.txt";
