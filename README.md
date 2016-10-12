@@ -14,6 +14,7 @@ apksig will choose the most appropriate cryptographic algorithms based on the An
 versions supported by the APK being signed.
 
 The project consists of two subprojects:
+
   * apksig library, and
   * apksigner command-line tool based on the apksig library.
 
@@ -21,6 +22,7 @@ The project consists of two subprojects:
 ## apksig library
 
 apksig library offers three primitives:
+
   * `ApkSigner` which signs the provided APK so that it verifies on the provided Android platform
     versions.
   * `ApkVerifier` which checks whether the provided APK is expected to verify on the provided
@@ -37,6 +39,7 @@ These are not public API of the library. Do not use \*.internal.\* classes direc
 ## apksigner command-line tool
 
 apksigner command-line tool offers two operations:
+
   * sign the provided APK so that it verifies on all Android platforms supported by the APK. Run
     `apksigner sign` for usage information.
   * check whether the provided APK's signatures are expected to verify on all Android platforms
