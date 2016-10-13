@@ -88,6 +88,9 @@ class AndroidBinXmlParser {
         Chunk resXmlChunk = null;
         while (xml.hasRemaining()) {
             Chunk chunk = Chunk.get(xml);
+            if (chunk == null) {
+                break;
+            }
             if (chunk.getType() == Chunk.TYPE_RES_XML) {
                 resXmlChunk = chunk;
                 break;
@@ -251,6 +254,9 @@ class AndroidBinXmlParser {
         // earliest event which we report to caller.
         while (mXml.hasRemaining()) {
             Chunk chunk = Chunk.get(mXml);
+            if (chunk == null) {
+                break;
+            }
             switch (chunk.getType()) {
                 case Chunk.TYPE_STRING_POOL:
                     if (mStringPool != null) {
@@ -480,17 +486,29 @@ class AndroidBinXmlParser {
             return mType;
         }
 
+        /**
+         * Consumes the chunk located at the current position of the input and returns the chunk
+         * or {@code null} if there is no chunk left in the input.
+         *
+         * @throws XmlParserException if the chunk is malformed
+         */
         public static Chunk get(ByteBuffer input) throws XmlParserException {
             if (input.remaining() < HEADER_MIN_SIZE_BYTES) {
-                throw new XmlParserException(
-                        "Need at least " + HEADER_MIN_SIZE_BYTES+ " bytes. Available: "
-                                + input.remaining());
+                // Android ignores the last chunk if its header is too big to fit into the file
+                input.position(input.limit());
+                return null;
             }
 
             int originalPosition = input.position();
             int type = getUnsignedInt16(input);
             int headerSize = getUnsignedInt16(input);
             long chunkSize = getUnsignedInt32(input);
+            long chunkRemaining = chunkSize - 8;
+            if (chunkRemaining > input.remaining()) {
+                // Android ignores the last chunk if it's too big to fit into the file
+                input.position(input.limit());
+                return null;
+            }
             if (headerSize < HEADER_MIN_SIZE_BYTES) {
                 throw new XmlParserException(
                         "Malformed chunk: header too short: " + headerSize + " bytes");
@@ -498,12 +516,6 @@ class AndroidBinXmlParser {
                 throw new XmlParserException(
                         "Malformed chunk: header too long: " + headerSize + " bytes. Chunk size: "
                                 + chunkSize + " bytes");
-            }
-            long chunkRemaining = chunkSize - 8;
-            if (chunkRemaining > input.remaining()) {
-                throw new XmlParserException(
-                        "Malformed chunk. Size: " + chunkSize + ", available: "
-                                + (input.remaining() + 8));
             }
             int contentStartPosition = originalPosition + headerSize;
             long chunkEndPosition = originalPosition + chunkSize;
