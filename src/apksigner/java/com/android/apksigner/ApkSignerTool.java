@@ -395,6 +395,7 @@ public class ApkSignerTool {
                 int signerNumber = 0;
                 MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
                 MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
+                MessageDigest md5 = MessageDigest.getInstance("MD5");
                 for (X509Certificate signerCert : signerCerts) {
                     signerNumber++;
                     System.out.println(
@@ -407,6 +408,9 @@ public class ApkSignerTool {
                     System.out.println(
                             "Signer #" + signerNumber + " certificate SHA-1 digest: "
                                     + HexEncoding.encode(sha1.digest(encodedCert)));
+                    System.out.println(
+                            "Signer #" + signerNumber + " certificate MD5 digest: "
+                                    + HexEncoding.encode(md5.digest(encodedCert)));
                     if (verbose) {
                         PublicKey publicKey = signerCert.getPublicKey();
                         System.out.println(
@@ -437,6 +441,9 @@ public class ApkSignerTool {
                         System.out.println(
                                 "Signer #" + signerNumber + " public key SHA-1 digest: "
                                         + HexEncoding.encode(sha1.digest(encodedKey)));
+                        System.out.println(
+                                "Signer #" + signerNumber + " public key MD5 digest: "
+                                        + HexEncoding.encode(md5.digest(encodedKey)));
                     }
                 }
             }
