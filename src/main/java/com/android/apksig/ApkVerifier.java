@@ -16,6 +16,7 @@
 
 package com.android.apksig;
 
+import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.ContentDigestAlgorithm;
@@ -80,13 +81,13 @@ public class ApkVerifier {
      * The verification result also includes errors, warnings, and information about signers.
      *
      * @throws IOException if an I/O error is encountered while reading the APK
-     * @throws ZipFormatException if the APK is malformed at ZIP format level
+     * @throws ApkFormatException if the APK is malformed
      * @throws NoSuchAlgorithmException if the APK's signatures cannot be verified because a
      *         required cryptographic algorithm implementation is missing
      * @throws IllegalStateException if this verifier's configuration is missing required
      *         information.
      */
-    public Result verify() throws IOException, ZipFormatException, NoSuchAlgorithmException,
+    public Result verify() throws IOException, ApkFormatException, NoSuchAlgorithmException,
             IllegalStateException {
         Closeable in = null;
         try {
@@ -120,12 +121,12 @@ public class ApkVerifier {
      *        may need to be verified
      *
      * @throws IOException if an I/O error is encountered while reading the APK
-     * @throws ZipFormatException if the APK is malformed at ZIP format level
+     * @throws ApkFormatException if the APK is malformed
      * @throws NoSuchAlgorithmException if the APK's signatures cannot be verified because a
      *         required cryptographic algorithm implementation is missing
      */
     private static Result verify(DataSource apk, int minSdkVersion, int maxSdkVersion)
-            throws IOException, ZipFormatException, NoSuchAlgorithmException {
+            throws IOException, ApkFormatException, NoSuchAlgorithmException {
         if (minSdkVersion < 0) {
             throw new IllegalArgumentException(
                     "minSdkVersion must not be negative: " + minSdkVersion);
@@ -135,7 +136,12 @@ public class ApkVerifier {
                     "minSdkVersion (" + minSdkVersion + ") > maxSdkVersion (" + maxSdkVersion
                             + ")");
         }
-        ApkUtils.ZipSections zipSections = ApkUtils.findZipSections(apk);
+        ApkUtils.ZipSections zipSections;
+        try {
+            zipSections = ApkUtils.findZipSections(apk);
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Malformed APK: not a ZIP archive", e);
+        }
 
         Result result = new Result();
 

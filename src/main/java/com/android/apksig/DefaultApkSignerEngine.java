@@ -16,6 +16,7 @@
 
 package com.android.apksig;
 
+import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.internal.apk.v1.DigestAlgorithm;
 import com.android.apksig.internal.apk.v1.V1SchemeSigner;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
@@ -325,7 +326,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
     @Override
     public OutputJarSignatureRequest outputJarEntries()
-            throws InvalidKeyException, SignatureException, NoSuchAlgorithmException {
+            throws ApkFormatException, InvalidKeyException, SignatureException,
+                    NoSuchAlgorithmException {
         checkNotClosed();
 
         if (!mV1SignaturePending) {

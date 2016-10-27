@@ -20,6 +20,7 @@ import com.android.apksig.ApkSigner;
 import com.android.apksig.ApkSignerEngine;
 import com.android.apksig.ApkVerifier;
 import com.android.apksig.DefaultApkSignerEngine;
+import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.internal.zip.LocalFileRecord;
@@ -216,7 +217,7 @@ public class ApkSignerTool {
         if (!minSdkVersionSpecified) {
             try {
                 minSdkVersion = getMinSdkVersionFromAndroidManifest(inputApk);
-            } catch (IOException | ZipFormatException | AndroidBinXmlParser.XmlParserException e) {
+            } catch (IOException | ApkFormatException | AndroidBinXmlParser.XmlParserException e) {
                 throw new IOException(
                         "Failed to deduce Min API Level from APK's AndroidManifest.xml"
                                 + ". Use --min-sdk-version to override.",
@@ -357,7 +358,7 @@ public class ApkSignerTool {
         if (!minSdkVersionSpecified) {
             try {
                 minSdkVersion = getMinSdkVersionFromAndroidManifest(inputApk);
-            } catch (IOException | ZipFormatException | AndroidBinXmlParser.XmlParserException e) {
+            } catch (IOException | ApkFormatException | AndroidBinXmlParser.XmlParserException e) {
                 throw new IOException(
                         "Failed to deduce Min API Level from APK's AndroidManifest.xml"
                                 + ". Use --min-sdk-version to override.",
@@ -791,7 +792,7 @@ public class ApkSignerTool {
     private static final int MIN_SDK_VERSION_ATTR_ID = 0x0101020c;
 
     private static int getMinSdkVersionFromAndroidManifest(File apk)
-            throws IOException, ZipFormatException, AndroidBinXmlParser.XmlParserException,
+            throws IOException, ApkFormatException, AndroidBinXmlParser.XmlParserException,
                     ParameterException {
         try (RandomAccessFile raf = new RandomAccessFile(apk, "r")) {
             return getMinSdkVersionFromAndroidManifest(
@@ -800,7 +801,7 @@ public class ApkSignerTool {
     }
 
     private static int getMinSdkVersionFromAndroidManifest(DataSource apk)
-            throws IOException, ZipFormatException, AndroidBinXmlParser.XmlParserException,
+            throws IOException, ApkFormatException, AndroidBinXmlParser.XmlParserException,
                     ParameterException {
         byte[] manifestBytes = getAndroidManifestContents(apk);
         if (manifestBytes == null) {
@@ -860,12 +861,17 @@ public class ApkSignerTool {
      * {@code null} if there is no such entry in the APK.
      */
     private static byte[] getAndroidManifestContents(DataSource apk)
-            throws IOException, ZipFormatException {
+            throws IOException, ApkFormatException {
         // Locate the ZIP Central Directory
-        ApkUtils.ZipSections zipSections = ApkUtils.findZipSections(apk);
+        ApkUtils.ZipSections zipSections;
+        try {
+            zipSections = ApkUtils.findZipSections(apk);
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Malformed APK: not a ZIP archive", e);
+        }
         long cdSizeBytes = zipSections.getZipCentralDirectorySizeBytes();
         if (cdSizeBytes > Integer.MAX_VALUE) {
-            throw new ZipFormatException("ZIP Central Directory too large: " + cdSizeBytes);
+            throw new ApkFormatException("ZIP Central Directory too large: " + cdSizeBytes);
         }
         long cdOffset = zipSections.getZipCentralDirectoryOffset();
 
@@ -880,15 +886,15 @@ public class ApkSignerTool {
             try {
                 cdRecord = CentralDirectoryRecord.getRecord(cd);
             } catch (ZipFormatException e) {
-                throw new ZipFormatException(
-                        "Failed to parse ZIP Central Directory record #" + (i + 1)
+                throw new ApkFormatException(
+                        "Malformed ZIP Central Directory record #" + (i + 1)
                                 + " at file offset " + (cdOffset + offsetInsideCd),
                         e);
             }
             String entryName = cdRecord.getName();
             if ("AndroidManifest.xml".equals(entryName)) {
                 if (manifestCdRecord != null) {
-                    throw new ZipFormatException(
+                    throw new ApkFormatException(
                             "Multiple " + entryName + " entries in ZIP Central Directory");
                 }
                 manifestCdRecord = cdRecord;
@@ -900,8 +906,12 @@ public class ApkSignerTool {
         }
 
         // Return the uncompressed data of the AndroidManifest.xml's Local File Header record
-        return LocalFileRecord.getUncompressedData(
-                apk, manifestCdRecord, zipSections.getZipCentralDirectoryOffset());
+        try {
+            return LocalFileRecord.getUncompressedData(
+                    apk, manifestCdRecord, zipSections.getZipCentralDirectoryOffset());
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Malformed ZIP entry: " + manifestCdRecord.getName(), e);
+        }
     }
 
     private static byte[] readFully(File file) throws IOException {

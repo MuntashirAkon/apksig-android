@@ -18,6 +18,7 @@ package com.android.apksig.internal.apk.v2;
 
 import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.ApkVerifier.IssueWithParams;
+import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.util.DelegatingX509Certificate;
@@ -78,13 +79,15 @@ public abstract class V2SchemeVerifier {
      * verification. APK is considered verified only if {@link Result#verified} is {@code true}. If
      * verification fails, the result will contain errors -- see {@link Result#getErrors()}.
      *
+     * @throws ApkFormatException if the APK is malformed
      * @throws NoSuchAlgorithmException if the APK's signatures cannot be verified because a
      *         required cryptographic algorithm implementation is missing
      * @throws SignatureNotFoundException if no APK Signature Scheme v2 signatures are found
      * @throws IOException if an I/O error occurs when reading the APK
      */
     public static Result verify(DataSource apk, ApkUtils.ZipSections zipSections)
-            throws IOException, NoSuchAlgorithmException, SignatureNotFoundException {
+            throws IOException, ApkFormatException, NoSuchAlgorithmException,
+                    SignatureNotFoundException {
         Result result = new Result();
         SignatureInfo signatureInfo = findSignature(apk, zipSections, result);
 
@@ -113,7 +116,7 @@ public abstract class V2SchemeVerifier {
             ByteBuffer apkSignatureSchemeV2Block,
             DataSource centralDir,
             ByteBuffer eocd,
-            Result result) throws IOException, NoSuchAlgorithmException {
+            Result result) throws IOException, ApkFormatException, NoSuchAlgorithmException {
         Set<ContentDigestAlgorithm> contentDigestsToVerify = new HashSet<>(1);
         parseSigners(apkSignatureSchemeV2Block, contentDigestsToVerify, result);
         if (result.containsErrors()) {
@@ -137,11 +140,11 @@ public abstract class V2SchemeVerifier {
     private static void parseSigners(
             ByteBuffer apkSignatureSchemeV2Block,
             Set<ContentDigestAlgorithm> contentDigestsToVerify,
-            Result result) throws NoSuchAlgorithmException {
+            Result result) throws ApkFormatException, NoSuchAlgorithmException {
         ByteBuffer signers;
         try {
             signers = getLengthPrefixedSlice(apkSignatureSchemeV2Block);
-        } catch (IOException e) {
+        } catch (ApkFormatException e) {
             result.addError(Issue.V2_SIG_MALFORMED_SIGNERS);
             return;
         }
@@ -166,7 +169,7 @@ public abstract class V2SchemeVerifier {
             try {
                 ByteBuffer signer = getLengthPrefixedSlice(signers);
                 parseSigner(signer, certFactory, signerInfo, contentDigestsToVerify);
-            } catch (IOException | BufferUnderflowException e) {
+            } catch (ApkFormatException | BufferUnderflowException e) {
                 signerInfo.addError(Issue.V2_SIG_MALFORMED_SIGNER);
                 return;
             }
@@ -185,7 +188,7 @@ public abstract class V2SchemeVerifier {
             CertificateFactory certFactory,
             Result.SignerInfo result,
             Set<ContentDigestAlgorithm> contentDigestsToVerify)
-                    throws IOException, NoSuchAlgorithmException {
+                    throws ApkFormatException, NoSuchAlgorithmException {
         ByteBuffer signedData = getLengthPrefixedSlice(signerBlock);
         byte[] signedDataBytes = new byte[signedData.remaining()];
         signedData.get(signedDataBytes);
@@ -212,7 +215,7 @@ public abstract class V2SchemeVerifier {
                     continue;
                 }
                 supportedSignatures.add(new SupportedSignature(signatureAlgorithm, sigBytes));
-            } catch (IOException | BufferUnderflowException e) {
+            } catch (ApkFormatException | BufferUnderflowException e) {
                 result.addError(Issue.V2_SIG_MALFORMED_SIGNATURE, signatureCount);
                 return;
             }
@@ -323,7 +326,7 @@ public abstract class V2SchemeVerifier {
                 byte[] digestBytes = readLengthPrefixedByteArray(digest);
                 result.contentDigests.add(
                         new Result.SignerInfo.ContentDigest(sigAlgorithmId, digestBytes));
-            } catch (IOException | BufferUnderflowException e) {
+            } catch (ApkFormatException | BufferUnderflowException e) {
                 result.addError(Issue.V2_SIG_MALFORMED_DIGEST, digestCount);
                 return;
             }
@@ -357,7 +360,7 @@ public abstract class V2SchemeVerifier {
                 result.additionalAttributes.add(
                         new Result.SignerInfo.AdditionalAttribute(id, value));
                 result.addWarning(Issue.V2_SIG_UNKNOWN_ADDITIONAL_ATTRIBUTE, id);
-            } catch (IOException | BufferUnderflowException e) {
+            } catch (ApkFormatException | BufferUnderflowException e) {
                 result.addError(
                         Issue.V2_SIG_MALFORMED_ADDITIONAL_ATTRIBUTE, additionalAttributeCount);
                 return;
@@ -765,29 +768,31 @@ public abstract class V2SchemeVerifier {
         }
     }
 
-    private static ByteBuffer getLengthPrefixedSlice(ByteBuffer source) throws IOException {
+    private static ByteBuffer getLengthPrefixedSlice(ByteBuffer source) throws ApkFormatException {
         if (source.remaining() < 4) {
-            throw new IOException(
-                    "Remaining buffer too short to contain length of length-prefixed field."
-                            + " Remaining: " + source.remaining());
+            throw new ApkFormatException(
+                    "Remaining buffer too short to contain length of length-prefixed field"
+                            + ". Remaining: " + source.remaining());
         }
         int len = source.getInt();
         if (len < 0) {
             throw new IllegalArgumentException("Negative length");
         } else if (len > source.remaining()) {
-            throw new IOException("Length-prefixed field longer than remaining buffer."
-                    + " Field length: " + len + ", remaining: " + source.remaining());
+            throw new ApkFormatException(
+                    "Length-prefixed field longer than remaining buffer"
+                            + ". Field length: " + len + ", remaining: " + source.remaining());
         }
         return getByteBuffer(source, len);
     }
 
-    private static byte[] readLengthPrefixedByteArray(ByteBuffer buf) throws IOException {
+    private static byte[] readLengthPrefixedByteArray(ByteBuffer buf) throws ApkFormatException {
         int len = buf.getInt();
         if (len < 0) {
-            throw new IOException("Negative length");
+            throw new ApkFormatException("Negative length");
         } else if (len > buf.remaining()) {
-            throw new IOException("Underflow while reading length-prefixed value. Length: " + len
-                    + ", available: " + buf.remaining());
+            throw new ApkFormatException(
+                    "Underflow while reading length-prefixed value. Length: " + len
+                            + ", available: " + buf.remaining());
         }
         byte[] result = new byte[len];
         buf.get(result);

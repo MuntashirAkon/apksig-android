@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.v2.V2SchemeVerifier;
 import com.android.apksig.internal.util.ByteBufferDataSource;
@@ -103,7 +104,7 @@ public class ApkSigner {
      * Signs the input APK and outputs the resulting signed APK. The input APK is not modified.
      *
      * @throws IOException if an I/O error is encountered while reading or writing the APKs
-     * @throws ZipFormatException if the input APK is malformed at ZIP format level
+     * @throws ApkFormatException if the input APK is malformed
      * @throws NoSuchAlgorithmException if the APK signatures cannot be produced or verified because
      *         a required cryptographic algorithm implementation is missing
      * @throws InvalidKeyException if a signature could not be generated because a signing key is
@@ -113,7 +114,7 @@ public class ApkSigner {
      *         or if the signing engine is in an invalid state.
      */
     public void sign()
-            throws IOException, ZipFormatException, NoSuchAlgorithmException, InvalidKeyException,
+            throws IOException, ApkFormatException, NoSuchAlgorithmException, InvalidKeyException,
                     SignatureException, IllegalStateException {
         Closeable in = null;
         DataSource inputApk;
@@ -163,10 +164,15 @@ public class ApkSigner {
             DataSource inputApk,
             DataSink outputApkOut,
             DataSource outputApkIn)
-                    throws IOException, ZipFormatException, NoSuchAlgorithmException,
+                    throws IOException, ApkFormatException, NoSuchAlgorithmException,
                             InvalidKeyException, SignatureException {
         // Step 1. Find input APK's main ZIP sections
-        ApkUtils.ZipSections inputZipSections = ApkUtils.findZipSections(inputApk);
+        ApkUtils.ZipSections inputZipSections;
+        try {
+            inputZipSections = ApkUtils.findZipSections(inputApk);
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Malformed APK: not a ZIP archive", e);
+        }
         long apkSigningBlockOffset = -1;
         try {
             Pair<DataSource, Long> apkSigningBlockAndOffset =
@@ -233,9 +239,14 @@ public class ApkSigner {
                 outputOffset += chunkSize;
                 inputOffset = inputLocalFileHeaderStartOffset;
             }
-            LocalFileRecord inputLocalFileRecord =
-                    LocalFileRecord.getRecord(
-                            inputApkLfhSection, inputCdRecord, inputApkLfhSection.size());
+            LocalFileRecord inputLocalFileRecord;
+            try {
+                inputLocalFileRecord =
+                        LocalFileRecord.getRecord(
+                                inputApkLfhSection, inputCdRecord, inputApkLfhSection.size());
+            } catch (ZipFormatException e) {
+                throw new ApkFormatException("Malformed ZIP entry: " + inputCdRecord.getName(), e);
+            }
             inputOffset += inputLocalFileRecord.getSize();
 
             ApkSignerEngine.InspectJarEntryRequest inspectEntryRequest =
@@ -411,8 +422,12 @@ public class ApkSigner {
             DataSource lfhSection,
             LocalFileRecord localFileRecord,
             ApkSignerEngine.InspectJarEntryRequest inspectEntryRequest)
-                    throws IOException, ZipFormatException {
-        localFileRecord.outputUncompressedData(lfhSection, inspectEntryRequest.getDataSink());
+                    throws IOException, ApkFormatException {
+        try {
+            localFileRecord.outputUncompressedData(lfhSection, inspectEntryRequest.getDataSink());
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Malformed ZIP entry: " + localFileRecord.getName(), e);
+        }
         inspectEntryRequest.done();
     }
 
@@ -559,10 +574,10 @@ public class ApkSigner {
 
     private static ByteBuffer getZipCentralDirectory(
             DataSource apk,
-            ApkUtils.ZipSections apkSections) throws IOException, ZipFormatException {
+            ApkUtils.ZipSections apkSections) throws IOException, ApkFormatException {
         long cdSizeBytes = apkSections.getZipCentralDirectorySizeBytes();
         if (cdSizeBytes > Integer.MAX_VALUE) {
-            throw new ZipFormatException("ZIP Central Directory too large: " + cdSizeBytes);
+            throw new ApkFormatException("ZIP Central Directory too large: " + cdSizeBytes);
         }
         long cdOffset = apkSections.getZipCentralDirectoryOffset();
         ByteBuffer cd = apk.getByteBuffer(cdOffset, (int) cdSizeBytes);
@@ -572,7 +587,7 @@ public class ApkSigner {
 
     private static List<CentralDirectoryRecord> parseZipCentralDirectory(
             ByteBuffer cd,
-            ApkUtils.ZipSections apkSections) throws ZipFormatException {
+            ApkUtils.ZipSections apkSections) throws ApkFormatException {
         long cdOffset = apkSections.getZipCentralDirectoryOffset();
         int expectedCdRecordCount = apkSections.getZipCentralDirectoryRecordCount();
         List<CentralDirectoryRecord> cdRecords = new ArrayList<>(expectedCdRecordCount);
@@ -583,22 +598,22 @@ public class ApkSigner {
             try {
                 cdRecord = CentralDirectoryRecord.getRecord(cd);
             } catch (ZipFormatException e) {
-                throw new ZipFormatException(
-                        "Failed to parse ZIP Central Directory record #" + (i + 1)
+                throw new ApkFormatException(
+                        "Malformed ZIP Central Directory record #" + (i + 1)
                                 + " at file offset " + (cdOffset + offsetInsideCd),
                         e);
             }
             String entryName = cdRecord.getName();
             if (!entryNames.add(entryName)) {
-                throw new ZipFormatException(
-                        "Malformed APK: multiple JAR entries with the same name: " + entryName);
+                throw new ApkFormatException(
+                        "Multiple ZIP entries with the same name: " + entryName);
             }
             cdRecords.add(cdRecord);
         }
         if (cd.hasRemaining()) {
-            throw new ZipFormatException(
+            throw new ApkFormatException(
                     "Unused space at the end of ZIP Central Directory: " + cd.remaining()
-                        + " bytes starting at file offset " + (cdOffset + cd.position()));
+                            + " bytes starting at file offset " + (cdOffset + cd.position()));
         }
 
         return cdRecords;

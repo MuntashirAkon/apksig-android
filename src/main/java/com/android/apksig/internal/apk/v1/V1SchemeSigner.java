@@ -42,6 +42,7 @@ import java.util.TreeMap;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 
+import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.internal.jar.ManifestWriter;
 import com.android.apksig.internal.jar.SignatureFileWriter;
 import com.android.apksig.internal.util.Pair;
@@ -222,6 +223,7 @@ public abstract class V1SchemeSigner {
      * @param signerConfigs signer configurations, one for each signer. At least one signer config
      *        must be provided.
      *
+     * @throws ApkFormatException if the source manifest is malformed
      * @throws NoSuchAlgorithmException if a required cryptographic algorithm implementation is
      *         missing
      * @throws InvalidKeyException if a signing key is not suitable for this signature scheme or
@@ -236,8 +238,8 @@ public abstract class V1SchemeSigner {
             List<Integer> apkSigningSchemeIds,
             byte[] sourceManifestBytes,
             String createdBy)
-                    throws NoSuchAlgorithmException, InvalidKeyException, CertificateException,
-                            SignatureException {
+                    throws NoSuchAlgorithmException, ApkFormatException, InvalidKeyException,
+                            CertificateException, SignatureException {
         if (signerConfigs.isEmpty()) {
             throw new IllegalArgumentException("At least one signer config must be provided");
         }
@@ -331,13 +333,13 @@ public abstract class V1SchemeSigner {
             DigestAlgorithm jarEntryDigestAlgorithm,
             Map<String, byte[]> jarEntryDigests,
             byte[] sourceManifestBytes,
-            String defaultCreatedBy) {
+            String defaultCreatedBy) throws ApkFormatException {
         Manifest sourceManifest = null;
         if (sourceManifestBytes != null) {
             try {
                 sourceManifest = new Manifest(new ByteArrayInputStream(sourceManifestBytes));
             } catch (IOException e) {
-                throw new IllegalArgumentException("Failed to parse source MANIFEST.MF", e);
+                throw new ApkFormatException("Malformed source META-INF/MANIFEST.MF", e);
             }
         }
         ByteArrayOutputStream manifestOut = new ByteArrayOutputStream();

@@ -41,6 +41,7 @@ import java.util.jar.Attributes;
 
 import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.ApkVerifier.IssueWithParams;
+import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.jar.ManifestParser;
 import com.android.apksig.internal.util.AndroidSdkVersion;
@@ -70,7 +71,7 @@ public abstract class V1SchemeVerifier {
      * considered verified only if {@link Result#verified} is {@code true}. If verification fails,
      * the result will contain errors -- see {@link Result#getErrors()}.
      *
-     * @throws ZipFormatException if the APK is malformed
+     * @throws ApkFormatException if the APK is malformed
      * @throws IOException if an I/O error occurs when reading the APK
      * @throws NoSuchAlgorithmException if the APK's JAR signatures cannot be verified because a
      *         required cryptographic algorithm implementation is missing
@@ -81,7 +82,7 @@ public abstract class V1SchemeVerifier {
             Map<Integer, String> supportedApkSigSchemeNames,
             Set<Integer> foundApkSigSchemeIds,
             int minSdkVersion,
-            int maxSdkVersion) throws IOException, ZipFormatException, NoSuchAlgorithmException {
+            int maxSdkVersion) throws IOException, ApkFormatException, NoSuchAlgorithmException {
         if (minSdkVersion > maxSdkVersion) {
             throw new IllegalArgumentException(
                     "minSdkVersion (" + minSdkVersion + ") > maxSdkVersion (" + maxSdkVersion
@@ -154,7 +155,7 @@ public abstract class V1SchemeVerifier {
                 Set<Integer> foundApkSigSchemeIds,
                 int minSdkVersion,
                 int maxSdkVersion,
-                Result result) throws ZipFormatException, IOException, NoSuchAlgorithmException {
+                Result result) throws ApkFormatException, IOException, NoSuchAlgorithmException {
 
             // Find JAR manifest and signature block files.
             CentralDirectoryRecord manifestEntry = null;
@@ -186,8 +187,13 @@ public abstract class V1SchemeVerifier {
             }
 
             // Parse the JAR manifest and check that all JAR entries it references exist in the APK.
-            byte[] manifestBytes =
-                    LocalFileRecord.getUncompressedData(apk, manifestEntry, cdStartOffset);
+            byte[] manifestBytes;
+            try {
+                manifestBytes =
+                        LocalFileRecord.getUncompressedData(apk, manifestEntry, cdStartOffset);
+            } catch (ZipFormatException e) {
+                throw new ApkFormatException("Malformed ZIP entry: " + manifestEntry.getName(), e);
+            }
             Map<String, ManifestParser.Section> entryNameToManifestSection = null;
             ManifestParser manifest = new ManifestParser(manifestBytes);
             ManifestParser.Section manifestMainSection = manifest.readSection();
@@ -406,11 +412,24 @@ public abstract class V1SchemeVerifier {
         @SuppressWarnings("restriction")
         public void verifySigBlockAgainstSigFile(
                 DataSource apk, long cdStartOffset, int minSdkVersion, int maxSdkVersion)
-                        throws IOException, ZipFormatException, NoSuchAlgorithmException {
-            byte[] sigBlockBytes =
-                    LocalFileRecord.getUncompressedData(apk, mSignatureBlockEntry, cdStartOffset);
-            mSigFileBytes =
-                    LocalFileRecord.getUncompressedData(apk, mSignatureFileEntry, cdStartOffset);
+                        throws IOException, ApkFormatException, NoSuchAlgorithmException {
+            byte[] sigBlockBytes;
+            try {
+                sigBlockBytes =
+                        LocalFileRecord.getUncompressedData(
+                                apk, mSignatureBlockEntry, cdStartOffset);
+            } catch (ZipFormatException e) {
+                throw new ApkFormatException(
+                        "Malformed ZIP entry: " + mSignatureBlockEntry.getName(), e);
+            }
+            try {
+                mSigFileBytes =
+                        LocalFileRecord.getUncompressedData(
+                                apk, mSignatureFileEntry, cdStartOffset);
+            } catch (ZipFormatException e) {
+                throw new ApkFormatException(
+                        "Malformed ZIP entry: " + mSignatureFileEntry.getName(), e);
+            }
             PKCS7 sigBlock;
             try {
                 sigBlock = new PKCS7(sigBlockBytes);
@@ -1301,11 +1320,11 @@ public abstract class V1SchemeVerifier {
     private static List<CentralDirectoryRecord> parseZipCentralDirectory(
             DataSource apk,
             ApkUtils.ZipSections apkSections)
-                    throws IOException, ZipFormatException {
+                    throws IOException, ApkFormatException {
         // Read the ZIP Central Directory
         long cdSizeBytes = apkSections.getZipCentralDirectorySizeBytes();
         if (cdSizeBytes > Integer.MAX_VALUE) {
-            throw new ZipFormatException("ZIP Central Directory too large: " + cdSizeBytes);
+            throw new ApkFormatException("ZIP Central Directory too large: " + cdSizeBytes);
         }
         long cdOffset = apkSections.getZipCentralDirectoryOffset();
         ByteBuffer cd = apk.getByteBuffer(cdOffset, (int) cdSizeBytes);
@@ -1320,8 +1339,8 @@ public abstract class V1SchemeVerifier {
             try {
                 cdRecord = CentralDirectoryRecord.getRecord(cd);
             } catch (ZipFormatException e) {
-                throw new ZipFormatException(
-                        "Failed to parse Central Directory record #" + (i + 1)
+                throw new ApkFormatException(
+                        "Malformed ZIP Central Directory record #" + (i + 1)
                                 + " at file offset " + (cdOffset + offsetInsideCd),
                         e);
             }
@@ -1361,7 +1380,7 @@ public abstract class V1SchemeVerifier {
             List<Signer> signers,
             int minSdkVersion,
             int maxSdkVersion,
-            Result result) throws ZipFormatException, IOException, NoSuchAlgorithmException {
+            Result result) throws ApkFormatException, IOException, NoSuchAlgorithmException {
         // Iterate over APK contents as sequentially as possible to improve performance.
         List<CentralDirectoryRecord> cdRecordsSortedByLocalFileHeaderOffset =
                 new ArrayList<>(cdRecords);
@@ -1429,7 +1448,7 @@ public abstract class V1SchemeVerifier {
                         cdOffsetInApk,
                         new MessageDigestSink(mds));
             } catch (ZipFormatException e) {
-                throw new ZipFormatException("Malformed entry: " + entryName, e);
+                throw new ApkFormatException("Malformed ZIP entry: " + entryName, e);
             } catch (IOException e) {
                 throw new IOException("Failed to read entry: " + entryName, e);
             }

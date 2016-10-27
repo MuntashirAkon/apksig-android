@@ -23,6 +23,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SignatureException;
 import java.util.List;
 
+import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
 
@@ -122,9 +123,11 @@ public interface ApkSignerEngine extends Closeable {
      *        guaranteed to not be used by the engine after this method terminates.
      *
      * @throws IOException if an I/O error occurs while reading the APK Signing Block
+     * @throws ApkFormatException if the APK Signing Block is malformed
      * @throws IllegalStateException if this engine is closed
      */
-    void inputApkSigningBlock(DataSource apkSigningBlock) throws IOException, IllegalStateException;
+    void inputApkSigningBlock(DataSource apkSigningBlock)
+            throws IOException, ApkFormatException, IllegalStateException;
 
     /**
      * Indicates to this engine that the specified JAR entry was encountered in the input APK.
@@ -180,12 +183,14 @@ public interface ApkSignerEngine extends Closeable {
     /**
      * Indicates to this engine that all JAR entries have been output.
      *
-     *
      * @return request to add JAR signature to the output or {@code null} if there is no need to add
      *         a JAR signature. The request will contain additional JAR entries to be output. The
      *         request must be fulfilled before
      *         {@link #outputZipSections(DataSource, DataSource, DataSource)} is invoked.
      *
+     * @throws ApkFormatException if the APK is malformed in a way which is preventing this engine
+     *         from producing a valid signature. For example, if the engine uses the provided
+     *         {@code META-INF/MANIFEST.MF} as a template and the file is malformed.
      * @throws NoSuchAlgorithmException if a signature could not be generated because a required
      *         cryptographic algorithm implementation is missing
      * @throws InvalidKeyException if a signature could not be generated because a signing key is
@@ -195,8 +200,8 @@ public interface ApkSignerEngine extends Closeable {
      *         entries, or if the engine is closed
      */
     OutputJarSignatureRequest outputJarEntries()
-            throws NoSuchAlgorithmException, InvalidKeyException, SignatureException,
-                    IllegalStateException;
+            throws ApkFormatException, NoSuchAlgorithmException, InvalidKeyException,
+                    SignatureException, IllegalStateException;
 
     /**
      * Indicates to this engine that the ZIP sections comprising the output APK have been output.
@@ -215,6 +220,9 @@ public interface ApkSignerEngine extends Closeable {
      *         {@link #outputDone()} is invoked.
      *
      * @throws IOException if an I/O error occurs while reading the provided ZIP sections
+     * @throws ApkFormatException if the provided APK is malformed in a way which prevents this
+     *         engine from producing a valid signature. For example, if the APK Signing Block
+     *         provided to the engine is malformed.
      * @throws NoSuchAlgorithmException if a signature could not be generated because a required
      *         cryptographic algorithm implementation is missing
      * @throws InvalidKeyException if a signature could not be generated because a signing key is
@@ -227,8 +235,8 @@ public interface ApkSignerEngine extends Closeable {
             DataSource zipEntries,
             DataSource zipCentralDirectory,
             DataSource zipEocd)
-                    throws IOException, NoSuchAlgorithmException, InvalidKeyException,
-                            SignatureException, IllegalStateException;
+                    throws IOException, ApkFormatException, NoSuchAlgorithmException,
+                            InvalidKeyException, SignatureException, IllegalStateException;
 
     /**
      * Indicates to this engine that the signed APK was output.
