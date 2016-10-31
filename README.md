@@ -15,18 +15,19 @@ versions supported by the APK being signed.
 
 The project consists of two subprojects:
 
-  * apksig library, and
-  * apksigner command-line tool based on the apksig library.
+  * apksig -- a pure Java library, and
+  * apksigner -- a pure Java command-line tool based on the apksig library.
 
 
 ## apksig library
 
 apksig library offers three primitives:
 
-  * `ApkSigner` which signs the provided APK so that it verifies on the provided Android platform
-    versions.
-  * `ApkVerifier` which checks whether the provided APK is expected to verify on the provided
-    Android platform versions.
+  * `ApkSigner` which signs the provided APK so that it verifies on all Android platform versions
+    supported by the APK. The range of platform versions can be customized if necessary.
+  * `ApkVerifier` which checks whether the provided APK is expected to verify on all Android
+    platform versions supported by the APK. The range of platform versions can be customized if
+    necessary.
   * `(Default)ApkSignerEngine` which abstracts away signing an APK from parsing and building an APK
     file. This is useful in optimized APK building pipelines, such as in Android Plugin for Gradle,
     which need to perform signing while building an APK, instead of after. For simpler use cases

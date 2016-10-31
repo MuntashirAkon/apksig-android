@@ -17,16 +17,9 @@
 package com.android.apksigner;
 
 import com.android.apksig.ApkSigner;
-import com.android.apksig.ApkSignerEngine;
 import com.android.apksig.ApkVerifier;
-import com.android.apksig.DefaultApkSignerEngine;
-import com.android.apksig.apk.ApkFormatException;
-import com.android.apksig.apk.ApkUtils;
-import com.android.apksig.internal.zip.CentralDirectoryRecord;
-import com.android.apksig.internal.zip.LocalFileRecord;
-import com.android.apksig.util.DataSource;
-import com.android.apksig.util.DataSources;
-import com.android.apksig.zip.ZipFormatException;
+import com.android.apksig.apk.MinSdkVersionException;
+
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -36,9 +29,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -209,30 +199,13 @@ public class ApkSignerTool {
             throw new ParameterException(
                     "Unexpected parameter(s) after input APK (" + params[0] + ")");
         }
-        File inputApk = new File(params[0]);
-        if (outputApk == null) {
-            outputApk = inputApk;
-        }
-
-        if (!minSdkVersionSpecified) {
-            try {
-                minSdkVersion = getMinSdkVersionFromAndroidManifest(inputApk);
-            } catch (IOException | ApkFormatException | AndroidBinXmlParser.XmlParserException e) {
-                throw new IOException(
-                        "Failed to deduce Min API Level from APK's AndroidManifest.xml"
-                                + ". Use --min-sdk-version to override.",
-                        e);
-            }
-        }
-
-        if (minSdkVersion > maxSdkVersion) {
+        if ((minSdkVersionSpecified) && (minSdkVersion > maxSdkVersion)) {
             throw new ParameterException(
                     "Min API Level (" + minSdkVersion + ") > max API Level (" + maxSdkVersion
                             + ")");
         }
 
-        List<DefaultApkSignerEngine.SignerConfig> signerConfigs =
-                new ArrayList<>(signers.size());
+        List<ApkSigner.SignerConfig> signerConfigs = new ArrayList<>(signers.size());
         int signerNumber = 0;
         try (PasswordRetriever passwordRetriever = new PasswordRetriever()) {
             for (SignerParams signer : signers) {
@@ -269,22 +242,18 @@ public class ApkSignerTool {
                     throw new RuntimeException(
                             "Neither KeyStore key alias nor private key file available");
                 }
-                DefaultApkSignerEngine.SignerConfig signerConfig =
-                        new DefaultApkSignerEngine.SignerConfig.Builder(
+                ApkSigner.SignerConfig signerConfig =
+                        new ApkSigner.SignerConfig.Builder(
                                 v1SigBasename, signer.privateKey, signer.certs)
                         .build();
                 signerConfigs.add(signerConfig);
             }
         }
 
-        ApkSignerEngine signerEngine =
-                new DefaultApkSignerEngine.Builder(signerConfigs, minSdkVersion)
-                .setOtherSignersSignaturesPreserved(false)
-                .setV1SigningEnabled(v1SigningEnabled)
-                .setV2SigningEnabled(v2SigningEnabled)
-                .setCreatedBy(VERSION + " (Android apksigner)")
-                .build();
-
+        File inputApk = new File(params[0]);
+        if (outputApk == null) {
+            outputApk = inputApk;
+        }
         File tmpOutputApk;
         if (inputApk.getCanonicalPath().equals(outputApk.getCanonicalPath())) {
             tmpOutputApk = File.createTempFile("apksigner", ".apk");
@@ -292,11 +261,27 @@ public class ApkSignerTool {
         } else {
             tmpOutputApk = outputApk;
         }
-        new ApkSigner.Builder(signerEngine)
-                .setInputApk(inputApk)
-                .setOutputApk(tmpOutputApk)
-                .build()
-                .sign();
+        ApkSigner.Builder apkSignerBuilder =
+                new ApkSigner.Builder(signerConfigs)
+                        .setInputApk(inputApk)
+                        .setOutputApk(tmpOutputApk)
+                        .setOtherSignersSignaturesPreserved(false)
+                        .setV1SigningEnabled(v1SigningEnabled)
+                        .setV2SigningEnabled(v2SigningEnabled)
+                        .setCreatedBy(VERSION + " (Android apksigner)");
+        if (minSdkVersionSpecified) {
+            apkSignerBuilder.setMinSdkVersion(minSdkVersion);
+        }
+        ApkSigner apkSigner = apkSignerBuilder.build();
+        try {
+            apkSigner.sign();
+        } catch (MinSdkVersionException e) {
+            String msg = e.getMessage();
+            if (!msg.endsWith(".")) {
+                msg += '.';
+            }
+            throw new ParameterException(msg + " Use --min-sdk-version to override.");
+        }
         if (!tmpOutputApk.getCanonicalPath().equals(outputApk.getCanonicalPath())) {
             FileSystem fs = FileSystems.getDefault();
             Files.move(
@@ -319,6 +304,7 @@ public class ApkSignerTool {
         int minSdkVersion = 1;
         boolean minSdkVersionSpecified = false;
         int maxSdkVersion = Integer.MAX_VALUE;
+        boolean maxSdkVersionSpecified = false;
         boolean printCerts = false;
         boolean verbose = false;
         boolean warningsTreatedAsErrors = false;
@@ -331,6 +317,7 @@ public class ApkSignerTool {
                 minSdkVersionSpecified = true;
             } else if ("max-sdk-version".equals(optionName)) {
                 maxSdkVersion = optionsParser.getRequiredIntValue("Maximum API Level");
+                maxSdkVersionSpecified = true;
             } else if ("print-certs".equals(optionName)) {
                 printCerts = optionsParser.getOptionalBooleanValue(true);
             } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
@@ -353,30 +340,33 @@ public class ApkSignerTool {
         } else if (params.length > 1) {
             throw new ParameterException("Unexpected parameter(s) after APK (" + params[0] + ")");
         }
-        File inputApk = new File(params[0]);
 
-        if (!minSdkVersionSpecified) {
-            try {
-                minSdkVersion = getMinSdkVersionFromAndroidManifest(inputApk);
-            } catch (IOException | ApkFormatException | AndroidBinXmlParser.XmlParserException e) {
-                throw new IOException(
-                        "Failed to deduce Min API Level from APK's AndroidManifest.xml"
-                                + ". Use --min-sdk-version to override.",
-                        e);
-            }
-        }
-
-        if (minSdkVersion > maxSdkVersion) {
+        if ((minSdkVersionSpecified) && (maxSdkVersionSpecified)
+                && (minSdkVersion > maxSdkVersion)) {
             throw new ParameterException(
                     "Min API Level (" + minSdkVersion + ") > max API Level (" + maxSdkVersion
                             + ")");
         }
 
-        ApkVerifier.Result result =
-                new ApkVerifier.Builder(inputApk)
-                .setCheckedPlatformVersions(minSdkVersion, maxSdkVersion)
-                .build()
-                .verify();
+        File inputApk = new File(params[0]);
+        ApkVerifier.Builder apkVerifierBuilder = new ApkVerifier.Builder(inputApk);
+        if (minSdkVersionSpecified) {
+            apkVerifierBuilder.setMinCheckedPlatformVersion(minSdkVersion);
+        }
+        if (maxSdkVersionSpecified) {
+            apkVerifierBuilder.setMaxCheckedPlatformVersion(maxSdkVersion);
+        }
+        ApkVerifier apkVerifier = apkVerifierBuilder.build();
+        ApkVerifier.Result result;
+        try {
+            result = apkVerifier.verify();
+        } catch (MinSdkVersionException e) {
+            String msg = e.getMessage();
+            if (!msg.endsWith(".")) {
+                msg += '.';
+            }
+            throw new ParameterException(msg + " Use --min-sdk-version to override.");
+        }
         boolean verified = result.isVerified();
 
         boolean warningsEncountered = false;
@@ -783,134 +773,6 @@ public class ApkSignerTool {
             } catch (InvalidKeySpecException expected) {
             }
             throw new InvalidKeySpecException("Not an RSA, EC, or DSA private key");
-        }
-    }
-
-    /**
-     * Android resource ID of the {@code android:minSdkVersion} attribute in AndroidManifest.xml.
-     */
-    private static final int MIN_SDK_VERSION_ATTR_ID = 0x0101020c;
-
-    private static int getMinSdkVersionFromAndroidManifest(File apk)
-            throws IOException, ApkFormatException, AndroidBinXmlParser.XmlParserException,
-                    ParameterException {
-        try (RandomAccessFile raf = new RandomAccessFile(apk, "r")) {
-            return getMinSdkVersionFromAndroidManifest(
-                    DataSources.asDataSource(raf, 0, raf.length()));
-        }
-    }
-
-    private static int getMinSdkVersionFromAndroidManifest(DataSource apk)
-            throws IOException, ApkFormatException, AndroidBinXmlParser.XmlParserException,
-                    ParameterException {
-        byte[] manifestBytes = getAndroidManifestContents(apk);
-        if (manifestBytes == null) {
-            throw new ParameterException(
-                    "Failed to deduce min API Level: APK does not contain AndroidManifest.xml"
-                            + ". Please specify --min-sdk-version.");
-        }
-        ByteBuffer manifestContents = ByteBuffer.wrap(manifestBytes);
-
-        // The default value of minSdkVersion is 1.
-        int result = 1;
-        // Android supports multiple uses-sdk elements, each of which overwrites the current value
-        // of minSdkVersion. We thus need to process all uses-sdk elements.
-        AndroidBinXmlParser parser = new AndroidBinXmlParser(manifestContents);
-        int eventType = parser.getEventType();
-        while (eventType != AndroidBinXmlParser.EVENT_END_DOCUMENT) {
-            if ((eventType == AndroidBinXmlParser.EVENT_START_ELEMENT)
-                    && (parser.getDepth() == 2)
-                    && ("uses-sdk".equals(parser.getName()))
-                    && (parser.getNamespace().isEmpty())) {
-                // In each uses-sdk element, minSdkVersion defaults to 1
-                int minSdkVersion = 1;
-                for (int i = 0; i < parser.getAttributeCount(); i++) {
-                    if (parser.getAttributeNameResourceId(i) == MIN_SDK_VERSION_ATTR_ID) {
-                        int valueType = parser.getAttributeValueType(i);
-                        switch (valueType) {
-                            case AndroidBinXmlParser.VALUE_TYPE_INT:
-                                minSdkVersion = parser.getAttributeIntValue(i);
-                                break;
-                            case AndroidBinXmlParser.VALUE_TYPE_STRING:
-                                throw new ParameterException(
-                                        "Codenames in AndroidManifest.xml's minSdkVersion not"
-                                        + " supported. Use --min-sdk-version to override.");
-                            default:
-                                throw new ParameterException(
-                                        "Unsupported value type in AndroidManifest.xml's"
-                                        + " minSdkVersion. Only numeric values supported"
-                                        + ". Use --min-sdk-version to override.");
-                        }
-                        break;
-                    }
-                }
-                // Android supports multiple uses-sdk elements. For each encountered uses-sdk
-                // element, the Android runtime checks that its minSdkVersion is not higher than the
-                // runtime's API Level. Thus, the effective minSdkVersion value is the maximum over
-                // the encountered minSdKVersion values.
-                result = Math.max(result, minSdkVersion);
-            }
-            eventType = parser.next();
-        }
-
-        return result;
-    }
-
-    /**
-     * Returns the contents of the {@code AndroidManifest.xml} entry of the provided APK or
-     * {@code null} if there is no such entry in the APK.
-     */
-    private static byte[] getAndroidManifestContents(DataSource apk)
-            throws IOException, ApkFormatException {
-        // Locate the ZIP Central Directory
-        ApkUtils.ZipSections zipSections;
-        try {
-            zipSections = ApkUtils.findZipSections(apk);
-        } catch (ZipFormatException e) {
-            throw new ApkFormatException("Malformed APK: not a ZIP archive", e);
-        }
-        long cdSizeBytes = zipSections.getZipCentralDirectorySizeBytes();
-        if (cdSizeBytes > Integer.MAX_VALUE) {
-            throw new ApkFormatException("ZIP Central Directory too large: " + cdSizeBytes);
-        }
-        long cdOffset = zipSections.getZipCentralDirectoryOffset();
-
-        // Parse the ZIP Central Directory, looking for the AndroidManifest.xml entry
-        ByteBuffer cd = apk.getByteBuffer(cdOffset, (int) cdSizeBytes);
-        cd.order(ByteOrder.LITTLE_ENDIAN);
-        CentralDirectoryRecord manifestCdRecord = null;
-        int expectedCdRecordCount = zipSections.getZipCentralDirectoryRecordCount();
-        for (int i = 0; i < expectedCdRecordCount; i++) {
-            CentralDirectoryRecord cdRecord;
-            int offsetInsideCd = cd.position();
-            try {
-                cdRecord = CentralDirectoryRecord.getRecord(cd);
-            } catch (ZipFormatException e) {
-                throw new ApkFormatException(
-                        "Malformed ZIP Central Directory record #" + (i + 1)
-                                + " at file offset " + (cdOffset + offsetInsideCd),
-                        e);
-            }
-            String entryName = cdRecord.getName();
-            if ("AndroidManifest.xml".equals(entryName)) {
-                if (manifestCdRecord != null) {
-                    throw new ApkFormatException(
-                            "Multiple " + entryName + " entries in ZIP Central Directory");
-                }
-                manifestCdRecord = cdRecord;
-            }
-        }
-
-        if (manifestCdRecord == null) {
-            return null;
-        }
-
-        // Return the uncompressed data of the AndroidManifest.xml's Local File Header record
-        try {
-            return LocalFileRecord.getUncompressedData(
-                    apk, manifestCdRecord, zipSections.getZipCentralDirectoryOffset());
-        } catch (ZipFormatException e) {
-            throw new ApkFormatException("Malformed ZIP entry: " + manifestCdRecord.getName(), e);
         }
     }
 

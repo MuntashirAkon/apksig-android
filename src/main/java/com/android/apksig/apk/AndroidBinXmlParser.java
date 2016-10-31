@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.apksigner;
+package com.android.apksig.apk;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
@@ -817,7 +817,9 @@ class AndroidBinXmlParser {
     /**
      * Indicates that an error occurred while parsing a document.
      */
-    public static class XmlParserException extends Exception {
+    static class XmlParserException extends Exception {
+        private static final long serialVersionUID = 1L;
+
         public XmlParserException(String message) {
             super(message);
         }

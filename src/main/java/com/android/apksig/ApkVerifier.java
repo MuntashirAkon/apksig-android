@@ -18,11 +18,13 @@ package com.android.apksig;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
+import com.android.apksig.apk.MinSdkVersionException;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.v2.SignatureAlgorithm;
 import com.android.apksig.internal.apk.v2.V2SchemeVerifier;
 import com.android.apksig.internal.util.AndroidSdkVersion;
+import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 import com.android.apksig.zip.ZipFormatException;
@@ -61,13 +63,13 @@ public class ApkVerifier {
     private final File mApkFile;
     private final DataSource mApkDataSource;
 
-    private final int mMinSdkVersion;
+    private final Integer mMinSdkVersion;
     private final int mMaxSdkVersion;
 
     private ApkVerifier(
             File apkFile,
             DataSource apkDataSource,
-            int minSdkVersion,
+            Integer minSdkVersion,
             int maxSdkVersion) {
         mApkFile = apkFile;
         mApkDataSource = apkDataSource;
@@ -101,7 +103,7 @@ public class ApkVerifier {
             } else {
                 throw new IllegalStateException("APK not provided");
             }
-            return verify(apk, mMinSdkVersion, mMaxSdkVersion);
+            return verify(apk);
         } finally {
             if (in != null) {
                 in.close();
@@ -115,26 +117,24 @@ public class ApkVerifier {
      * The verification result also includes errors, warnings, and information about signers.
      *
      * @param apk APK file contents
-     * @param minSdkVersion API Level of the oldest Android platform on which the APK's signatures
-     *        may need to be verified
-     * @param maxSdkVersion API Level of the newest Android platform on which the APK's signatures
-     *        may need to be verified
      *
      * @throws IOException if an I/O error is encountered while reading the APK
      * @throws ApkFormatException if the APK is malformed
      * @throws NoSuchAlgorithmException if the APK's signatures cannot be verified because a
      *         required cryptographic algorithm implementation is missing
      */
-    private static Result verify(DataSource apk, int minSdkVersion, int maxSdkVersion)
+    private Result verify(DataSource apk)
             throws IOException, ApkFormatException, NoSuchAlgorithmException {
-        if (minSdkVersion < 0) {
-            throw new IllegalArgumentException(
-                    "minSdkVersion must not be negative: " + minSdkVersion);
-        }
-        if (minSdkVersion > maxSdkVersion) {
-            throw new IllegalArgumentException(
-                    "minSdkVersion (" + minSdkVersion + ") > maxSdkVersion (" + maxSdkVersion
-                            + ")");
+        if (mMinSdkVersion != null) {
+            if (mMinSdkVersion < 0) {
+                throw new IllegalArgumentException(
+                        "minSdkVersion must not be negative: " + mMinSdkVersion);
+            }
+            if ((mMinSdkVersion != null) && (mMinSdkVersion > mMaxSdkVersion)) {
+                throw new IllegalArgumentException(
+                        "minSdkVersion (" + mMinSdkVersion + ") > maxSdkVersion (" + mMaxSdkVersion
+                                + ")");
+            }
         }
         ApkUtils.ZipSections zipSections;
         try {
@@ -142,6 +142,30 @@ public class ApkVerifier {
         } catch (ZipFormatException e) {
             throw new ApkFormatException("Malformed APK: not a ZIP archive", e);
         }
+
+        int minSdkVersion;
+        if (mMinSdkVersion != null) {
+            // No need to obtain minSdkVersion from the APK's AndroidManifest.xml
+            minSdkVersion = mMinSdkVersion;
+        } else {
+            // Need to obtain minSdkVersion from the APK's AndroidManifest.xml
+            List<CentralDirectoryRecord> cdRecords;
+            try {
+                cdRecords = V1SchemeVerifier.parseZipCentralDirectory(apk, zipSections);
+            } catch (ApkFormatException e) {
+                throw new MinSdkVersionException(
+                        "Unable to determine APK's minimum supported Android platform version", e);
+            }
+            minSdkVersion =
+                    ApkSigner.getMinSdkVersionFromApk(
+                            cdRecords, apk.slice(0, zipSections.getZipCentralDirectoryOffset()));
+            if (minSdkVersion > mMaxSdkVersion) {
+                throw new IllegalArgumentException(
+                        "minSdkVersion from APK (" + minSdkVersion + ") > maxSdkVersion ("
+                                + mMaxSdkVersion + ")");
+            }
+        }
+        int maxSdkVersion = mMaxSdkVersion;
 
         Result result = new Result();
 
@@ -1152,17 +1176,16 @@ public class ApkVerifier {
     /**
      * Builder of {@link ApkVerifier} instances.
      *
-     * <p>Although not required, it is best to provide the SDK version (API Level) of the oldest
-     * Android platform on which the APK is supposed to be installed -- see
-     * {@link #setMinCheckedPlatformVersion(int)}. Without this information, APKs which use security
-     * features not supported on ancient Android platforms (e.g., SHA-256 digests or ECDSA
-     * signatures) will not verify.
+     * <p>The resulting verifier by default checks whether the APK will verify on all platform
+     * versions supported by the APK, as specified by {@code android:minSdkVersion} attributes in
+     * the APK's {@code AndroidManifest.xml}. The range of platform versions can be customized using
+     * {@link #setMinCheckedPlatformVersion(int)} and {@link #setMaxCheckedPlatformVersion(int)}.
      */
     public static class Builder {
         private final File mApkFile;
         private final DataSource mApkDataSource;
 
-        private int mMinSdkVersion = 1;
+        private Integer mMinSdkVersion;
         private int mMaxSdkVersion = Integer.MAX_VALUE;
 
         /**
@@ -1190,38 +1213,37 @@ public class ApkVerifier {
         /**
          * Sets the oldest Android platform version for which the APK is verified. APK verification
          * will confirm that the APK is expected to install successfully on all known Android
-         * platforms starting from the platform version with the provided API Level.
+         * platforms starting from the platform version with the provided API Level. The upper end
+         * of the platform versions range can be modified via
+         * {@link #setMaxCheckedPlatformVersion(int)}.
          *
-         * <p>By default, the APK is checked for all platform versions. Thus, APKs which use
-         * security features not supported on ancient Android platforms (e.g., SHA-256 digests or
-         * ECDSA signatures) will not verify by default.
+         * <p>This method is useful for overriding the default behavior which checks that the APK
+         * will verify on all platform versions supported by the APK, as specified by
+         * {@code android:minSdkVersion} attributes in the APK's {@code AndroidManifest.xml}. For
+         * example, the default behavior refuses to handle APKs with codenames as values of
+         * {@code android:minSdkVersion} (e.g., "N").
          *
          * @param minSdkVersion API Level of the oldest platform for which to verify the APK
          *
-         * @see #setCheckedPlatformVersions(int, int)
+         * @see #setMinCheckedPlatformVersion(int)
          */
         public Builder setMinCheckedPlatformVersion(int minSdkVersion) {
             mMinSdkVersion = minSdkVersion;
-            mMaxSdkVersion = Integer.MAX_VALUE;
             return this;
         }
 
         /**
-         * Sets the range of Android platform versions for which the APK is verified. APK
-         * verification will confirm that the APK is expected to install successfully on Android
-         * platforms whose API Levels fall into this inclusive range.
+         * Sets the newest Android platform version for which the APK is verified. APK verification
+         * will confirm that the APK is expected to install successfully on all platform versions
+         * supported by the APK up until and including the provided version. The lower end
+         * of the platform versions range can be modified via
+         * {@link #setMinCheckedPlatformVersion(int)}.
          *
-         * <p>By default, the APK is checked for all platform versions. Thus, APKs which use
-         * security features not supported on ancient Android platforms (e.g., SHA-256 digests or
-         * ECDSA signatures) will not verify by default.
-         *
-         * @param minSdkVersion API Level of the oldest platform for which to verify the APK
          * @param maxSdkVersion API Level of the newest platform for which to verify the APK
          *
          * @see #setMinCheckedPlatformVersion(int)
          */
-        public Builder setCheckedPlatformVersions(int minSdkVersion, int maxSdkVersion) {
-            mMinSdkVersion = minSdkVersion;
+        public Builder setMaxCheckedPlatformVersion(int maxSdkVersion) {
             mMaxSdkVersion = maxSdkVersion;
             return this;
         }

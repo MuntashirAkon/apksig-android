@@ -1317,7 +1317,7 @@ public abstract class V1SchemeVerifier {
         return null;
     }
 
-    private static List<CentralDirectoryRecord> parseZipCentralDirectory(
+    public static List<CentralDirectoryRecord> parseZipCentralDirectory(
             DataSource apk,
             ApkUtils.ZipSections apkSections)
                     throws IOException, ApkFormatException {
