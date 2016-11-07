@@ -1019,8 +1019,7 @@ public class ApkSigner {
         }
 
         /**
-         * Sets the value of the {@code Created-By} field in JAR signature files and, if not already
-         * specified there, in the {@code MANIFEST.MF} file.
+         * Sets the value of the {@code Created-By} field in JAR signature files.
          *
          * <p><em>Note:</em> This method may only be invoked when this builder is not initialized
          * with an {@link ApkSignerEngine}.

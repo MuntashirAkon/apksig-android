@@ -245,7 +245,7 @@ public abstract class V1SchemeSigner {
         }
         OutputManifestFile manifest =
                 generateManifestFile(
-                        jarEntryDigestAlgorithm, jarEntryDigests, sourceManifestBytes, createdBy);
+                        jarEntryDigestAlgorithm, jarEntryDigests, sourceManifestBytes);
 
         return signManifest(
                 signerConfigs, jarEntryDigestAlgorithm, apkSigningSchemeIds, createdBy, manifest);
@@ -332,8 +332,7 @@ public abstract class V1SchemeSigner {
     public static OutputManifestFile generateManifestFile(
             DigestAlgorithm jarEntryDigestAlgorithm,
             Map<String, byte[]> jarEntryDigests,
-            byte[] sourceManifestBytes,
-            String defaultCreatedBy) throws ApkFormatException {
+            byte[] sourceManifestBytes) throws ApkFormatException {
         Manifest sourceManifest = null;
         if (sourceManifestBytes != null) {
             try {
@@ -345,11 +344,13 @@ public abstract class V1SchemeSigner {
         ByteArrayOutputStream manifestOut = new ByteArrayOutputStream();
         Attributes mainAttrs = new Attributes();
         // Copy the main section from the source manifest (if provided). Otherwise use defaults.
+        // NOTE: We don't output our own Created-By header because this signer did not create the
+        //       JAR/APK being signed -- the signer only adds signatures to the already existing
+        //       JAR/APK.
         if (sourceManifest != null) {
             mainAttrs.putAll(sourceManifest.getMainAttributes());
         } else {
             mainAttrs.put(Attributes.Name.MANIFEST_VERSION, ATTRIBUTE_VALUE_MANIFEST_VERSION);
-            mainAttrs.put(ATTRIBUTE_NAME_CREATED_BY, defaultCreatedBy);
         }
 
         try {

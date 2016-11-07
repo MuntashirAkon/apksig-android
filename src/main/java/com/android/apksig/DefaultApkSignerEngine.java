@@ -385,8 +385,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     V1SchemeSigner.generateManifestFile(
                             mV1ContentDigestAlgorithm,
                             mOutputJarEntryDigests,
-                            inputJarManifest,
-                            mCreatedBy);
+                            inputJarManifest);
             byte[] emittedSignatureManifest =
                     mEmittedSignatureJarEntryData.get(V1SchemeSigner.MANIFEST_ENTRY_NAME);
             if (!Arrays.equals(newManifest.contents, emittedSignatureManifest)) {
@@ -942,8 +941,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
 
         /**
-         * Sets the value of the {@code Created-By} field in JAR signature files and, if not already
-         * specified there, the {@code MANIFEST.MF} file.
+         * Sets the value of the {@code Created-By} field in JAR signature files.
          */
         public Builder setCreatedBy(String createdBy) {
             if (createdBy == null) {
