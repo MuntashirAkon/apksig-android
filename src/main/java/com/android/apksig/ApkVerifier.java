@@ -895,18 +895,14 @@ public class ApkVerifier {
          * Signature Scheme v2 signature from this signer, but does not contain a JAR signature
          * from this signer.
          */
-        JAR_SIG_MISSING(
-                "No APK Signature Scheme v2 signature from this signer despite APK being v2"
-                        + " signed"),
+        JAR_SIG_MISSING("No JAR signature from this signer"),
 
         /**
          * APK which is both JAR-signed and signed using APK Signature Scheme v2 contains a JAR
          * signature from this signer, but does not contain an APK Signature Scheme v2 signature
          * from this signer.
          */
-        V2_SIG_MISSING(
-                "No APK Signature Scheme v2 signature from this signer despite APK being v2"
-                        + " signed"),
+        V2_SIG_MISSING("No APK Signature Scheme v2 signature from this signer"),
 
         /**
          * Failed to parse the list of signers contained in the APK Signature Scheme v2 signature.
