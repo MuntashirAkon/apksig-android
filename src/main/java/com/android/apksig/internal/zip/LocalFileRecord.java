@@ -154,7 +154,7 @@ public class LocalFileRecord {
         int headerSizeWithName = HEADER_SIZE_BYTES + cdRecordEntryNameSizeBytes;
         long headerStartOffset = cdRecord.getLocalFileHeaderOffset();
         long headerEndOffset = headerStartOffset + headerSizeWithName;
-        if (headerEndOffset >= cdStartOffset) {
+        if (headerEndOffset > cdStartOffset) {
             throw new ZipFormatException(
                     "Local File Header of " + entryName + " extends beyond start of Central"
                             + " Directory. LFH end: " + headerEndOffset
