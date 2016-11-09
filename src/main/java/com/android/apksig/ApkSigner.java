@@ -704,7 +704,7 @@ public class ApkSigner {
         if (androidManifestCdRecord == null) {
             throw new MinSdkVersionException(
                     "Unable to determine APK's minimum supported Android platform version"
-                            + " : APK is missing " + ANDROID_MANIFEST_ZIP_ENTRY_NAME);
+                            + ": APK is missing " + ANDROID_MANIFEST_ZIP_ENTRY_NAME);
         }
         byte[] androidManifest;
         try {
@@ -714,7 +714,7 @@ public class ApkSigner {
         } catch (ZipFormatException e) {
             throw new MinSdkVersionException(
                     "Unable to determine APK's minimum supported Android platform version"
-                            + " : malformed ZIP entry: " + androidManifestCdRecord.getName(),
+                            + ": malformed ZIP entry: " + androidManifestCdRecord.getName(),
                     e);
         }
         return ApkUtils.getMinSdkVersionFromBinaryAndroidManifest(ByteBuffer.wrap(androidManifest));
