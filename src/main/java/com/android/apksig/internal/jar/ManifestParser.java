@@ -18,6 +18,7 @@ package com.android.apksig.internal.jar;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.jar.Attributes;
@@ -36,7 +37,7 @@ public class ManifestParser {
     private int mOffset;
     private int mEndOffset;
 
-    private String mBufferedLine;
+    private byte[] mBufferedLine;
 
     /**
      * Constructs a new {@code ManifestParser} with the provided input.
@@ -119,18 +120,33 @@ public class ManifestParser {
      * {@code null} if end of input has been reached.
      */
     private String readAttribute() {
-        // Check whether end of section was reached during previous invocation
-        if ((mBufferedLine != null) && (mBufferedLine.length() == 0)) {
-            mBufferedLine = null;
+        byte[] bytes = readAttributeBytes();
+        if (bytes == null) {
+            return null;
+        } else if (bytes.length == 0) {
             return "";
+        } else {
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
+    }
+
+    /**
+     * Returns the next attribute or empty array if end of section has been reached or {@code null}
+     * if end of input has been reached.
+     */
+    private byte[] readAttributeBytes() {
+        // Check whether end of section was reached during previous invocation
+        if ((mBufferedLine != null) && (mBufferedLine.length == 0)) {
+            mBufferedLine = null;
+            return EMPTY_BYTE_ARRAY;
         }
 
         // Read the next line
-        String line = readLine();
+        byte[] line = readLine();
         if (line == null) {
             // End of input
             if (mBufferedLine != null) {
-                String result = mBufferedLine;
+                byte[] result = mBufferedLine;
                 mBufferedLine = null;
                 return result;
             }
@@ -138,28 +154,28 @@ public class ManifestParser {
         }
 
         // Consume the read line
-        if (line.length() == 0) {
+        if (line.length == 0) {
             // End of section
             if (mBufferedLine != null) {
-                String result = mBufferedLine;
-                mBufferedLine = "";
+                byte[] result = mBufferedLine;
+                mBufferedLine = EMPTY_BYTE_ARRAY;
                 return result;
             }
-            return "";
+            return EMPTY_BYTE_ARRAY;
         }
-        StringBuilder attrLine;
+        byte[] attrLine;
         if (mBufferedLine == null) {
-            attrLine = new StringBuilder(line);
+            attrLine = line;
         } else {
-            if (!line.startsWith(" ")) {
+            if ((line.length == 0) || (line[0] != ' ')) {
                 // The most common case: buffered line is a full attribute
-                String result = mBufferedLine;
+                byte[] result = mBufferedLine;
                 mBufferedLine = line;
                 return result;
             }
-            attrLine = new StringBuilder(mBufferedLine);
+            attrLine = mBufferedLine;
             mBufferedLine = null;
-            attrLine.append(line.substring(1));
+            attrLine = concat(attrLine, line, 1, line.length - 1);
         }
 
         // Everything's buffered in attrLine now. mBufferedLine is null
@@ -169,28 +185,37 @@ public class ManifestParser {
             line = readLine();
             if (line == null) {
                 // End of input
-                return attrLine.toString();
-            } else if (line.length() == 0) {
+                return attrLine;
+            } else if (line.length == 0) {
                 // End of section
-                mBufferedLine = ""; // make this method return "end of section" next time
-                return attrLine.toString();
+                mBufferedLine = EMPTY_BYTE_ARRAY; // return "end of section" next time
+                return attrLine;
             }
-            if (line.startsWith(" ")) {
+            if (line[0] == ' ') {
                 // Continuation line
-                attrLine.append(line.substring(1));
+                attrLine = concat(attrLine, line, 1, line.length - 1);
             } else {
                 // Next attribute
                 mBufferedLine = line;
-                return attrLine.toString();
+                return attrLine;
             }
         }
+    }
+
+    private static final byte[] EMPTY_BYTE_ARRAY = new byte[0];
+
+    private static byte[] concat(byte[] arr1, byte[] arr2, int offset2, int length2) {
+        byte[] result = new byte[arr1.length + length2];
+        System.arraycopy(arr1, 0, result, 0, arr1.length);
+        System.arraycopy(arr2, offset2, result, arr1.length, length2);
+        return result;
     }
 
     /**
      * Returns the next line (without line delimiter characters) or {@code null} if end of input has
      * been reached.
      */
-    private String readLine() {
+    private byte[] readLine() {
         if (mOffset >= mEndOffset) {
             return null;
         }
@@ -220,11 +245,10 @@ public class ManifestParser {
         }
         mOffset = newlineEndOffset;
 
-        int lineLengthBytes = newlineStartOffset - startOffset;
-        if (lineLengthBytes == 0) {
-            return "";
+        if (newlineStartOffset == startOffset) {
+            return EMPTY_BYTE_ARRAY;
         }
-        return new String(mManifest, startOffset, lineLengthBytes, StandardCharsets.UTF_8);
+        return Arrays.copyOfRange(mManifest, startOffset, newlineStartOffset);
     }
 
 
