@@ -280,7 +280,10 @@ public class ApkSignerTool {
             if (!msg.endsWith(".")) {
                 msg += '.';
             }
-            throw new ParameterException(msg + " Use --min-sdk-version to override.");
+            throw new MinSdkVersionException(
+                    "Failed to determine APK's minimum supported platform version"
+                            + ". Use --min-sdk-version to override",
+                    e);
         }
         if (!tmpOutputApk.getCanonicalPath().equals(outputApk.getCanonicalPath())) {
             FileSystem fs = FileSystems.getDefault();
@@ -365,7 +368,10 @@ public class ApkSignerTool {
             if (!msg.endsWith(".")) {
                 msg += '.';
             }
-            throw new ParameterException(msg + " Use --min-sdk-version to override.");
+            throw new MinSdkVersionException(
+                    "Failed to determine APK's minimum supported platform version"
+                            + ". Use --min-sdk-version to override",
+                    e);
         }
         boolean verified = result.isVerified();
 
