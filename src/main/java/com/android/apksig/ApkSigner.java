@@ -49,6 +49,7 @@ import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
+import com.android.apksig.util.ReadableDataSink;
 import com.android.apksig.zip.ZipFormatException;
 
 /**
@@ -895,6 +896,7 @@ public class ApkSigner {
          * Sets the location of the output (signed) APK. {@code ApkSigner} will create this file if
          * it doesn't exist.
          *
+         * @see #setOutputApk(ReadableDataSink)
          * @see #setOutputApk(DataSink, DataSource)
          */
         public Builder setOutputApk(File outputApk) {
@@ -908,9 +910,32 @@ public class ApkSigner {
         }
 
         /**
+         * Sets the readable data sink which will receive the output (signed) APK. After signing,
+         * the contents of the output APK will be available via the {@link DataSource} interface of
+         * the sink.
+         *
+         * <p>This variant of {@code setOutputApk} is useful for avoiding writing the output APK to
+         * a file. For example, an in-memory data sink, such as
+         * {@link DataSinks#newInMemoryDataSink()}, could be used instead of a file.
+         *
+         * @see #setOutputApk(File)
+         * @see #setOutputApk(DataSink, DataSource)
+         */
+        public Builder setOutputApk(ReadableDataSink outputApk) {
+            if (outputApk == null) {
+                throw new NullPointerException("outputApk == null");
+            }
+            return setOutputApk(outputApk, outputApk);
+        }
+
+        /**
          * Sets the sink which will receive the output (signed) APK. Data received by the
          * {@code outputApkOut} sink must be visible through the {@code outputApkIn} data source.
          *
+         * <p>This is an advanced variant of {@link #setOutputApk(ReadableDataSink)}, enabling the
+         * sink and the source to be different objects.
+         *
+         * @see #setOutputApk(ReadableDataSink)
          * @see #setOutputApk(File)
          */
         public Builder setOutputApk(DataSink outputApkOut, DataSource outputApkIn) {

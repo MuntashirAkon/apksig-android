@@ -19,6 +19,7 @@ package com.android.apksig.util;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 
+import com.android.apksig.internal.util.ByteArrayDataSink;
 import com.android.apksig.internal.util.OutputStreamDataSink;
 import com.android.apksig.internal.util.RandomAccessFileDataSink;
 
@@ -42,5 +43,23 @@ public abstract class DataSinks {
      */
     public static DataSink asDataSink(RandomAccessFile file) {
         return new RandomAccessFileDataSink(file);
+    }
+
+    /**
+     * Returns a new in-memory {@link DataSink} which exposes all data consumed so far via the
+     * {@link DataSource} interface.
+     */
+    public static ReadableDataSink newInMemoryDataSink() {
+        return new ByteArrayDataSink();
+    }
+
+    /**
+     * Returns a new in-memory {@link DataSink} which exposes all data consumed so far via the
+     * {@link DataSource} interface.
+     *
+     * @param initialCapacity initial capacity in bytes
+     */
+    public static ReadableDataSink newInMemoryDataSink(int initialCapacity) {
+        return new ByteArrayDataSink(initialCapacity);
     }
 }
