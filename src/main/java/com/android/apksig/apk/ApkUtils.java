@@ -24,6 +24,8 @@ import com.android.apksig.zip.ZipFormatException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
+import java.util.Comparator;
 
 /**
  * APK utilities.
@@ -204,17 +206,10 @@ public abstract class ApkUtils {
                                     minSdkVersion = parser.getAttributeIntValue(i);
                                     break;
                                 case AndroidBinXmlParser.VALUE_TYPE_STRING:
-                                {
-                                    String codename = parser.getAttributeStringValue(i);
-                                    throw new CodenameMinSdkVersionException(
-                                            "Unable to determine APK's minimum supported Android"
-                                                    + " platform version: Codename in "
-                                                    + ANDROID_MANIFEST_ZIP_ENTRY_NAME
-                                                    + "'s minSdkVersion" + ": \""
-                                                    + codename + "\""
-                                                    + ". Only integer values supported.",
-                                            codename);
-                                }
+                                    minSdkVersion =
+                                            getMinSdkVersionForCodename(
+                                                    parser.getAttributeStringValue(i));
+                                    break;
                                 default:
                                     throw new MinSdkVersionException(
                                             "Unable to determine APK's minimum supported Android"
@@ -238,5 +233,97 @@ public abstract class ApkUtils {
                             + ": malformed binary resource: " + ANDROID_MANIFEST_ZIP_ENTRY_NAME,
                     e);
         }
+    }
+
+    private static class CodenamesLazyInitializer {
+
+        /**
+         * List of platform codename (first letter of) to API Level mappings. The list must be
+         * sorted by the first letter. For codenames not in the list, the assumption is that the API
+         * Level is incremented by one for every increase in the codename's first letter.
+         */
+        @SuppressWarnings("unchecked")
+        private static final Pair<Character, Integer>[] SORTED_CODENAMES_FIRST_CHAR_TO_API_LEVEL =
+                new Pair[] {
+            Pair.of('C', 2),
+            Pair.of('D', 3),
+            Pair.of('E', 4),
+            Pair.of('F', 7),
+            Pair.of('G', 8),
+            Pair.of('H', 10),
+            Pair.of('I', 13),
+            Pair.of('J', 15),
+            Pair.of('K', 18),
+            Pair.of('L', 20),
+            Pair.of('M', 22),
+            Pair.of('N', 23),
+            Pair.of('O', 25),
+        };
+
+        private static final Comparator<Pair<Character, Integer>> CODENAME_FIRST_CHAR_COMPARATOR =
+                new ByFirstComparator();
+
+        private static class ByFirstComparator implements Comparator<Pair<Character, Integer>> {
+            @Override
+            public int compare(Pair<Character, Integer> o1, Pair<Character, Integer> o2) {
+                char c1 = o1.getFirst();
+                char c2 = o2.getFirst();
+                return c1 - c2;
+            }
+        }
+    }
+
+    /**
+     * Returns the API Level corresponding to the provided platform codename.
+     *
+     * <p>This method is pessimistic. It returns a value one lower than the API Level with which the
+     * platform is actually released (e.g., 23 for N which was released as API Level 24). This is
+     * because new features which first appear in an API Level are not available in the early days
+     * of that platform version's existence, when the platform only has a codename. Moreover, this
+     * method currently doesn't differentiate between initial and MR releases, meaning API Level
+     * returned for MR releases may be more than one lower than the API Level with which the
+     * platform version is actually released.
+     *
+     * @throws CodenameMinSdkVersionException if the {@code codename} is not supported
+     */
+    static int getMinSdkVersionForCodename(String codename) throws CodenameMinSdkVersionException {
+        char firstChar = codename.isEmpty() ? ' ' : codename.charAt(0);
+        // Codenames are case-sensitive. Only codenames starting with A-Z are supported for now.
+        // We only look at the first letter of the codename as this is the most important letter.
+        if ((firstChar >= 'A') && (firstChar <= 'Z')) {
+            Pair<Character, Integer>[] sortedCodenamesFirstCharToApiLevel =
+                    CodenamesLazyInitializer.SORTED_CODENAMES_FIRST_CHAR_TO_API_LEVEL;
+            int searchResult =
+                    Arrays.binarySearch(
+                            sortedCodenamesFirstCharToApiLevel,
+                            Pair.of(firstChar, null), // second element of the pair is ignored here
+                            CodenamesLazyInitializer.CODENAME_FIRST_CHAR_COMPARATOR);
+            if (searchResult >= 0) {
+                // Exact match -- searchResult is the index of the matching element
+                return sortedCodenamesFirstCharToApiLevel[searchResult].getSecond();
+            }
+            // Not an exact match -- searchResult is negative and is -(insertion index) - 1.
+            // The element at insertionIndex - 1 (if present) is smaller than firstChar and the
+            // element at insertionIndex (if present) is greater than firstChar.
+            int insertionIndex = -1 - searchResult; // insertionIndex is in [0; array length]
+            if (insertionIndex == 0) {
+                // 'A' or 'B' -- never released to public
+                return 1;
+            } else {
+                // The element at insertionIndex - 1 is the newest older codename.
+                // API Level bumped by at least 1 for every change in the first letter of codename
+                Pair<Character, Integer> newestOlderCodenameMapping =
+                        sortedCodenamesFirstCharToApiLevel[insertionIndex - 1];
+                char newestOlderCodenameFirstChar = newestOlderCodenameMapping.getFirst();
+                int newestOlderCodenameApiLevel = newestOlderCodenameMapping.getSecond();
+                return newestOlderCodenameApiLevel + (firstChar - newestOlderCodenameFirstChar);
+            }
+        }
+
+        throw new CodenameMinSdkVersionException(
+                "Unable to determine APK's minimum supported Android platform version"
+                        + " : Unsupported codename in " + ANDROID_MANIFEST_ZIP_ENTRY_NAME
+                        + "'s minSdkVersion: \"" + codename + "\"",
+                codename);
     }
 }

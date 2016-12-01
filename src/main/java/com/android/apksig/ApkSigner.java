@@ -955,9 +955,7 @@ public class ApkSigner {
          * Sets the minimum Android platform version (API Level) on which APK signatures produced
          * by the signer being built must verify. This method is useful for overriding the default
          * behavior where the minimum API Level is obtained from the {@code android:minSdkVersion}
-         * attribute of the APK's {@code AndroidManifest.xml}. For example, the default behavior
-         * refuses to handle APKs whose {@code AndroidManifest.xml} specifies {@code minSdkVersion}
-         * as a codename (e.g., "N") rather than an integer.
+         * attribute of the APK's {@code AndroidManifest.xml}.
          *
          * <p><em>Note:</em> This method may result in APK signatures which don't verify on some
          * Android platform versions supported by the APK.

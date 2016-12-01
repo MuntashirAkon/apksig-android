@@ -1215,9 +1215,7 @@ public class ApkVerifier {
          *
          * <p>This method is useful for overriding the default behavior which checks that the APK
          * will verify on all platform versions supported by the APK, as specified by
-         * {@code android:minSdkVersion} attributes in the APK's {@code AndroidManifest.xml}. For
-         * example, the default behavior refuses to handle APKs with codenames as values of
-         * {@code android:minSdkVersion} (e.g., "N").
+         * {@code android:minSdkVersion} attributes in the APK's {@code AndroidManifest.xml}.
          *
          * @param minSdkVersion API Level of the oldest platform for which to verify the APK
          *
