@@ -28,6 +28,5 @@ java_test(
     srcs = [
         "src/test/java/com/android/apksig/apk/ApkUtilsTest.java",
     ],
-    main_class = "com.android.apksig.apk.ApkUtilsTest",
     deps = [":apksig"],
 )
