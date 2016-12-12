@@ -16,13 +16,12 @@
 
 package com.android.apksig.internal.util;
 
+import com.android.apksig.util.DataSink;
+import com.android.apksig.util.DataSource;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-
-import com.android.apksig.util.DataSink;
-import com.android.apksig.util.DataSource;
 
 /**
  * {@link DataSource} backed by a {@link RandomAccessFile}.

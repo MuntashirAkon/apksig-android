@@ -17,7 +17,6 @@
 package com.android.apksig.internal.apk.v2;
 
 import com.android.apksig.internal.util.Pair;
-
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;

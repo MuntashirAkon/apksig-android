@@ -16,11 +16,10 @@
 
 package com.android.apksig.internal.util;
 
+import com.android.apksig.util.DataSink;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-
-import com.android.apksig.util.DataSink;
 
 /**
  * {@link DataSink} which outputs received data into the associated {@link OutputStream}.

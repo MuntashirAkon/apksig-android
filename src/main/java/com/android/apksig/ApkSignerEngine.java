@@ -16,16 +16,15 @@
 
 package com.android.apksig;
 
+import com.android.apksig.apk.ApkFormatException;
+import com.android.apksig.util.DataSink;
+import com.android.apksig.util.DataSource;
 import java.io.Closeable;
 import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SignatureException;
 import java.util.List;
-
-import com.android.apksig.apk.ApkFormatException;
-import com.android.apksig.util.DataSink;
-import com.android.apksig.util.DataSource;
 
 /**
  * APK signing logic which is independent of how input and output APKs are stored, parsed, and

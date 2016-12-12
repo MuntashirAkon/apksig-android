@@ -16,6 +16,10 @@
 
 package com.android.apksig.internal.apk.v1;
 
+import com.android.apksig.apk.ApkFormatException;
+import com.android.apksig.internal.jar.ManifestWriter;
+import com.android.apksig.internal.jar.SignatureFileWriter;
+import com.android.apksig.internal.util.Pair;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -41,12 +45,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
-
-import com.android.apksig.apk.ApkFormatException;
-import com.android.apksig.internal.jar.ManifestWriter;
-import com.android.apksig.internal.jar.SignatureFileWriter;
-import com.android.apksig.internal.util.Pair;
-
 import sun.security.pkcs.ContentInfo;
 import sun.security.pkcs.PKCS7;
 import sun.security.pkcs.SignerInfo;

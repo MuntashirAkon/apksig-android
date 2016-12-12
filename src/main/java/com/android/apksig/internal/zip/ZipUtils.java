@@ -16,15 +16,14 @@
 
 package com.android.apksig.internal.zip;
 
+import com.android.apksig.internal.util.Pair;
+import com.android.apksig.util.DataSource;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.zip.CRC32;
 import java.util.zip.Deflater;
-
-import com.android.apksig.internal.util.Pair;
-import com.android.apksig.util.DataSource;
 
 /**
  * Assorted ZIP format helpers.

@@ -25,7 +25,6 @@ import com.android.apksig.internal.util.DelegatingX509Certificate;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;

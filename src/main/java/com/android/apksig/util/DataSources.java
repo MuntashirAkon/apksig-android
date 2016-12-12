@@ -18,7 +18,6 @@ package com.android.apksig.util;
 
 import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.util.RandomAccessFileDataSource;
-
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 

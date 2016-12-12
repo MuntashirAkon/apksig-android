@@ -28,7 +28,6 @@ import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 import com.android.apksig.zip.ZipFormatException;
-
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;

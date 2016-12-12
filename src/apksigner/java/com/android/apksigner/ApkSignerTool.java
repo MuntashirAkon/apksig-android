@@ -19,7 +19,6 @@ package com.android.apksigner;
 import com.android.apksig.ApkSigner;
 import com.android.apksig.ApkVerifier;
 import com.android.apksig.apk.MinSdkVersionException;
-
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -57,7 +56,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.List;
-
 import javax.crypto.EncryptedPrivateKeyInfo;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;

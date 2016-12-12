@@ -16,6 +16,18 @@
 
 package com.android.apksig.internal.apk.v1;
 
+import com.android.apksig.ApkVerifier.Issue;
+import com.android.apksig.ApkVerifier.IssueWithParams;
+import com.android.apksig.apk.ApkFormatException;
+import com.android.apksig.apk.ApkUtils;
+import com.android.apksig.internal.jar.ManifestParser;
+import com.android.apksig.internal.util.AndroidSdkVersion;
+import com.android.apksig.internal.util.InclusiveIntRange;
+import com.android.apksig.internal.util.MessageDigestSink;
+import com.android.apksig.internal.zip.CentralDirectoryRecord;
+import com.android.apksig.internal.zip.LocalFileRecord;
+import com.android.apksig.util.DataSource;
+import com.android.apksig.zip.ZipFormatException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -38,20 +50,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.jar.Attributes;
-
-import com.android.apksig.ApkVerifier.Issue;
-import com.android.apksig.ApkVerifier.IssueWithParams;
-import com.android.apksig.apk.ApkFormatException;
-import com.android.apksig.apk.ApkUtils;
-import com.android.apksig.internal.jar.ManifestParser;
-import com.android.apksig.internal.util.AndroidSdkVersion;
-import com.android.apksig.internal.util.InclusiveIntRange;
-import com.android.apksig.internal.util.MessageDigestSink;
-import com.android.apksig.internal.zip.CentralDirectoryRecord;
-import com.android.apksig.internal.zip.LocalFileRecord;
-import com.android.apksig.util.DataSource;
-import com.android.apksig.zip.ZipFormatException;
-
 import sun.security.pkcs.PKCS7;
 import sun.security.pkcs.SignerInfo;
 

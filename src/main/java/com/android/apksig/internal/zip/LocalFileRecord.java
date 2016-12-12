@@ -16,6 +16,10 @@
 
 package com.android.apksig.internal.zip;
 
+import com.android.apksig.internal.util.ByteBufferSink;
+import com.android.apksig.util.DataSink;
+import com.android.apksig.util.DataSource;
+import com.android.apksig.zip.ZipFormatException;
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -23,11 +27,6 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
-
-import com.android.apksig.internal.util.ByteBufferSink;
-import com.android.apksig.util.DataSink;
-import com.android.apksig.util.DataSource;
-import com.android.apksig.zip.ZipFormatException;
 
 /**
  * ZIP Local File record.

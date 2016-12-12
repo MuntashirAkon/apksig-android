@@ -34,7 +34,6 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
-
 import javax.security.auth.x500.X500Principal;
 
 /**

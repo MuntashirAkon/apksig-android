@@ -16,13 +16,12 @@
 
 package com.android.apksig.internal.util;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
-
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.ReadableDataSink;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 /**
  * Growable byte array which can be appended to via {@link DataSink} interface and read from via

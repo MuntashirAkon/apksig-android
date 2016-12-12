@@ -16,12 +16,11 @@
 
 package com.android.apksig.util;
 
-import java.io.OutputStream;
-import java.io.RandomAccessFile;
-
 import com.android.apksig.internal.util.ByteArrayDataSink;
 import com.android.apksig.internal.util.OutputStreamDataSink;
 import com.android.apksig.internal.util.RandomAccessFileDataSink;
+import java.io.OutputStream;
+import java.io.RandomAccessFile;
 
 /**
  * Utility methods for working with {@link DataSink} abstraction.
