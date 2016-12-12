@@ -115,7 +115,7 @@ public abstract class V2SchemeVerifier {
             ByteBuffer apkSignatureSchemeV2Block,
             DataSource centralDir,
             ByteBuffer eocd,
-            Result result) throws IOException, ApkFormatException, NoSuchAlgorithmException {
+            Result result) throws IOException, NoSuchAlgorithmException {
         Set<ContentDigestAlgorithm> contentDigestsToVerify = new HashSet<>(1);
         parseSigners(apkSignatureSchemeV2Block, contentDigestsToVerify, result);
         if (result.containsErrors()) {
@@ -139,7 +139,7 @@ public abstract class V2SchemeVerifier {
     private static void parseSigners(
             ByteBuffer apkSignatureSchemeV2Block,
             Set<ContentDigestAlgorithm> contentDigestsToVerify,
-            Result result) throws ApkFormatException, NoSuchAlgorithmException {
+            Result result) throws NoSuchAlgorithmException {
         ByteBuffer signers;
         try {
             signers = getLengthPrefixedSlice(apkSignatureSchemeV2Block);

@@ -158,49 +158,49 @@ public class ByteArrayDataSink implements ReadableDataSink {
      * Slice of the growable byte array. The slice's offset and size in the array are fixed.
      */
     private class SliceDataSource implements DataSource {
-        private final int mOffset;
-        private final int mSize;
+        private final int mSliceOffset;
+        private final int mSliceSize;
 
         private SliceDataSource(int offset, int size) {
-            mOffset = offset;
-            mSize = size;
+            mSliceOffset = offset;
+            mSliceSize = size;
         }
 
         @Override
         public long size() {
-            return mSize;
+            return mSliceSize;
         }
 
         @Override
         public void feed(long offset, long size, DataSink sink) throws IOException {
             checkChunkValid(offset, size);
             // checkChunkValid combined with the way instances of this class are constructed ensures
-            // that mOffset + offset does not overflow and that it's fine to cast size to int.
-            sink.consume(mArray, (int) (mOffset + offset), (int) size);
+            // that mSliceOffset + offset does not overflow and that it's fine to cast size to int.
+            sink.consume(mArray, (int) (mSliceOffset + offset), (int) size);
         }
 
         @Override
         public ByteBuffer getByteBuffer(long offset, int size) throws IOException {
             checkChunkValid(offset, size);
             // checkChunkValid combined with the way instances of this class are constructed ensures
-            // that mOffset + offset does not overflow.
-            return ByteBuffer.wrap(mArray, (int) (mOffset + offset), size);
+            // that mSliceOffset + offset does not overflow.
+            return ByteBuffer.wrap(mArray, (int) (mSliceOffset + offset), size);
         }
 
         @Override
         public void copyTo(long offset, int size, ByteBuffer dest) throws IOException {
             checkChunkValid(offset, size);
             // checkChunkValid combined with the way instances of this class are constructed ensures
-            // that mOffset + offset does not overflow.
-            dest.put(mArray, (int) (mOffset + offset), size);
+            // that mSliceOffset + offset does not overflow.
+            dest.put(mArray, (int) (mSliceOffset + offset), size);
         }
 
         @Override
         public DataSource slice(long offset, long size) {
             checkChunkValid(offset, size);
             // checkChunkValid combined with the way instances of this class are constructed ensures
-            // that mOffset + offset does not overflow and that it's fine to cast size to int.
-            return new SliceDataSource((int) (mOffset + offset), (int) size);
+            // that mSliceOffset + offset does not overflow and that it's fine to cast size to int.
+            return new SliceDataSource((int) (mSliceOffset + offset), (int) size);
         }
 
         private void checkChunkValid(long offset, long size) {
@@ -210,18 +210,18 @@ public class ByteArrayDataSink implements ReadableDataSink {
             if (size < 0) {
                 throw new IllegalArgumentException("size: " + size);
             }
-            if (offset > mSize) {
+            if (offset > mSliceSize) {
                 throw new IllegalArgumentException(
-                        "offset (" + offset + ") > source size (" + mSize + ")");
+                        "offset (" + offset + ") > source size (" + mSliceSize + ")");
             }
             long endOffset = offset + size;
             if (endOffset < offset) {
                 throw new IllegalArgumentException(
                         "offset (" + offset + ") + size (" + size + ") overflow");
             }
-            if (endOffset > mSize) {
+            if (endOffset > mSliceSize) {
                 throw new IllegalArgumentException(
-                        "offset (" + offset + ") + size (" + size + ") > source size (" + mSize
+                        "offset (" + offset + ") + size (" + size + ") > source size (" + mSliceSize
                                 + ")");
             }
         }

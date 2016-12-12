@@ -19,7 +19,8 @@ package com.android.apksig.apk;
 /**
  * Indicates that an APK is not well-formed. For example, this may indicate that the APK is not a
  * well-formed ZIP archive, in which case {@link #getCause()} will return a
- * {@link ZipFormatException}, or that the APK contains multiple ZIP entries with the same name.
+ * {@link com.android.apksig.zip.ZipFormatException ZipFormatException}, or that the APK contains
+ * multiple ZIP entries with the same name.
  */
 public class ApkFormatException extends Exception {
     private static final long serialVersionUID = 1L;
