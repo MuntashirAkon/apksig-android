@@ -250,13 +250,15 @@ public class ApkSigner {
                                 signerConfig.getCertificates())
                                 .build());
             }
-            signerEngine =
+            DefaultApkSignerEngine.Builder signerEngineBuilder =
                     new DefaultApkSignerEngine.Builder(engineSignerConfigs, minSdkVersion)
-                    .setV1SigningEnabled(mV1SigningEnabled)
-                    .setV2SigningEnabled(mV2SigningEnabled)
-                    .setOtherSignersSignaturesPreserved(mOtherSignersSignaturesPreserved)
-                    .setCreatedBy(mCreatedBy)
-                    .build();
+                            .setV1SigningEnabled(mV1SigningEnabled)
+                            .setV2SigningEnabled(mV2SigningEnabled)
+                            .setOtherSignersSignaturesPreserved(mOtherSignersSignaturesPreserved);
+            if (mCreatedBy != null) {
+                signerEngineBuilder.setCreatedBy(mCreatedBy);
+            }
+            signerEngine = signerEngineBuilder.build();
         }
 
         // Step 4. Provide the signer engine with the input APK's APK Signing Block (if any)
@@ -819,7 +821,7 @@ public class ApkSigner {
         private boolean mV1SigningEnabled = true;
         private boolean mV2SigningEnabled = true;
         private boolean mOtherSignersSignaturesPreserved;
-        private String mCreatedBy = "1.0 (Android apksig)";
+        private String mCreatedBy;
         private Integer mMinSdkVersion;
 
         private final ApkSignerEngine mSignerEngine;

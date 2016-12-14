@@ -265,8 +265,7 @@ public class ApkSignerTool {
                         .setOutputApk(tmpOutputApk)
                         .setOtherSignersSignaturesPreserved(false)
                         .setV1SigningEnabled(v1SigningEnabled)
-                        .setV2SigningEnabled(v2SigningEnabled)
-                        .setCreatedBy(VERSION + " (Android apksigner)");
+                        .setV2SigningEnabled(v2SigningEnabled);
         if (minSdkVersionSpecified) {
             apkSignerBuilder.setMinSdkVersion(minSdkVersion);
         }

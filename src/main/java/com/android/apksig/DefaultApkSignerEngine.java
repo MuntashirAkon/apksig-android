@@ -871,7 +871,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         private boolean mV1SigningEnabled = true;
         private boolean mV2SigningEnabled = true;
         private boolean mOtherSignersSignaturesPreserved;
-        private String mCreatedBy = "1.0 (Android apksig)";
+        private String mCreatedBy = "1.0 (Android)";
 
         /**
          * Constructs a new {@code Builder}.
