@@ -8,6 +8,11 @@ private key and certificate.
 
         OPTIONS
 
+--in                  Input APK file to sign. This is an alternative to
+                      specifying the APK as the very last parameter, after all
+                      options. Unless --out is specified, this file will be
+                      overwritten with the resulting signed APK.
+
 --out                 File into which to output the signed APK. By default, the
                       APK is signed in-place, overwriting the input file.
 
@@ -128,11 +133,14 @@ file in X.509 format (see --key and --cert).
 
         EXAMPLES
 
-1. Sign an APK using the one and only key in keystore release.jks:
+1. Sign an APK, in-place, using the one and only key in keystore release.jks:
 $ apksigner sign --ks release.jks app.apk
 
-2. Sign an APK using a private key and certificate stored as individual files:
+1. Sign an APK, without overwriting, using the one and only key in keystore release.jks:
+$ apksigner sign --ks release.jks --in app.apk --out app-signed.apk
+
+3. Sign an APK using a private key and certificate stored as individual files:
 $ apksigner sign --key release.pk8 --cert release.x509.pem app.apk
 
-3. Sign an APK using two keys:
+4. Sign an APK using two keys:
 $ apksigner sign --ks release.jks --next-signer --ks magic.jks app.apk

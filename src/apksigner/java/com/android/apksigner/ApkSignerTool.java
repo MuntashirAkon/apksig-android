@@ -111,6 +111,7 @@ public class ApkSignerTool {
         }
 
         File outputApk = null;
+        File inputApk = null;
         boolean verbose = false;
         boolean v1SigningEnabled = true;
         boolean v2SigningEnabled = true;
@@ -121,13 +122,16 @@ public class ApkSignerTool {
         SignerParams signerParams = new SignerParams();
         OptionsParser optionsParser = new OptionsParser(params);
         String optionName;
+        String optionOriginalForm = null;
         while ((optionName = optionsParser.nextOption()) != null) {
-            String optionOriginalForm = optionsParser.getOptionOriginalForm();
+            optionOriginalForm = optionsParser.getOptionOriginalForm();
             if (("help".equals(optionName)) || ("h".equals(optionName))) {
                 printUsage(HELP_PAGE_SIGN);
                 return;
             } else if ("out".equals(optionName)) {
                 outputApk = new File(optionsParser.getRequiredValue("Output file name"));
+            } else if ("in".equals(optionName)) {
+                inputApk = new File(optionsParser.getRequiredValue("Input file name"));
             } else if ("min-sdk-version".equals(optionName)) {
                 minSdkVersion = optionsParser.getRequiredIntValue("Mininimum API Level");
                 minSdkVersionSpecified = true;
@@ -189,11 +193,23 @@ public class ApkSignerTool {
         }
 
         params = optionsParser.getRemainingParams();
-        if (params.length < 1) {
-            throw new ParameterException("Missing input APK");
-        } else if (params.length > 1) {
-            throw new ParameterException(
-                    "Unexpected parameter(s) after input APK (" + params[0] + ")");
+        if (inputApk != null) {
+            // Input APK has been specified via preceding parameters. We don't expect any more
+            // parameters.
+            if (params.length > 0) {
+                throw new ParameterException(
+                        "Unexpected parameter(s) after " + optionOriginalForm + ": " + params[0]);
+            }
+        } else {
+            // Input APK has not been specified via preceding parameters. The next parameter is
+            // supposed to be the path to input APK.
+            if (params.length < 1) {
+                throw new ParameterException("Missing input APK");
+            } else if (params.length > 1) {
+                throw new ParameterException(
+                        "Unexpected parameter(s) after input APK (" + params[1] + ")");
+            }
+            inputApk = new File(params[0]);
         }
         if ((minSdkVersionSpecified) && (minSdkVersion > maxSdkVersion)) {
             throw new ParameterException(
@@ -246,7 +262,6 @@ public class ApkSignerTool {
             }
         }
 
-        File inputApk = new File(params[0]);
         if (outputApk == null) {
             outputApk = inputApk;
         }
@@ -296,6 +311,7 @@ public class ApkSignerTool {
             return;
         }
 
+        File inputApk = null;
         int minSdkVersion = 1;
         boolean minSdkVersionSpecified = false;
         int maxSdkVersion = Integer.MAX_VALUE;
@@ -305,8 +321,9 @@ public class ApkSignerTool {
         boolean warningsTreatedAsErrors = false;
         OptionsParser optionsParser = new OptionsParser(params);
         String optionName;
+        String optionOriginalForm = null;
         while ((optionName = optionsParser.nextOption()) != null) {
-            String optionOriginalForm = optionsParser.getOptionOriginalForm();
+            optionOriginalForm = optionsParser.getOptionOriginalForm();
             if ("min-sdk-version".equals(optionName)) {
                 minSdkVersion = optionsParser.getRequiredIntValue("Mininimum API Level");
                 minSdkVersionSpecified = true;
@@ -322,6 +339,8 @@ public class ApkSignerTool {
             } else if (("help".equals(optionName)) || ("h".equals(optionName))) {
                 printUsage(HELP_PAGE_VERIFY);
                 return;
+            } else if ("in".equals(optionName)) {
+                inputApk = new File(optionsParser.getRequiredValue("Input APK file"));
             } else {
                 throw new ParameterException(
                         "Unsupported option: " + optionOriginalForm + ". See --help for supported"
@@ -330,10 +349,23 @@ public class ApkSignerTool {
         }
         params = optionsParser.getRemainingParams();
 
-        if (params.length < 1) {
-            throw new ParameterException("Missing APK");
-        } else if (params.length > 1) {
-            throw new ParameterException("Unexpected parameter(s) after APK (" + params[0] + ")");
+        if (inputApk != null) {
+            // Input APK has been specified in preceding parameters. We don't expect any more
+            // parameters.
+            if (params.length > 0) {
+                throw new ParameterException(
+                        "Unexpected parameter(s) after " + optionOriginalForm + ": " + params[0]);
+            }
+        } else {
+            // Input APK has not been specified in preceding parameters. The next parameter is
+            // supposed to be the input APK.
+            if (params.length < 1) {
+                throw new ParameterException("Missing APK");
+            } else if (params.length > 1) {
+                throw new ParameterException(
+                        "Unexpected parameter(s) after APK (" + params[1] + ")");
+            }
+            inputApk = new File(params[0]);
         }
 
         if ((minSdkVersionSpecified) && (maxSdkVersionSpecified)
@@ -343,7 +375,6 @@ public class ApkSignerTool {
                             + ")");
         }
 
-        File inputApk = new File(params[0]);
         ApkVerifier.Builder apkVerifierBuilder = new ApkVerifier.Builder(inputApk);
         if (minSdkVersionSpecified) {
             apkVerifierBuilder.setMinCheckedPlatformVersion(minSdkVersion);

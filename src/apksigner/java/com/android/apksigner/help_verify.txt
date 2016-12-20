@@ -24,6 +24,9 @@ range of API Levels.
 
 -Werr                 Treat warnings as errors
 
+--in                  APK file to verify. This is an alternative to specifying
+                      the APK as the very last parameter, after all options.
+
 
         EXAMPLES
 
