@@ -11,6 +11,8 @@ range of API Levels.
 
 --print-certs         Show information about the APK's signing certificates
 
+-v, --verbose         Verbose output mode
+
 --min-sdk-version     Lowest API Level on which this APK's signatures will be
                       verified. By default, the value from AndroidManifest.xml
                       is used.
@@ -18,14 +20,12 @@ range of API Levels.
 --max-sdk-version     Highest API Level on which this APK's signatures will be
                       verified. By default, the highest possible value is used.
 
--v, --verbose         Verbose output mode
-
--h, --help            Show help about this command and exit
-
 -Werr                 Treat warnings as errors
 
 --in                  APK file to verify. This is an alternative to specifying
                       the APK as the very last parameter, after all options.
+
+-h, --help            Show help about this command and exit
 
 
         EXAMPLES

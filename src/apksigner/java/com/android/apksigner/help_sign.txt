@@ -1,12 +1,13 @@
 USAGE: apksigner sign [options] apk
 
-This signs the provided APK using one or more signers, each represented by
-an asymmetric key pair and a corresponding certificate. Typically, an APK is
-signed by just one signer. For each signer, you need to provide the signer's
-private key and certificate.
+This signs the provided APK, stripping out any pre-existing signatures. Signing
+is performed using one or more signers, each represented by an asymmetric key
+pair and a corresponding certificate. Typically, an APK is signed by just one
+signer. For each signer, you need to provide the signer's private key and
+certificate.
 
 
-        OPTIONS
+        GENERAL OPTIONS
 
 --in                  Input APK file to sign. This is an alternative to
                       specifying the APK as the very last parameter, after all
@@ -16,6 +17,19 @@ private key and certificate.
 --out                 File into which to output the signed APK. By default, the
                       APK is signed in-place, overwriting the input file.
 
+-v, --verbose         Verbose output mode
+
+--v1-signing-enabled  Whether to enable signing using JAR signing scheme (aka v1
+                      signing scheme) used in Android since day one. By default,
+                      signing using this scheme is enabled based on min and max
+                      SDK version (see --min-sdk-version and --max-sdk-version).
+
+--v2-signing-enabled  Whether to enable signing using APK Signature Scheme v2
+                      (aka v2 signing scheme) introduced in Android Nougat,
+                      API Level 24. By default, signing using this scheme is
+                      enabled based on min and max SDK version (see
+                      --min-sdk-version and --max-sdk-version).
+
 --min-sdk-version     Lowest API Level on which this APK's signatures will be
                       verified. By default, the value from AndroidManifest.xml
                       is used. The higher the value, the stronger security
@@ -23,20 +37,6 @@ private key and certificate.
 
 --max-sdk-version     Highest API Level on which this APK's signatures will be
                       verified. By default, the highest possible value is used.
-
---v1-signing-enabled  Whether to enable signing using JAR signing scheme (aka v1
-                      signing scheme, the one used in Android since day one). By
-                      default, signing using this scheme is enabled based on min
-                      and max SDK version (see --min-sdk-version and
-                      --max-sdk-version).
-
---v2-signing-enabled  Whether to enable signing using APK Signature Scheme v2
-                      (aka v2 signing scheme, the one introduced in Android
-                      Nougat, API Level 24). By default, signing using this
-                      scheme is enabled based on min and max SDK version (see
-                      --min-sdk-version and --max-sdk-version).
-
--v, --verbose         Verbose output mode
 
 -h, --help            Show help about this command and exit
 
@@ -136,7 +136,8 @@ file in X.509 format (see --key and --cert).
 1. Sign an APK, in-place, using the one and only key in keystore release.jks:
 $ apksigner sign --ks release.jks app.apk
 
-1. Sign an APK, without overwriting, using the one and only key in keystore release.jks:
+1. Sign an APK, without overwriting, using the one and only key in keystore
+   release.jks:
 $ apksigner sign --ks release.jks --in app.apk --out app-signed.apk
 
 3. Sign an APK using a private key and certificate stored as individual files:
