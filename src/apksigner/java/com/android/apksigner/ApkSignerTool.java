@@ -638,14 +638,6 @@ public class ApkSignerTool {
             }
 
             // 3. Load the PrivateKey and cert chain from KeyStore
-            char[] keyPwd;
-            if (keyPasswordSpec == null) {
-                keyPwd = keystorePwd;
-            } else {
-                keyPwd =
-                        passwordRetriever.getPassword(keyPasswordSpec, "Key password for " + name)
-                                .toCharArray();
-            }
             String keyAlias = null;
             PrivateKey key = null;
             try {
@@ -680,25 +672,34 @@ public class ApkSignerTool {
                     throw new ParameterException(
                             keystoreFile + " entry \"" + keyAlias + "\" does not contain a key");
                 }
+
                 Key entryKey;
-                if (keyPwd != null) {
-                    // Key password specified -- load this key as a password-protected key
+                if (keyPasswordSpec != null) {
+                    // Key password spec is explicitly specified. Use this spec to obtain the
+                    // password and then load the key using that password.
+                    char[] keyPwd =
+                            passwordRetriever.getPassword(
+                                    keyPasswordSpec,
+                                    "Key \"" + keyAlias + "\" password for " + name)
+                                    .toCharArray();
                     entryKey = ks.getKey(keyAlias, keyPwd);
                 } else {
-                    // Key password not specified -- try to load this key without using a password
+                    // Key password spec is not specified. This means we should assume that key
+                    // password is the same as the keystore password and that, if this assumption is
+                    // wrong, we should prompt for key password and retry loading the key using that
+                    // password.
                     try {
-                        entryKey = ks.getKey(keyAlias, null);
+                        entryKey = ks.getKey(keyAlias, keystorePwd);
                     } catch (UnrecoverableKeyException expected) {
-                        // Looks like this might be a password-protected key. Prompt for password
-                        // and try loading the key using the password.
-                        keyPwd =
+                        char[] keyPwd =
                                 passwordRetriever.getPassword(
                                         PasswordRetriever.SPEC_STDIN,
-                                        "Password for key with alias \"" + keyAlias + "\"")
-                                                .toCharArray();
+                                        "Key \"" + keyAlias + "\" password for " + name)
+                                        .toCharArray();
                         entryKey = ks.getKey(keyAlias, keyPwd);
                     }
                 }
+
                 if (entryKey == null) {
                     throw new ParameterException(
                             keystoreFile + " entry \"" + keyAlias + "\" does not contain a key");

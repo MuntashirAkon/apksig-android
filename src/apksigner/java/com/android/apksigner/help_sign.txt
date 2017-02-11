@@ -85,9 +85,7 @@ file in X.509 format (see --key and --cert).
                       signer, KeyStore password is read before the key password
                       is read.
 
---key-pass            Password with which the private key is protected. By
-                      default it is assumed that KeyStore keys are protected
-                      using the same password as their KeyStore (see --ks-pass).
+--key-pass            Password with which the private key is protected.
                       The following formats are supported:
                           pass:<password> password provided inline
                           env:<name>      password provided in the named
@@ -96,8 +94,13 @@ file in X.509 format (see --key and --cert).
                                           file, as a single line
                           stdin           password provided on standard input,
                                           as a single line
-                      By default, if the key is password-protected, the tool
-                      will prompt for password via console or standard input.
+                      If --key-pass is not specified for a KeyStore key, this
+                      tool will attempt to load the key using the KeyStore
+                      password and, if that fails, will prompt for key password
+                      and attempt to load the key using that password.
+                      If --key-pass is not specified for a private key file key,
+                      this tool will prompt for key password only if a password
+                      is required.
                       When the same file (including standard input) is used for
                       providing multiple passwords, the passwords are read from
                       the file one line at a time. Passwords are read in the
