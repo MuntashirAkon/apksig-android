@@ -623,17 +623,18 @@ public class ApkSignerTool {
             }
 
             // 2. Load the KeyStore
-            List<char[]> keystorePasswords = null;
-            if ("NONE".equals(keystoreFile)) {
-                ks.load(null);
-            } else {
+            List<char[]> keystorePasswords;
+            {
                 String keystorePasswordSpec =
                         (this.keystorePasswordSpec != null)
                                 ?  this.keystorePasswordSpec : PasswordRetriever.SPEC_STDIN;
                 keystorePasswords =
                         passwordRetriever.getPasswords(
                                 keystorePasswordSpec, "Keystore password for " + name);
-                loadKeyStoreFromFile(ks, keystoreFile, keystorePasswords);
+                loadKeyStoreFromFile(
+                        ks,
+                        "NONE".equals(keystoreFile) ? null : keystoreFile,
+                        keystorePasswords);
             }
 
             // 3. Load the PrivateKey and cert chain from KeyStore
@@ -725,13 +726,23 @@ public class ApkSignerTool {
             }
         }
 
+        /**
+         * Loads the password-protected keystore from storage.
+         *
+         * @param file file backing the keystore or {@code null} if the keystore is not file-backed,
+         *        for example, a PKCS #11 KeyStore.
+         */
         private static void loadKeyStoreFromFile(KeyStore ks, String file, List<char[]> passwords)
                 throws Exception {
             Exception lastFailure = null;
             for (char[] password : passwords) {
                 try {
-                    try (FileInputStream in = new FileInputStream(file)) {
-                        ks.load(in, password);
+                    if (file != null) {
+                        try (FileInputStream in = new FileInputStream(file)) {
+                            ks.load(in, password);
+                        }
+                    } else {
+                        ks.load(null, password);
                     }
                     return;
                 } catch (Exception e) {
