@@ -24,9 +24,10 @@ java_binary(
 )
 
 java_test(
-    name = "ApkUtilsTest",
-    srcs = [
-        "src/test/java/com/android/apksig/apk/ApkUtilsTest.java",
-    ],
+    name = "all",
+    srcs = glob([
+        "src/test/java/com/android/apksig/**/*.java",
+    ]),
+    test_class = "com.android.apksig.AllTests",
     deps = [":apksig"],
 )
