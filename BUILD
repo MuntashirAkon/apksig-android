@@ -28,6 +28,9 @@ java_test(
     srcs = glob([
         "src/test/java/com/android/apksig/**/*.java",
     ]),
+    resources = glob([
+        "src/test/resources/**/*",
+    ]),
     test_class = "com.android.apksig.AllTests",
     deps = [":apksig"],
 )
