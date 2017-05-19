@@ -23,12 +23,11 @@ import static org.junit.Assume.assumeNoException;
 import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.ApkVerifier.IssueWithParams;
 import com.android.apksig.apk.ApkFormatException;
-import com.android.apksig.internal.test.HexEncoding;
 import com.android.apksig.internal.util.AndroidSdkVersion;
+import com.android.apksig.internal.util.HexEncoding;
+import com.android.apksig.internal.util.Resources;
 import com.android.apksig.util.DataSources;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -36,7 +35,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.Security;
 import java.security.Signature;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.Locale;
@@ -182,7 +180,8 @@ public class ApkVerifierTest {
         // OpenJDK's default implementation of Signature.SHA1withDSA refuses to verify signatures
         // created with keys too long for the digest used. Android Package Manager does not reject
         // such signatures. We thus skip this test if Signature.SHA1withDSA exhibits this issue.
-        PublicKey publicKey = getCertificateFromResources("dsa-2048.x509.pem").getPublicKey();
+        PublicKey publicKey =
+                Resources.toCertificate(getClass(), "dsa-2048.x509.pem").getPublicKey();
         Signature s = Signature.getInstance("SHA1withDSA");
         try {
             s.initVerify(publicKey);
@@ -215,7 +214,8 @@ public class ApkVerifierTest {
         // OpenJDK's default implementation of Signature.SHA224withDSA refuses to verify signatures
         // created with keys too long for the digest used. Android Package Manager does not reject
         // such signatures. We thus skip this test if Signature.SHA224withDSA exhibits this issue.
-        PublicKey publicKey = getCertificateFromResources("dsa-2048.x509.pem").getPublicKey();
+        PublicKey publicKey =
+                Resources.toCertificate(getClass(), "dsa-2048.x509.pem").getPublicKey();
         Signature s = Signature.getInstance("SHA224withDSA");
         try {
             s.initVerify(publicKey);
@@ -539,7 +539,7 @@ public class ApkVerifierTest {
     private ApkVerifier.Result verify(
             String apkFilenameInResources, Integer minSdkVersionOverride)
                     throws IOException, ApkFormatException, NoSuchAlgorithmException {
-        byte[] apkBytes = getResourceContents(apkFilenameInResources);
+        byte[] apkBytes = Resources.toByteArray(getClass(), apkFilenameInResources);
 
         ApkVerifier.Builder builder =
                 new ApkVerifier.Builder(DataSources.asDataSource(ByteBuffer.wrap(apkBytes)));
@@ -662,41 +662,12 @@ public class ApkVerifierTest {
         assertVerifiedForEach(apkFilenameInResources, args, minSdkVersion);
     }
 
-    private byte[] getResourceContents(String resourceName) throws IOException {
-        try (InputStream in = getClass().getResourceAsStream(resourceName)) {
-            if (in == null) {
-                throw new IllegalArgumentException("Resource not found: " + resourceName);
-            }
-            return toByteArray(in);
-        }
-    }
-
-    private X509Certificate getCertificateFromResources(String resourceName) throws Exception {
-        try (InputStream in = getClass().getResourceAsStream(resourceName)) {
-            if (in == null) {
-                throw new IllegalArgumentException("Resource not found: " + resourceName);
-            }
-            return (X509Certificate)
-                    CertificateFactory.getInstance("X.509").generateCertificate(in);
-        }
-    }
-
     private static byte[] sha256(byte[] msg) throws Exception {
         try {
             return MessageDigest.getInstance("SHA-256").digest(msg);
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("Failed to create SHA-256 MessageDigest", e);
         }
-    }
-
-    private static byte[] toByteArray(InputStream in) throws IOException {
-        ByteArrayOutputStream result = new ByteArrayOutputStream();
-        byte[] buf = new byte[16384];
-        int chunkSize;
-        while ((chunkSize = in.read(buf)) != -1) {
-            result.write(buf, 0, chunkSize);
-        }
-        return result.toByteArray();
     }
 
     private static void assumeThatRsaPssAvailable() throws Exception {
