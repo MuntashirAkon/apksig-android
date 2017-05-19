@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.test;
+package com.android.apksig.internal.util;
 
 import java.nio.ByteBuffer;
 
 /**
  * Hexadecimal encoding where each byte is represented by two hexadecimal digits.
- *
- * @hide
  */
 public class HexEncoding {
 

@@ -21,6 +21,7 @@ import org.junit.runners.Suite;
 
 @RunWith(Suite.class)
 @Suite.SuiteClasses({
+    ApkSignerTest.class,
     ApkVerifierTest.class,
     com.android.apksig.apk.AllTests.class,
     com.android.apksig.internal.AllTests.class,
