@@ -549,7 +549,7 @@ public class ApkVerifierTest {
         return builder.build().verify();
     }
 
-    private static void assertVerified(ApkVerifier.Result result) {
+    static void assertVerified(ApkVerifier.Result result) {
         if (result.isVerified()) {
             return;
         }
@@ -589,7 +589,7 @@ public class ApkVerifierTest {
         assertVerified(verify(apkFilenameInResources, minSdkVersionOverride));
     }
 
-    private static void assertVerificationFailure(ApkVerifier.Result result, Issue expectedIssue) {
+    static void assertVerificationFailure(ApkVerifier.Result result, Issue expectedIssue) {
         if (result.isVerified()) {
             fail("APK verification succeeded instead of failing with " + expectedIssue);
             return;
