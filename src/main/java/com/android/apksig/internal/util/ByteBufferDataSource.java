@@ -82,7 +82,7 @@ public class ByteBufferDataSource implements DataSource {
     @Override
     public void feed(long offset, long size, DataSink sink) throws IOException {
         if ((size < 0) || (size > mSize)) {
-            throw new IllegalArgumentException("size: " + size + ", source size: " + mSize);
+            throw new IndexOutOfBoundsException("size: " + size + ", source size: " + mSize);
         }
         sink.consume(getByteBuffer(offset, (int) size));
     }
@@ -93,7 +93,7 @@ public class ByteBufferDataSource implements DataSource {
             return this;
         }
         if ((size < 0) || (size > mSize)) {
-            throw new IllegalArgumentException("size: " + size + ", source size: " + mSize);
+            throw new IndexOutOfBoundsException("size: " + size + ", source size: " + mSize);
         }
         return new ByteBufferDataSource(
                 getByteBuffer(offset, (int) size),
@@ -103,22 +103,22 @@ public class ByteBufferDataSource implements DataSource {
 
     private void checkChunkValid(long offset, long size) {
         if (offset < 0) {
-            throw new IllegalArgumentException("offset: " + offset);
+            throw new IndexOutOfBoundsException("offset: " + offset);
         }
         if (size < 0) {
-            throw new IllegalArgumentException("size: " + size);
+            throw new IndexOutOfBoundsException("size: " + size);
         }
         if (offset > mSize) {
-            throw new IllegalArgumentException(
+            throw new IndexOutOfBoundsException(
                     "offset (" + offset + ") > source size (" + mSize + ")");
         }
         long endOffset = offset + size;
         if (endOffset < offset) {
-            throw new IllegalArgumentException(
+            throw new IndexOutOfBoundsException(
                     "offset (" + offset + ") + size (" + size + ") overflow");
         }
         if (endOffset > mSize) {
-            throw new IllegalArgumentException(
+            throw new IndexOutOfBoundsException(
                     "offset (" + offset + ") + size (" + size + ") > source size (" + mSize  +")");
         }
     }
