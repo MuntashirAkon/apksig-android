@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-package com.android.apksig;
+package com.android.apksig.util;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+import java.io.IOException;
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    ApkSignerTest.class,
-    ApkVerifierTest.class,
-    com.android.apksig.apk.AllTests.class,
-    com.android.apksig.internal.AllTests.class,
-    com.android.apksig.util.AllTests.class,
-})
-public class AllTests {}
+/**
+ * Tests for the {@link DataSource} returned by {@link DataSinks#newInMemoryDataSink()}.
+ */
+public class InMemoryDataSinkDataSourceTest extends DataSourceTestBase {
+    @Override
+    protected CloseableWithDataSource createDataSource(byte[] contents) throws IOException {
+        ReadableDataSink sink = DataSinks.newInMemoryDataSink();
+        sink.consume(contents, 0, contents.length);
+        return CloseableWithDataSource.of(sink);
+    }
+}
