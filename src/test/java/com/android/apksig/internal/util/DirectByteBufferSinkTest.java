@@ -14,19 +14,13 @@
  * limitations under the License.
  */
 
-package com.android.apksig.util;
+package com.android.apksig.internal.util;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+import java.nio.ByteBuffer;
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    DataSinkFromOutputStreamTest.class,
-    DataSinkFromRAFTest.class,
-    DataSourceFromByteBufferTest.class,
-    DataSourceFromRAFChunkTest.class,
-    DataSourceFromRAFTest.class,
-    InMemoryDataSinkDataSourceTest.class,
-    InMemoryDataSinkTest.class,
-})
-public class AllTests {}
+public class DirectByteBufferSinkTest extends ByteBufferSinkTestBase {
+    @Override
+    protected ByteBuffer createBuffer(int size) {
+        return ByteBuffer.allocateDirect(size);
+    }
+}

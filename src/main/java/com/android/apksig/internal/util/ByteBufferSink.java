@@ -32,6 +32,10 @@ public class ByteBufferSink implements DataSink {
         mBuffer = buffer;
     }
 
+    public ByteBuffer getBuffer() {
+        return mBuffer;
+    }
+
     @Override
     public void consume(byte[] buf, int offset, int length) throws IOException {
         try {
