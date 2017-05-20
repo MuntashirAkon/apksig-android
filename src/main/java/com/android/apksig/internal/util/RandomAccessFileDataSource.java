@@ -20,6 +20,7 @@ import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
@@ -49,13 +50,15 @@ public class RandomAccessFileDataSource implements DataSource {
      * Constructs a new {@code RandomAccessFileDataSource} based on the data contained in the
      * specified region of the provided file. Changes to the contents of the file will be visible in
      * this data source.
+     *
+     * @throws IndexOutOfBoundsException if {@code offset} or {@code size} is negative.
      */
     public RandomAccessFileDataSource(RandomAccessFile file, long offset, long size) {
         if (offset < 0) {
-            throw new IllegalArgumentException("offset: " + size);
+            throw new IndexOutOfBoundsException("offset: " + size);
         }
         if (size < 0) {
-            throw new IllegalArgumentException("size: " + size);
+            throw new IndexOutOfBoundsException("size: " + size);
         }
         mFile = file;
         mOffset = offset;
@@ -116,11 +119,16 @@ public class RandomAccessFileDataSource implements DataSource {
         if (size == 0) {
             return;
         }
+        if (size > dest.remaining()) {
+            throw new BufferOverflowException();
+        }
 
         long offsetInFile = mOffset + offset;
         int remaining = size;
         int prevLimit = dest.limit();
         try {
+            // FileChannel.read(ByteBuffer) reads up to dest.remaining(). Thus, we need to adjust
+            // the buffer's limit to avoid reading more than size bytes.
             dest.limit(dest.position() + size);
             FileChannel fileChannel = mFile.getChannel();
             while (remaining > 0) {
@@ -139,6 +147,9 @@ public class RandomAccessFileDataSource implements DataSource {
 
     @Override
     public ByteBuffer getByteBuffer(long offset, int size) throws IOException {
+        if (size < 0) {
+            throw new IndexOutOfBoundsException("size: " + size);
+        }
         ByteBuffer result = ByteBuffer.allocate(size);
         copyTo(offset, size, result);
         result.flip();
@@ -147,22 +158,22 @@ public class RandomAccessFileDataSource implements DataSource {
 
     private static void checkChunkValid(long offset, long size, long sourceSize) {
         if (offset < 0) {
-            throw new IllegalArgumentException("offset: " + offset);
+            throw new IndexOutOfBoundsException("offset: " + offset);
         }
         if (size < 0) {
-            throw new IllegalArgumentException("size: " + size);
+            throw new IndexOutOfBoundsException("size: " + size);
         }
         if (offset > sourceSize) {
-            throw new IllegalArgumentException(
+            throw new IndexOutOfBoundsException(
                     "offset (" + offset + ") > source size (" + sourceSize + ")");
         }
         long endOffset = offset + size;
         if (endOffset < offset) {
-            throw new IllegalArgumentException(
+            throw new IndexOutOfBoundsException(
                     "offset (" + offset + ") + size (" + size + ") overflow");
         }
         if (endOffset > sourceSize) {
-            throw new IllegalArgumentException(
+            throw new IndexOutOfBoundsException(
                     "offset (" + offset + ") + size (" + size
                             + ") > source size (" + sourceSize  +")");
         }
