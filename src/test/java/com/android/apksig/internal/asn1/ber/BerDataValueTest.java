@@ -23,13 +23,12 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.android.apksig.internal.util.HexEncoding;
 import java.nio.ByteBuffer;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-
-import com.android.apksig.internal.test.HexEncoding;
 
 @RunWith(JUnit4.class)
 public class BerDataValueTest {

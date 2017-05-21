@@ -23,9 +23,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.android.apksig.internal.util.HexEncoding;
 import org.junit.Test;
-
-import com.android.apksig.internal.test.HexEncoding;
 
 /**
  * Base class for unit tests of ASN.1 BER (see {@code X.690}) data value reader implementations.

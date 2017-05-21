@@ -106,7 +106,7 @@ public class ByteArrayDataSink implements ReadableDataSink {
         checkChunkValid(offset, size);
 
         // checkChunkValid ensures that it's OK to cast offset to int.
-        return ByteBuffer.wrap(mArray, (int) offset, size);
+        return ByteBuffer.wrap(mArray, (int) offset, size).slice();
     }
 
     @Override
@@ -127,22 +127,22 @@ public class ByteArrayDataSink implements ReadableDataSink {
 
     private void checkChunkValid(long offset, long size) {
         if (offset < 0) {
-            throw new IllegalArgumentException("offset: " + offset);
+            throw new IndexOutOfBoundsException("offset: " + offset);
         }
         if (size < 0) {
-            throw new IllegalArgumentException("size: " + size);
+            throw new IndexOutOfBoundsException("size: " + size);
         }
         if (offset > mSize) {
-            throw new IllegalArgumentException(
+            throw new IndexOutOfBoundsException(
                     "offset (" + offset + ") > source size (" + mSize + ")");
         }
         long endOffset = offset + size;
         if (endOffset < offset) {
-            throw new IllegalArgumentException(
+            throw new IndexOutOfBoundsException(
                     "offset (" + offset + ") + size (" + size + ") overflow");
         }
         if (endOffset > mSize) {
-            throw new IllegalArgumentException(
+            throw new IndexOutOfBoundsException(
                     "offset (" + offset + ") + size (" + size + ") > source size (" + mSize + ")");
         }
     }
@@ -184,7 +184,7 @@ public class ByteArrayDataSink implements ReadableDataSink {
             checkChunkValid(offset, size);
             // checkChunkValid combined with the way instances of this class are constructed ensures
             // that mSliceOffset + offset does not overflow.
-            return ByteBuffer.wrap(mArray, (int) (mSliceOffset + offset), size);
+            return ByteBuffer.wrap(mArray, (int) (mSliceOffset + offset), size).slice();
         }
 
         @Override
@@ -205,22 +205,22 @@ public class ByteArrayDataSink implements ReadableDataSink {
 
         private void checkChunkValid(long offset, long size) {
             if (offset < 0) {
-                throw new IllegalArgumentException("offset: " + offset);
+                throw new IndexOutOfBoundsException("offset: " + offset);
             }
             if (size < 0) {
-                throw new IllegalArgumentException("size: " + size);
+                throw new IndexOutOfBoundsException("size: " + size);
             }
             if (offset > mSliceSize) {
-                throw new IllegalArgumentException(
+                throw new IndexOutOfBoundsException(
                         "offset (" + offset + ") > source size (" + mSliceSize + ")");
             }
             long endOffset = offset + size;
             if (endOffset < offset) {
-                throw new IllegalArgumentException(
+                throw new IndexOutOfBoundsException(
                         "offset (" + offset + ") + size (" + size + ") overflow");
             }
             if (endOffset > mSliceSize) {
-                throw new IllegalArgumentException(
+                throw new IndexOutOfBoundsException(
                         "offset (" + offset + ") + size (" + size + ") > source size (" + mSliceSize
                                 + ")");
             }

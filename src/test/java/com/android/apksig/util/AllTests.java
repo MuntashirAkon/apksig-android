@@ -14,17 +14,16 @@
  * limitations under the License.
  */
 
-package com.android.apksig;
+package com.android.apksig.util;
 
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 
 @RunWith(Suite.class)
 @Suite.SuiteClasses({
-    ApkSignerTest.class,
-    ApkVerifierTest.class,
-    com.android.apksig.apk.AllTests.class,
-    com.android.apksig.internal.AllTests.class,
-    com.android.apksig.util.AllTests.class,
+    DataSourceFromByteBufferTest.class,
+    DataSourceFromRAFChunkTest.class,
+    DataSourceFromRAFTest.class,
+    InMemoryDataSinkDataSourceTest.class,
 })
 public class AllTests {}
