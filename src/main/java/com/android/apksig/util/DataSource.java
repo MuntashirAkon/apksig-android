@@ -62,6 +62,9 @@ public interface DataSource {
      *
      * @param offset index (in bytes) at which the chunk starts inside data source
      * @param size size (in bytes) of the chunk
+     *
+     * @throws IndexOutOfBoundsException if {@code offset} or {@code size} is negative, or if
+     *         {@code offset + size} is greater than {@link #size()}.
      */
     void feed(long offset, long size, DataSink sink) throws IOException;
 
@@ -75,6 +78,9 @@ public interface DataSource {
      *
      * @param offset index (in bytes) at which the chunk starts inside data source
      * @param size size (in bytes) of the chunk
+     *
+     * @throws IndexOutOfBoundsException if {@code offset} or {@code size} is negative, or if
+     *         {@code offset + size} is greater than {@link #size()}.
      */
     ByteBuffer getByteBuffer(long offset, int size) throws IOException;
 
@@ -84,6 +90,9 @@ public interface DataSource {
      *
      * @param offset index (in bytes) at which the chunk starts inside data source
      * @param size size (in bytes) of the chunk
+     *
+     * @throws IndexOutOfBoundsException if {@code offset} or {@code size} is negative, or if
+     *         {@code offset + size} is greater than {@link #size()}.
      */
     void copyTo(long offset, int size, ByteBuffer dest) throws IOException;
 
@@ -93,6 +102,9 @@ public interface DataSource {
      *
      * @param offset index (in bytes) at which the region starts inside data source
      * @param size size (in bytes) of the region
+     *
+     * @throws IndexOutOfBoundsException if {@code offset} or {@code size} is negative, or if
+     *         {@code offset + size} is greater than {@link #size()}.
      */
     DataSource slice(long offset, long size);
 }
