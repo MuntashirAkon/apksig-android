@@ -47,6 +47,17 @@ public class ByteArrayDataSink implements ReadableDataSink {
 
     @Override
     public void consume(byte[] buf, int offset, int length) throws IOException {
+        if (offset < 0) {
+            // Must perform this check because System.arraycopy below doesn't perform it when
+            // length == 0
+            throw new IndexOutOfBoundsException("offset: " + offset);
+        }
+        if (offset > buf.length) {
+            // Must perform this check because System.arraycopy below doesn't perform it when
+            // length == 0
+            throw new IndexOutOfBoundsException(
+                    "offset: " + offset + ", buf.length: " + buf.length);
+        }
         if (length == 0) {
             return;
         }
