@@ -22,5 +22,6 @@ import org.junit.runners.Suite;
 @RunWith(Suite.class)
 @Suite.SuiteClasses({
     com.android.apksig.internal.asn1.AllTests.class,
+    com.android.apksig.internal.util.AllTests.class,
 })
 public class AllTests {}
