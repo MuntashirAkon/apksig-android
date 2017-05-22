@@ -25,11 +25,14 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 /**
  * Tests for the {@link DataSource} returned by
  * {@link DataSources#asDataSource(java.io.RandomAccessFile)}.
  */
+@RunWith(JUnit4.class)
 public class DataSourceFromRAFTest extends DataSourceTestBase {
 
     @Test
