@@ -35,4 +35,7 @@ public abstract class AndroidSdkVersion {
 
     /** Android 7.0. N is for Nougat. */
     public static final int N = 24;
+
+    /** Android O. */
+    public static final int O = 26;
 }

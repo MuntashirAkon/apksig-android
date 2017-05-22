@@ -690,12 +690,12 @@ public class ApkSigner {
     }
 
     /**
-     * Returns the minimum Android version (API Level) supported by the provided APK. This is based
-     * on the {@code android:minSdkVersion} attributes of the APK's {@code AndroidManifest.xml}.
+     * Returns the contents of the APK's {@code AndroidManifest.xml} or {@code null} if this entry
+     * is not present in the APK.
      */
-    static int getMinSdkVersionFromApk(
+    static ByteBuffer getAndroidManifestFromApk(
             List<CentralDirectoryRecord> cdRecords, DataSource lhfSection)
-                    throws IOException, MinSdkVersionException {
+                    throws IOException, ApkFormatException, ZipFormatException {
         CentralDirectoryRecord androidManifestCdRecord = null;
         for (CentralDirectoryRecord cdRecord : cdRecords) {
             if (ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(cdRecord.getName())) {
@@ -704,22 +704,30 @@ public class ApkSigner {
             }
         }
         if (androidManifestCdRecord == null) {
-            throw new MinSdkVersionException(
-                    "Unable to determine APK's minimum supported Android platform version"
-                            + ": APK is missing " + ANDROID_MANIFEST_ZIP_ENTRY_NAME);
+            throw new ApkFormatException("Missing " + ANDROID_MANIFEST_ZIP_ENTRY_NAME);
         }
-        byte[] androidManifest;
+
+        return ByteBuffer.wrap(
+                LocalFileRecord.getUncompressedData(
+                        lhfSection, androidManifestCdRecord, lhfSection.size()));
+    }
+
+    /**
+     * Returns the minimum Android version (API Level) supported by the provided APK. This is based
+     * on the {@code android:minSdkVersion} attributes of the APK's {@code AndroidManifest.xml}.
+     */
+    private static int getMinSdkVersionFromApk(
+            List<CentralDirectoryRecord> cdRecords, DataSource lhfSection)
+                    throws IOException, MinSdkVersionException {
+        ByteBuffer androidManifest;
         try {
-            androidManifest =
-                    LocalFileRecord.getUncompressedData(
-                            lhfSection, androidManifestCdRecord, lhfSection.size());
-        } catch (ZipFormatException e) {
+            androidManifest = getAndroidManifestFromApk(cdRecords, lhfSection);
+        } catch (ZipFormatException | ApkFormatException e) {
             throw new MinSdkVersionException(
-                    "Unable to determine APK's minimum supported Android platform version"
-                            + ": malformed ZIP entry: " + androidManifestCdRecord.getName(),
+                    "Failed to determine APK's minimum supported Android platform version",
                     e);
         }
-        return ApkUtils.getMinSdkVersionFromBinaryAndroidManifest(ByteBuffer.wrap(androidManifest));
+        return ApkUtils.getMinSdkVersionFromBinaryAndroidManifest(androidManifest);
     }
 
     /**

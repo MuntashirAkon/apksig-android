@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.apksig.apk;
+package com.android.apksig.internal.apk;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
@@ -32,7 +32,7 @@ import java.util.Map;
  * event can be obtained via an assortment of getters, for example, {@link #getName()} or
  * {@link #getAttributeNameResourceId(int)}.
  */
-class AndroidBinXmlParser {
+public class AndroidBinXmlParser {
 
     /** Event: start of document. */
     public static final int EVENT_START_DOCUMENT = 1;
@@ -817,7 +817,7 @@ class AndroidBinXmlParser {
     /**
      * Indicates that an error occurred while parsing a document.
      */
-    static class XmlParserException extends Exception {
+    public static class XmlParserException extends Exception {
         private static final long serialVersionUID = 1L;
 
         public XmlParserException(String message) {
