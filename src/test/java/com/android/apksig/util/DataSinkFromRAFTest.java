@@ -16,17 +16,19 @@
 
 package com.android.apksig.util;
 
+import com.android.apksig.internal.util.RandomAccessFileDataSink;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-
-import com.android.apksig.internal.util.RandomAccessFileDataSink;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 /**
  * Tests for the {@link DataSink} returned by
  * {@link DataSinks#asDataSink(java.io.RandomAccessFile)}.
  */
+@RunWith(JUnit4.class)
 public class DataSinkFromRAFTest extends DataSinkTestBase<RandomAccessFileDataSink> {
 
     @Override
