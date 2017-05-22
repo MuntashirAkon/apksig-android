@@ -1425,18 +1425,18 @@ public abstract class V1SchemeVerifier {
                 continue;
             }
 
-            Collection<NamedDigest> expectedDigests =
-                    getDigestsToVerify(manifestSection, "-Digest", minSdkVersion, maxSdkVersion);
+            List<NamedDigest> expectedDigests =
+                    new ArrayList<>(
+                            getDigestsToVerify(
+                                    manifestSection, "-Digest", minSdkVersion, maxSdkVersion));
             if (expectedDigests.isEmpty()) {
                 result.addError(Issue.JAR_SIG_NO_ZIP_ENTRY_DIGEST_IN_MANIFEST, entryName);
                 continue;
             }
 
             MessageDigest[] mds = new MessageDigest[expectedDigests.size()];
-            int mdIndex = 0;
-            for (NamedDigest expectedDigest : expectedDigests) {
-                mds[mdIndex] = getMessageDigest(expectedDigest.jcaDigestAlgorithm);
-                mdIndex++;
+            for (int i = 0; i < expectedDigests.size(); i++) {
+                mds[i] = getMessageDigest(expectedDigests.get(i).jcaDigestAlgorithm);
             }
 
             try {
@@ -1451,9 +1451,9 @@ public abstract class V1SchemeVerifier {
                 throw new IOException("Failed to read entry: " + entryName, e);
             }
 
-            mdIndex = 0;
-            for (NamedDigest expectedDigest : expectedDigests) {
-                byte[] actualDigest = mds[mdIndex].digest();
+            for (int i = 0; i < expectedDigests.size(); i++) {
+                NamedDigest expectedDigest = expectedDigests.get(i);
+                byte[] actualDigest = mds[i].digest();
                 if (!Arrays.equals(expectedDigest.digest, actualDigest)) {
                     result.addError(
                             Issue.JAR_SIG_ZIP_ENTRY_DIGEST_DID_NOT_VERIFY,
