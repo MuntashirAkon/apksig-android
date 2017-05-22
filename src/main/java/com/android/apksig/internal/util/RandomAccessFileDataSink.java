@@ -55,8 +55,26 @@ public class RandomAccessFileDataSink implements DataSink {
         mPosition = startPosition;
     }
 
+    /**
+     * Returns the underlying {@link RandomAccessFile}.
+     */
+    public RandomAccessFile getFile() {
+        return mFile;
+    }
+
     @Override
     public void consume(byte[] buf, int offset, int length) throws IOException {
+        if (offset < 0) {
+            // Must perform this check here because RandomAccessFile.write doesn't throw when offset
+            // is negative but length is 0
+            throw new IndexOutOfBoundsException("offset: " + offset);
+        }
+        if (offset > buf.length) {
+            // Must perform this check here because RandomAccessFile.write doesn't throw when offset
+            // is too large but length is 0
+            throw new IndexOutOfBoundsException(
+                    "offset: " + offset + ", buf.length: " + buf.length);
+        }
         if (length == 0) {
             return;
         }
