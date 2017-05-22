@@ -20,10 +20,13 @@ import com.android.apksig.internal.util.OutputStreamDataSink;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 /**
  * Tests for the {@link DataSink} returned by {@link DataSinks#asDataSink(java.io.OutputStream)}.
  */
+@RunWith(JUnit4.class)
 public class DataSinkFromOutputStreamTest extends DataSinkTestBase<OutputStreamDataSink> {
 
     @Override
