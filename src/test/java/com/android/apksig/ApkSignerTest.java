@@ -18,6 +18,8 @@ package com.android.apksig;
 
 import static org.junit.Assert.fail;
 
+import com.android.apksig.ApkVerifier.Issue;
+import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.internal.util.Resources;
 import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
@@ -29,6 +31,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ByteChannel;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.Collections;
@@ -259,6 +262,57 @@ public class ApkSignerTest {
         // files always differ from golden files.
     }
 
+    @Test
+    public void testRsaSignedVerifies() throws Exception {
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(getDefaultSignerConfigFromResources("rsa-2048"));
+        String in = "original.apk";
+
+        // Sign so that the APK is guaranteed to verify on API Level 1+
+        DataSource out = sign(in, new ApkSigner.Builder(signers).setMinSdkVersion(1));
+        assertVerified(verifyForMinSdkVersion(out, 1));
+
+        // Sign so that the APK is guaranteed to verify on API Level 18+
+        out = sign(in, new ApkSigner.Builder(signers).setMinSdkVersion(18));
+        assertVerified(verifyForMinSdkVersion(out, 18));
+        // Does not verify on API Level 17 because RSA with SHA-256 not supported
+        assertVerificationFailure(
+                verifyForMinSdkVersion(out, 17), Issue.JAR_SIG_UNSUPPORTED_SIG_ALG);
+    }
+
+    @Test
+    public void testDsaSignedVerifies() throws Exception {
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(getDefaultSignerConfigFromResources("dsa-1024"));
+        String in = "original.apk";
+
+        // Sign so that the APK is guaranteed to verify on API Level 1+
+        DataSource out = sign(in, new ApkSigner.Builder(signers).setMinSdkVersion(1));
+        assertVerified(verifyForMinSdkVersion(out, 1));
+
+        // Sign so that the APK is guaranteed to verify on API Level 21+
+        out = sign(in, new ApkSigner.Builder(signers).setMinSdkVersion(21));
+        assertVerified(verifyForMinSdkVersion(out, 21));
+        // Does not verify on API Level 20 because DSA with SHA-256 not supported
+        assertVerificationFailure(
+                verifyForMinSdkVersion(out, 20), Issue.JAR_SIG_UNSUPPORTED_SIG_ALG);
+    }
+
+    @Test
+    public void testEcSignedVerifies() throws Exception {
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(getDefaultSignerConfigFromResources("ec-p256"));
+        String in = "original.apk";
+
+        // NOTE: EC APK signatures are not supported prior to API Level 18
+        // Sign so that the APK is guaranteed to verify on API Level 18+
+        DataSource out = sign(in, new ApkSigner.Builder(signers).setMinSdkVersion(18));
+        assertVerified(verifyForMinSdkVersion(out, 18));
+        // Does not verify on API Level 17 because EC not supported
+        assertVerificationFailure(
+                verifyForMinSdkVersion(out, 17), Issue.JAR_SIG_UNSUPPORTED_SIG_ALG);
+    }
+
     /**
      * Asserts that signing the specified golden input file using the provided signing
      * configuration produces output identical to the specified golden output file.
@@ -266,16 +320,8 @@ public class ApkSignerTest {
     private void assertGolden(
             String inResourceName, String expectedOutResourceName,
             ApkSigner.Builder apkSignerBuilder) throws Exception {
-        // Sign the provided golden input using default settings
-        DataSource in =
-                DataSources.asDataSource(
-                        ByteBuffer.wrap(Resources.toByteArray(getClass(), inResourceName)));
-        ReadableDataSink out = DataSinks.newInMemoryDataSink();
-        apkSignerBuilder
-                .setInputApk(in)
-                .setOutputApk(out)
-                .build()
-                .sign();
+        // Sign the provided golden input
+        DataSource out = sign(inResourceName, apkSignerBuilder);
 
         // Assert that the output is identical to the provided golden output
         if (out.size() > Integer.MAX_VALUE) {
@@ -318,6 +364,42 @@ public class ApkSignerTest {
         } else {
             fail("Output differs from " + expectedOutResourceName);
         }
+    }
+
+    private DataSource sign(
+            String inResourceName, ApkSigner.Builder apkSignerBuilder) throws Exception {
+        DataSource in =
+                DataSources.asDataSource(
+                        ByteBuffer.wrap(Resources.toByteArray(getClass(), inResourceName)));
+        ReadableDataSink out = DataSinks.newInMemoryDataSink();
+        apkSignerBuilder
+                .setInputApk(in)
+                .setOutputApk(out)
+                .build()
+                .sign();
+        return out;
+    }
+
+    private static ApkVerifier.Result verifyForMinSdkVersion(DataSource apk, int minSdkVersion)
+            throws IOException, ApkFormatException, NoSuchAlgorithmException {
+        return verify(apk, minSdkVersion);
+    }
+
+    private static ApkVerifier.Result verify(DataSource apk, Integer minSdkVersionOverride)
+            throws IOException, ApkFormatException, NoSuchAlgorithmException {
+        ApkVerifier.Builder builder = new ApkVerifier.Builder(apk);
+        if (minSdkVersionOverride != null) {
+            builder.setMinCheckedPlatformVersion(minSdkVersionOverride);
+        }
+        return builder.build().verify();
+    }
+
+    private static void assertVerified(ApkVerifier.Result result) {
+        ApkVerifierTest.assertVerified(result);
+    }
+
+    private static void assertVerificationFailure(ApkVerifier.Result result, Issue expectedIssue) {
+        ApkVerifierTest.assertVerificationFailure(result, expectedIssue);
     }
 
     private static ApkSigner.SignerConfig getDefaultSignerConfigFromResources(
