@@ -16,6 +16,7 @@
 
 package com.android.apksig.apk;
 
+import com.android.apksig.internal.apk.AndroidBinXmlParser;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;

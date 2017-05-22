@@ -513,16 +513,47 @@ public class ApkVerifierTest {
     @Test
     public void testEmptyApk() throws Exception {
         // Unsigned empty ZIP archive
-        assertVerificationFailure(
-                verifyForMinSdkVersion("empty-unsigned.apk", 1), Issue.JAR_SIG_NO_MANIFEST);
+        try {
+            verifyForMinSdkVersion("empty-unsigned.apk", 1);
+            fail("ApkFormatException should've been thrown");
+        } catch (ApkFormatException expected) {}
 
         // JAR-signed empty ZIP archive
-        assertVerificationFailure(
-                verifyForMinSdkVersion("v1-only-empty.apk", 18),
-                Issue.JAR_SIG_NO_SIGNED_ZIP_ENTRIES);
+        try {
+            verifyForMinSdkVersion("v1-only-empty.apk", 18);
+            fail("ApkFormatException should've been thrown");
+        } catch (ApkFormatException expected) {}
 
         // APK Signature Scheme v2 signed empty ZIP archive
-        assertVerified(verifyForMinSdkVersion("v2-only-empty.apk", AndroidSdkVersion.N));
+        try {
+            verifyForMinSdkVersion("v2-only-empty.apk", AndroidSdkVersion.N);
+            fail("ApkFormatException should've been thrown");
+        } catch (ApkFormatException expected) {}
+    }
+
+    @Test
+    public void testTargetSandboxVersion2AndHigher() throws Exception {
+        // This APK (and its variants below) use minSdkVersion 18, meaning it needs to be signed
+        // with v1 and v2 schemes
+
+        // This APK is signed with v1 and v2 schemes and thus should verify
+        assertVerified(verify("targetSandboxVersion-2.apk"));
+
+        // v1 signature is needed only if minSdkVersion is lower than 24
+        assertVerificationFailure(
+                verify("v2-only-targetSandboxVersion-2.apk"), Issue.JAR_SIG_NO_MANIFEST);
+        assertVerified(verifyForMinSdkVersion("v2-only-targetSandboxVersion-2.apk", 24));
+
+        // v2 signature is required
+        assertVerificationFailure(
+                verify("v1-only-targetSandboxVersion-2.apk"),
+                Issue.NO_SIG_FOR_TARGET_SANDBOX_VERSION);
+        assertVerificationFailure(
+                verify("unsigned-targetSandboxVersion-2.apk"),
+                Issue.NO_SIG_FOR_TARGET_SANDBOX_VERSION);
+
+        // minSdkVersion 28, meaning v1 signature not needed
+        assertVerified(verify("v2-only-targetSandboxVersion-3.apk"));
     }
 
     @Test
