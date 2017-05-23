@@ -47,7 +47,7 @@ public class ApkSignerTest {
      * Whether to preserve, as files, outputs of failed tests. This is useful for investigating test
      * failures.
      */
-    private static boolean KEEP_FAILING_OUTPUT_AS_FILES = false;
+    private static final boolean KEEP_FAILING_OUTPUT_AS_FILES = false;
 
     public static void main(String[] params) throws Exception {
         File outDir = (params.length > 0) ? new File(params[0]) : new File(".");
