@@ -513,31 +513,143 @@ public class ApkVerifierTest {
     @Test
     public void testEmptyApk() throws Exception {
         // Unsigned empty ZIP archive
-        assertVerificationFailure(
-                verifyForMinSdkVersion("empty-unsigned.apk", 1), Issue.JAR_SIG_NO_MANIFEST);
+        try {
+            verifyForMinSdkVersion("empty-unsigned.apk", 1);
+            fail("ApkFormatException should've been thrown");
+        } catch (ApkFormatException expected) {}
 
         // JAR-signed empty ZIP archive
-        assertVerificationFailure(
-                verifyForMinSdkVersion("v1-only-empty.apk", 18),
-                Issue.JAR_SIG_NO_SIGNED_ZIP_ENTRIES);
+        try {
+            verifyForMinSdkVersion("v1-only-empty.apk", 18);
+            fail("ApkFormatException should've been thrown");
+        } catch (ApkFormatException expected) {}
 
         // APK Signature Scheme v2 signed empty ZIP archive
-        assertVerified(verifyForMinSdkVersion("v2-only-empty.apk", AndroidSdkVersion.N));
+        try {
+            verifyForMinSdkVersion("v2-only-empty.apk", AndroidSdkVersion.N);
+            fail("ApkFormatException should've been thrown");
+        } catch (ApkFormatException expected) {}
+    }
+
+    @Test
+    public void testTargetSandboxVersion2AndHigher() throws Exception {
+        // This APK (and its variants below) use minSdkVersion 18, meaning it needs to be signed
+        // with v1 and v2 schemes
+
+        // This APK is signed with v1 and v2 schemes and thus should verify
+        assertVerified(verify("targetSandboxVersion-2.apk"));
+
+        // v1 signature is needed only if minSdkVersion is lower than 24
+        assertVerificationFailure(
+                verify("v2-only-targetSandboxVersion-2.apk"), Issue.JAR_SIG_NO_MANIFEST);
+        assertVerified(verifyForMinSdkVersion("v2-only-targetSandboxVersion-2.apk", 24));
+
+        // v2 signature is required
+        assertVerificationFailure(
+                verify("v1-only-targetSandboxVersion-2.apk"),
+                Issue.NO_SIG_FOR_TARGET_SANDBOX_VERSION);
+        assertVerificationFailure(
+                verify("unsigned-targetSandboxVersion-2.apk"),
+                Issue.NO_SIG_FOR_TARGET_SANDBOX_VERSION);
+
+        // minSdkVersion 28, meaning v1 signature not needed
+        assertVerified(verify("v2-only-targetSandboxVersion-3.apk"));
+    }
+
+    @Test
+    public void testV1MultipleDigestAlgsInManifestAndSignatureFile() throws Exception {
+        // MANIFEST.MF contains SHA-1 and SHA-256 digests for each entry, .SF contains only SHA-1
+        // digests. This file was obtained by:
+        //   jarsigner -sigalg SHA256withRSA -digestalg SHA-256 ... <file> ...
+        //   jarsigner -sigalg SHA1withRSA -digestalg SHA1 ... <same file> ...
+        assertVerified(verify("v1-sha1-sha256-manifest-and-sha1-sf.apk"));
+
+        // MANIFEST.MF and .SF contain SHA-1 and SHA-256 digests for each entry. This file was
+        // obtained by modifying apksigner to output multiple digests.
+        assertVerified(verify("v1-sha1-sha256-manifest-and-sf.apk"));
+
+        // One of the digests is wrong in either MANIFEST.MF or .SF. These files were obtained by
+        // modifying apksigner to output multiple digests and to flip a bit to create a wrong
+        // digest.
+
+        // SHA-1 digests in MANIFEST.MF are wrong, but SHA-256 digests are OK.
+        // The APK will fail to verify on API Level 17 and lower, but will verify on API Level 18
+        // and higher.
+        assertVerificationFailure(
+                verify("v1-sha1-sha256-manifest-and-sf-with-sha1-wrong-in-manifest.apk"),
+                Issue.JAR_SIG_ZIP_ENTRY_DIGEST_DID_NOT_VERIFY);
+        assertVerificationFailure(
+                verifyForMaxSdkVersion(
+                        "v1-sha1-sha256-manifest-and-sf-with-sha1-wrong-in-manifest.apk", 17),
+                Issue.JAR_SIG_ZIP_ENTRY_DIGEST_DID_NOT_VERIFY);
+        assertVerified(
+                verifyForMinSdkVersion(
+                        "v1-sha1-sha256-manifest-and-sf-with-sha1-wrong-in-manifest.apk", 18));
+
+        // SHA-1 digests in .SF are wrong, but SHA-256 digests are OK.
+        // The APK will fail to verify on API Level 17 and lower, but will verify on API Level 18
+        // and higher.
+        assertVerificationFailure(
+                verify("v1-sha1-sha256-manifest-and-sf-with-sha1-wrong-in-sf.apk"),
+                Issue.JAR_SIG_MANIFEST_SECTION_DIGEST_DID_NOT_VERIFY);
+        assertVerificationFailure(
+                verifyForMaxSdkVersion(
+                        "v1-sha1-sha256-manifest-and-sf-with-sha1-wrong-in-sf.apk", 17),
+                Issue.JAR_SIG_MANIFEST_SECTION_DIGEST_DID_NOT_VERIFY);
+        assertVerified(
+                verifyForMinSdkVersion(
+                        "v1-sha1-sha256-manifest-and-sf-with-sha1-wrong-in-sf.apk", 18));
+
+        // SHA-256 digests in MANIFEST.MF are wrong, but SHA-1 digests are OK.
+        // The APK will fail to verify on API Level 18 and higher, but will verify on API Level 17
+        // and lower.
+        assertVerificationFailure(
+                verify("v1-sha1-sha256-manifest-and-sf-with-sha256-wrong-in-manifest.apk"),
+                Issue.JAR_SIG_ZIP_ENTRY_DIGEST_DID_NOT_VERIFY);
+        assertVerificationFailure(
+                verifyForMinSdkVersion(
+                        "v1-sha1-sha256-manifest-and-sf-with-sha256-wrong-in-manifest.apk", 18),
+                Issue.JAR_SIG_ZIP_ENTRY_DIGEST_DID_NOT_VERIFY);
+        assertVerified(
+                verifyForMaxSdkVersion(
+                        "v1-sha1-sha256-manifest-and-sf-with-sha256-wrong-in-manifest.apk", 17));
+
+        // SHA-256 digests in .SF are wrong, but SHA-1 digests are OK.
+        // The APK will fail to verify on API Level 18 and higher, but will verify on API Level 17
+        // and lower.
+        assertVerificationFailure(
+                verify("v1-sha1-sha256-manifest-and-sf-with-sha256-wrong-in-sf.apk"),
+                Issue.JAR_SIG_MANIFEST_SECTION_DIGEST_DID_NOT_VERIFY);
+        assertVerificationFailure(
+                verifyForMinSdkVersion(
+                        "v1-sha1-sha256-manifest-and-sf-with-sha256-wrong-in-sf.apk", 18),
+                Issue.JAR_SIG_MANIFEST_SECTION_DIGEST_DID_NOT_VERIFY);
+        assertVerified(
+                verifyForMaxSdkVersion(
+                        "v1-sha1-sha256-manifest-and-sf-with-sha256-wrong-in-sf.apk", 17));
     }
 
     private ApkVerifier.Result verify(String apkFilenameInResources)
             throws IOException, ApkFormatException, NoSuchAlgorithmException {
-        return verify(apkFilenameInResources, null);
+        return verify(apkFilenameInResources, null, null);
     }
 
     private ApkVerifier.Result verifyForMinSdkVersion(
             String apkFilenameInResources, int minSdkVersion)
                     throws IOException, ApkFormatException, NoSuchAlgorithmException {
-        return verify(apkFilenameInResources, minSdkVersion);
+        return verify(apkFilenameInResources, minSdkVersion, null);
+    }
+
+    private ApkVerifier.Result verifyForMaxSdkVersion(
+            String apkFilenameInResources, int maxSdkVersion)
+                    throws IOException, ApkFormatException, NoSuchAlgorithmException {
+        return verify(apkFilenameInResources, null, maxSdkVersion);
     }
 
     private ApkVerifier.Result verify(
-            String apkFilenameInResources, Integer minSdkVersionOverride)
+            String apkFilenameInResources,
+            Integer minSdkVersionOverride,
+            Integer maxSdkVersionOverride)
                     throws IOException, ApkFormatException, NoSuchAlgorithmException {
         byte[] apkBytes = Resources.toByteArray(getClass(), apkFilenameInResources);
 
@@ -546,10 +658,13 @@ public class ApkVerifierTest {
         if (minSdkVersionOverride != null) {
             builder.setMinCheckedPlatformVersion(minSdkVersionOverride);
         }
+        if (maxSdkVersionOverride != null) {
+            builder.setMaxCheckedPlatformVersion(maxSdkVersionOverride);
+        }
         return builder.build().verify();
     }
 
-    private static void assertVerified(ApkVerifier.Result result) {
+    static void assertVerified(ApkVerifier.Result result) {
         if (result.isVerified()) {
             return;
         }
@@ -585,11 +700,14 @@ public class ApkVerifierTest {
     }
 
     private void assertVerified(
-            String apkFilenameInResources, Integer minSdkVersionOverride) throws Exception {
-        assertVerified(verify(apkFilenameInResources, minSdkVersionOverride));
+            String apkFilenameInResources,
+            Integer minSdkVersionOverride,
+            Integer maxSdkVersionOverride) throws Exception {
+        assertVerified(
+                verify(apkFilenameInResources, minSdkVersionOverride, maxSdkVersionOverride));
     }
 
-    private static void assertVerificationFailure(ApkVerifier.Result result, Issue expectedIssue) {
+    static void assertVerificationFailure(ApkVerifier.Result result, Issue expectedIssue) {
         if (result.isVerified()) {
             fail("APK verification succeeded instead of failing with " + expectedIssue);
             return;
@@ -643,23 +761,25 @@ public class ApkVerifierTest {
 
     private void assertVerifiedForEach(
             String apkFilenamePatternInResources, String[] args) throws Exception {
-        assertVerifiedForEach(apkFilenamePatternInResources, args, null);
+        assertVerifiedForEach(apkFilenamePatternInResources, args, null, null);
     }
 
     private void assertVerifiedForEach(
-            String apkFilenamePatternInResources, String[] args, Integer minSdkVersionOverride)
-                    throws Exception {
+            String apkFilenamePatternInResources,
+            String[] args,
+            Integer minSdkVersionOverride,
+            Integer maxSdkVersionOverride) throws Exception {
         for (String arg : args) {
             String apkFilenameInResources =
                     String.format(Locale.US, apkFilenamePatternInResources, arg);
-            assertVerified(apkFilenameInResources, minSdkVersionOverride);
+            assertVerified(apkFilenameInResources, minSdkVersionOverride, maxSdkVersionOverride);
         }
     }
 
     private void assertVerifiedForEachForMinSdkVersion(
             String apkFilenameInResources, String[] args, int minSdkVersion)
                     throws Exception {
-        assertVerifiedForEach(apkFilenameInResources, args, minSdkVersion);
+        assertVerifiedForEach(apkFilenameInResources, args, minSdkVersion, null);
     }
 
     private static byte[] sha256(byte[] msg) throws Exception {
