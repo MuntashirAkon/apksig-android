@@ -315,7 +315,7 @@ public abstract class DataSourceTestBase {
      * Returns the contents of the provided buffer as a string. The buffer's position and limit
      * remain unchanged.
      */
-    private static String toString(ByteBuffer buf) {
+    static String toString(ByteBuffer buf) {
         byte[] arr;
         int offset;
         int size = buf.remaining();

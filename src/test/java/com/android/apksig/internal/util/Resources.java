@@ -89,7 +89,24 @@ public final class Resources {
             Class <?> cls, String resourceName, String keyAlgorithm)
                     throws IOException, InvalidKeySpecException, NoSuchAlgorithmException {
         byte[] encoded = toByteArray(cls, resourceName);
-        return KeyFactory.getInstance(keyAlgorithm)
-                .generatePrivate(new PKCS8EncodedKeySpec(encoded));
+
+        // Keep overly strictly linter happy by limiting what JCA KeyFactory algorithms are used
+        // here
+        KeyFactory keyFactory;
+        switch (keyAlgorithm.toUpperCase(Locale.US)) {
+            case "RSA":
+                keyFactory = KeyFactory.getInstance("rsa");
+                break;
+            case "DSA":
+                keyFactory = KeyFactory.getInstance("dsa");
+                break;
+            case "EC":
+                keyFactory = KeyFactory.getInstance("ec");
+                break;
+            default:
+                throw new InvalidKeySpecException("Unsupported key algorithm: " + keyAlgorithm);
+        }
+
+        return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(encoded));
     }
 }
