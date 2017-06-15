@@ -362,6 +362,7 @@ public abstract class V1SchemeSigner {
         SortedMap<String, byte[]> invidualSectionsContents = new TreeMap<>();
         String entryDigestAttributeName = getEntryDigestAttributeName(jarEntryDigestAlgorithm);
         for (String entryName : sortedEntryNames) {
+            checkEntryNameValid(entryName);
             byte[] entryDigest = jarEntryDigests.get(entryName);
             Attributes entryAttrs = new Attributes();
             entryAttrs.putValue(
@@ -384,6 +385,22 @@ public abstract class V1SchemeSigner {
         result.mainSectionAttributes = mainAttrs;
         result.individualSectionsContents = invidualSectionsContents;
         return result;
+    }
+
+    private static void checkEntryNameValid(String name) throws ApkFormatException {
+        // JAR signing spec says CR, LF, and NUL are not permitted in entry names
+        // CR or LF in entry names will result in malformed MANIFEST.MF and .SF files because there
+        // is no way to escape characters in MANIFEST.MF and .SF files. NUL can, presumably, cause
+        // issues when parsing using C and C++ like languages.
+        for (char c : name.toCharArray()) {
+            if ((c == '\r') || (c == '\n') || (c == 0)) {
+                throw new ApkFormatException(
+                        String.format(
+                                "Unsupported character 0x%1$02x in ZIP entry name \"%2$s\"",
+                                (int) c,
+                                name));
+            }
+        }
     }
 
     public static class OutputManifestFile {
