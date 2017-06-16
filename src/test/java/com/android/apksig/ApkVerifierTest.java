@@ -632,6 +632,17 @@ public class ApkVerifierTest {
                         "v1-sha1-sha256-manifest-and-sf-with-sha256-wrong-in-sf.apk", 17));
     }
 
+    @Test
+    public void testV1WithUnsupportedCharacterInZipEntryName() throws Exception {
+        // Android Package Manager does not support ZIP entry names containing CR or LF
+        assertVerificationFailure(
+                verify("v1-only-with-cr-in-entry-name.apk"),
+                Issue.JAR_SIG_UNNNAMED_MANIFEST_SECTION);
+        assertVerificationFailure(
+                verify("v1-only-with-lf-in-entry-name.apk"),
+                Issue.JAR_SIG_UNNNAMED_MANIFEST_SECTION);
+    }
+
     private ApkVerifier.Result verify(String apkFilenameInResources)
             throws IOException, ApkFormatException, NoSuchAlgorithmException {
         return verify(apkFilenameInResources, null, null);
