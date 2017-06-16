@@ -313,6 +313,31 @@ public class ApkSignerTest {
                 verifyForMinSdkVersion(out, 17), Issue.JAR_SIG_UNSUPPORTED_SIG_ALG);
     }
 
+    @Test
+    public void testV1SigningRejectsInvalidZipEntryNames() throws Exception {
+        // ZIP/JAR entry name cannot contain CR, LF, or NUL characters when the APK is being
+        // JAR-signed.
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(getDefaultSignerConfigFromResources("rsa-2048"));
+        try {
+            sign("v1-only-with-cr-in-entry-name.apk",
+                    new ApkSigner.Builder(signers).setV1SigningEnabled(true));
+            fail();
+        } catch (ApkFormatException expected) {}
+
+        try {
+            sign("v1-only-with-lf-in-entry-name.apk",
+                    new ApkSigner.Builder(signers).setV1SigningEnabled(true));
+            fail();
+        } catch (ApkFormatException expected) {}
+
+        try {
+            sign("v1-only-with-nul-in-entry-name.apk",
+                    new ApkSigner.Builder(signers).setV1SigningEnabled(true));
+            fail();
+        } catch (ApkFormatException expected) {}
+    }
+
     /**
      * Asserts that signing the specified golden input file using the provided signing
      * configuration produces output identical to the specified golden output file.
