@@ -698,6 +698,23 @@ public class ApkVerifierTest {
                 Issue.JAR_SIG_UNNNAMED_MANIFEST_SECTION);
     }
 
+    @Test
+    public void testWeirdZipCompressionMethod() throws Exception {
+        // Any ZIP compression method other than STORED is treated as DEFLATED by Android.
+        // This APK declares compression method 21 (neither STORED nor DEFLATED) for CERT.RSA entry,
+        // but the entry is actually Deflate-compressed.
+        assertVerified(verify("weird-compression-method.apk"));
+    }
+
+    @Test
+    public void testZipCompressionMethodMismatchBetweenLfhAndCd() throws Exception {
+        // Android Package Manager ignores compressionMethod field in Local File Header and always
+        // uses the compressionMethod from Central Directory instead.
+        // In this APK, compression method of CERT.RSA is declared as STORED in Local File Header
+        // and as DEFLATED in Central Directory. The entry is actually Deflate-compressed.
+        assertVerified(verify("mismatched-compression-method.apk"));
+    }
+
     private ApkVerifier.Result verify(String apkFilenameInResources)
             throws IOException, ApkFormatException, NoSuchAlgorithmException {
         return verify(apkFilenameInResources, null, null);
