@@ -40,7 +40,6 @@ import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.Locale;
 import org.junit.Assume;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -66,7 +65,6 @@ public class ApkVerifierTest {
     }
 
     @Test
-    @Ignore
     public void testV1OneSignerMD5withRSAAccepted() throws Exception {
         assumeThatMd5AcceptedInPkcs7Signature();
 
@@ -482,7 +480,6 @@ public class ApkVerifierTest {
     }
 
     @Test
-    @Ignore
     public void testV1SchemeSignatureCertNotReencoded() throws Exception {
         // Regression test for b/30148997 and b/18228011. When PackageManager does not preserve the
         // original encoded form of signing certificates, bad things happen, such as rejection of
