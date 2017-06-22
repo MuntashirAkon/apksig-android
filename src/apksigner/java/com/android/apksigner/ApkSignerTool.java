@@ -41,6 +41,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.Provider;
 import java.security.PublicKey;
+import java.security.Security;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
@@ -67,7 +68,7 @@ import javax.crypto.spec.PBEKeySpec;
  */
 public class ApkSignerTool {
 
-    private static final String VERSION = "0.5";
+    private static final String VERSION = "0.7";
     private static final String HELP_PAGE_GENERAL = "help.txt";
     private static final String HELP_PAGE_SIGN = "help_sign.txt";
     private static final String HELP_PAGE_VERIFY = "help_verify.txt";
@@ -122,6 +123,8 @@ public class ApkSignerTool {
         int maxSdkVersion = Integer.MAX_VALUE;
         List<SignerParams> signers = new ArrayList<>(1);
         SignerParams signerParams = new SignerParams();
+        List<ProviderInstallSpec> providers = new ArrayList<>();
+        ProviderInstallSpec providerParams = new ProviderInstallSpec();
         OptionsParser optionsParser = new OptionsParser(params);
         String optionName;
         String optionOriginalForm = null;
@@ -179,6 +182,20 @@ public class ApkSignerTool {
                 signerParams.certFile = optionsParser.getRequiredValue("Certificate file");
             } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
                 verbose = optionsParser.getOptionalBooleanValue(true);
+            } else if ("next-provider".equals(optionName)) {
+                if (!providerParams.isEmpty()) {
+                    providers.add(providerParams);
+                    providerParams = new ProviderInstallSpec();
+                }
+            } else if ("provider-class".equals(optionName)) {
+                providerParams.className =
+                        optionsParser.getRequiredValue("JCA Provider class name");
+            } else if ("provider-arg".equals(optionName)) {
+                providerParams.constructorParam =
+                        optionsParser.getRequiredValue("JCA Provider constructor argument");
+            } else if ("provider-pos".equals(optionName)) {
+                providerParams.position =
+                        optionsParser.getRequiredIntValue("JCA Provider position");
             } else {
                 throw new ParameterException(
                         "Unsupported option: " + optionOriginalForm + ". See --help for supported"
@@ -189,6 +206,10 @@ public class ApkSignerTool {
             signers.add(signerParams);
         }
         signerParams = null;
+        if (!providerParams.isEmpty()) {
+            providers.add(providerParams);
+        }
+        providerParams = null;
 
         if (signers.isEmpty()) {
             throw new ParameterException("At least one signer must be specified");
@@ -217,6 +238,11 @@ public class ApkSignerTool {
             throw new ParameterException(
                     "Min API Level (" + minSdkVersion + ") > max API Level (" + maxSdkVersion
                             + ")");
+        }
+
+        // Install additional JCA Providers
+        for (ProviderInstallSpec providerInstallSpec : providers) {
+            providerInstallSpec.installProvider();
         }
 
         List<ApkSigner.SignerConfig> signerConfigs = new ArrayList<>(signers.size());
@@ -531,6 +557,46 @@ public class ApkSignerTool {
         }
     }
 
+    private static class ProviderInstallSpec {
+        String className;
+        String constructorParam;
+        Integer position;
+
+        private boolean isEmpty() {
+            return (className == null) && (constructorParam == null) && (position == null);
+        }
+
+        private void installProvider() throws Exception {
+            if (className == null) {
+                throw new ParameterException(
+                        "JCA Provider class name (--provider-class) must be specified");
+            }
+
+            Class<?> providerClass = Class.forName(className);
+            if (!Provider.class.isAssignableFrom(providerClass)) {
+                throw new ParameterException(
+                        "JCA Provider class " + providerClass + " not subclass of "
+                                + Provider.class.getName());
+            }
+            Provider provider;
+            if (constructorParam != null) {
+                // Single-arg Provider constructor
+                provider =
+                        (Provider) providerClass.getConstructor(String.class)
+                                .newInstance(constructorParam);
+            } else {
+                // No-arg Provider constructor
+                provider = (Provider) providerClass.getConstructor().newInstance();
+            }
+
+            if (position == null) {
+                Security.addProvider(provider);
+            } else {
+                Security.insertProviderAt(provider, position);
+            }
+        }
+    }
+
     private static class SignerParams {
         String name;
 
@@ -623,17 +689,18 @@ public class ApkSignerTool {
             }
 
             // 2. Load the KeyStore
-            List<char[]> keystorePasswords = null;
-            if ("NONE".equals(keystoreFile)) {
-                ks.load(null);
-            } else {
+            List<char[]> keystorePasswords;
+            {
                 String keystorePasswordSpec =
                         (this.keystorePasswordSpec != null)
                                 ?  this.keystorePasswordSpec : PasswordRetriever.SPEC_STDIN;
                 keystorePasswords =
                         passwordRetriever.getPasswords(
                                 keystorePasswordSpec, "Keystore password for " + name);
-                loadKeyStoreFromFile(ks, keystoreFile, keystorePasswords);
+                loadKeyStoreFromFile(
+                        ks,
+                        "NONE".equals(keystoreFile) ? null : keystoreFile,
+                        keystorePasswords);
             }
 
             // 3. Load the PrivateKey and cert chain from KeyStore
@@ -725,13 +792,23 @@ public class ApkSignerTool {
             }
         }
 
+        /**
+         * Loads the password-protected keystore from storage.
+         *
+         * @param file file backing the keystore or {@code null} if the keystore is not file-backed,
+         *        for example, a PKCS #11 KeyStore.
+         */
         private static void loadKeyStoreFromFile(KeyStore ks, String file, List<char[]> passwords)
                 throws Exception {
             Exception lastFailure = null;
             for (char[] password : passwords) {
                 try {
-                    try (FileInputStream in = new FileInputStream(file)) {
-                        ks.load(in, password);
+                    if (file != null) {
+                        try (FileInputStream in = new FileInputStream(file)) {
+                            ks.load(in, password);
+                        }
+                    } else {
+                        ks.load(null, password);
                     }
                     return;
                 } catch (Exception e) {

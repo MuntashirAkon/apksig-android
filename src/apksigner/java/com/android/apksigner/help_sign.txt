@@ -134,6 +134,25 @@ file in X.509 format (see --key and --cert).
                       must be in X.509 PEM or DER format.
 
 
+        JCA PROVIDER INSTALLATION OPTIONS
+These options enable you to install additional Java Crypto Architecture (JCA)
+Providers, such PKCS #11 providers. Use --next-provider to delimit options of
+different providers. Providers are installed in the order in which they appear
+on the command-line.
+
+--provider-class      Fully-qualified class name of the JCA Provider.
+
+--provider-arg        Value to pass into the constructor of the JCA Provider
+                      class specified by --provider-class. The value is passed
+                      into the constructor as java.lang.String. By default, the
+                      no-arg provider's constructor is used.
+
+--provider-pos        Position / priority at which to install this provider in
+                      the JCA provider list. By default, the provider is
+                      installed as the lowest priority provider.
+                      See java.security.Security.insertProviderAt.
+
+
         EXAMPLES
 
 1. Sign an APK, in-place, using the one and only key in keystore release.jks:
@@ -148,3 +167,7 @@ $ apksigner sign --key release.pk8 --cert release.x509.pem app.apk
 
 4. Sign an APK using two keys:
 $ apksigner sign --ks release.jks --next-signer --ks magic.jks app.apk
+
+5. Sign an APK using PKCS #11 JCA Provider:
+$ apksigner sign --provider-class sun.security.pkcs11.SunPKCS11 \
+    --provider-arg token.cfg --ks NONE --ks-type PKCS11 app.apk
