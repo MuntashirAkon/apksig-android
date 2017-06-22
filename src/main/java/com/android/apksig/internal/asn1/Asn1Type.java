@@ -16,12 +16,13 @@
 
 package com.android.apksig.internal.asn1;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
-
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    com.android.apksig.internal.asn1.Asn1BerParserTest.class,
-    com.android.apksig.internal.asn1.ber.AllTests.class,
-})
-public class AllTests {}
+public enum Asn1Type {
+    ANY,
+    CHOICE,
+    INTEGER,
+    OBJECT_IDENTIFIER,
+    OCTET_STRING,
+    SEQUENCE,
+    SEQUENCE_OF,
+    SET_OF,
+}

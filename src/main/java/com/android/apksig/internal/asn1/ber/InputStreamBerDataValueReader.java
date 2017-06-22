@@ -117,7 +117,7 @@ public class InputStreamBerDataValueReader implements BerDataValueReader {
         return result;
     }
 
-    private static int readShortFormLength(int firstLengthByte) throws BerDataValueFormatException {
+    private static int readShortFormLength(int firstLengthByte) {
         return firstLengthByte & 0x7f;
     }
 
