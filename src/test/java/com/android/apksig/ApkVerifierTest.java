@@ -40,7 +40,6 @@ import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.Locale;
 import org.junit.Assume;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -66,8 +65,9 @@ public class ApkVerifierTest {
     }
 
     @Test
-    @Ignore
     public void testV1OneSignerMD5withRSAAccepted() throws Exception {
+        assumeThatMd5AcceptedInPkcs7Signature();
+
         // APK signed with v1 scheme only, one signer
         assertVerifiedForEach(
                 "v1-only-with-rsa-pkcs1-md5-1.2.840.113549.1.1.1-%s.apk", RSA_KEY_NAMES);
@@ -480,7 +480,6 @@ public class ApkVerifierTest {
     }
 
     @Test
-    @Ignore
     public void testV1SchemeSignatureCertNotReencoded() throws Exception {
         // Regression test for b/30148997 and b/18228011. When PackageManager does not preserve the
         // original encoded form of signing certificates, bad things happen, such as rejection of
@@ -878,5 +877,14 @@ public class ApkVerifierTest {
 
     private static void assumeThatRsaPssAvailable() throws Exception {
         Assume.assumeTrue(Security.getProviders("Signature.SHA256withRSA/PSS") != null);
+    }
+
+    private static void assumeThatMd5AcceptedInPkcs7Signature() throws Exception {
+        String algs = Security.getProperty("jdk.jar.disabledAlgorithms");
+        if ((algs != null) && (algs.toLowerCase(Locale.US).contains("md5"))) {
+            Assume.assumeNoException(
+                    new RuntimeException("MD5 not accepted in PKCS #7 signatures"
+                            + " . jdk.jar.disabledAlgorithms: \"" + algs + "\""));
+        }
     }
 }
