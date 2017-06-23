@@ -313,6 +313,52 @@ public class ApkSignerTest {
                 verifyForMinSdkVersion(out, 17), Issue.JAR_SIG_UNSUPPORTED_SIG_ALG);
     }
 
+    @Test
+    public void testV1SigningRejectsInvalidZipEntryNames() throws Exception {
+        // ZIP/JAR entry name cannot contain CR, LF, or NUL characters when the APK is being
+        // JAR-signed.
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(getDefaultSignerConfigFromResources("rsa-2048"));
+        try {
+            sign("v1-only-with-cr-in-entry-name.apk",
+                    new ApkSigner.Builder(signers).setV1SigningEnabled(true));
+            fail();
+        } catch (ApkFormatException expected) {}
+
+        try {
+            sign("v1-only-with-lf-in-entry-name.apk",
+                    new ApkSigner.Builder(signers).setV1SigningEnabled(true));
+            fail();
+        } catch (ApkFormatException expected) {}
+
+        try {
+            sign("v1-only-with-nul-in-entry-name.apk",
+                    new ApkSigner.Builder(signers).setV1SigningEnabled(true));
+            fail();
+        } catch (ApkFormatException expected) {}
+    }
+
+    @Test
+    public void testWeirdZipCompressionMethod() throws Exception {
+        // Any ZIP compression method other than STORED is treated as DEFLATED by Android.
+        // This APK declares compression method 21 (neither STORED nor DEFLATED) for CERT.RSA entry,
+        // but the entry is actually Deflate-compressed.
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(getDefaultSignerConfigFromResources("rsa-2048"));
+        sign("weird-compression-method.apk", new ApkSigner.Builder(signers));
+    }
+
+    @Test
+    public void testZipCompressionMethodMismatchBetweenLfhAndCd() throws Exception {
+        // Android Package Manager ignores compressionMethod field in Local File Header and always
+        // uses the compressionMethod from Central Directory instead.
+        // In this APK, compression method of CERT.RSA is declared as STORED in Local File Header
+        // and as DEFLATED in Central Directory. The entry is actually Deflate-compressed.
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(getDefaultSignerConfigFromResources("rsa-2048"));
+        sign("mismatched-compression-method.apk", new ApkSigner.Builder(signers));
+    }
+
     /**
      * Asserts that signing the specified golden input file using the provided signing
      * configuration produces output identical to the specified golden output file.

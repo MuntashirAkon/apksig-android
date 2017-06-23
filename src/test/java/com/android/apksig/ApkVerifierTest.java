@@ -35,6 +35,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.Security;
 import java.security.Signature;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.Locale;
@@ -65,6 +66,8 @@ public class ApkVerifierTest {
 
     @Test
     public void testV1OneSignerMD5withRSAAccepted() throws Exception {
+        assumeThatMd5AcceptedInPkcs7Signature();
+
         // APK signed with v1 scheme only, one signer
         assertVerifiedForEach(
                 "v1-only-with-rsa-pkcs1-md5-1.2.840.113549.1.1.1-%s.apk", RSA_KEY_NAMES);
@@ -493,11 +496,65 @@ public class ApkVerifierTest {
         // v1-only-with-rsa-1024-cert-not-der.apk META-INF/CERT.RSA was obtained from
         // v1-only-with-rsa-1024.apk META-INF/CERT.RSA by manually modifying the ASN.1 structure.
         ApkVerifier.Result result = verify("v1-only-with-rsa-1024-cert-not-der.apk");
+
+        // On JDK 8u131 and newer, when the default (SUN) X.509 CertificateFactory implementation is
+        // used, PKCS #7 signature verification fails because the certificate is not DER-encoded.
+        // This contrived block of code disables this test in this scenario.
+        if (!result.isVerified()) {
+            List<ApkVerifier.Result.V1SchemeSignerInfo> signers = result.getV1SchemeSigners();
+            if (signers.size() > 0) {
+                ApkVerifier.Result.V1SchemeSignerInfo signer = signers.get(0);
+                for (IssueWithParams issue : signer.getErrors()) {
+                    if (issue.getIssue() == Issue.JAR_SIG_PARSE_EXCEPTION) {
+                        CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+                        if ("SUN".equals(certFactory.getProvider().getName())) {
+                            Throwable exception = (Throwable) issue.getParams()[1];
+                            Throwable e = exception;
+                            while (e != null) {
+                                String msg = e.getMessage();
+                                e = e.getCause();
+                                if ((msg != null)
+                                        && (msg.contains("Redundant length bytes found"))) {
+                                    Assume.assumeNoException(exception);
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
         assertVerified(result);
         List<X509Certificate> signingCerts = result.getSignerCertificates();
         assertEquals(1, signingCerts.size());
         assertEquals(
                 "c5d4535a7e1c8111687a8374b2198da6f5ff8d811a7a25aa99ef060669342fa9",
+                HexEncoding.encode(sha256(signingCerts.get(0).getEncoded())));
+    }
+
+    @Test
+    public void testV1SchemeSignatureCertNotReencoded2() throws Exception {
+        // Regression test for b/30148997 and b/18228011. When PackageManager does not preserve the
+        // original encoded form of signing certificates, bad things happen, such as rejection of
+        // completely valid updates to apps. The issue in b/30148997 and b/18228011 was that
+        // PackageManager started re-encoding signing certs into DER. This normally produces exactly
+        // the original form because X.509 certificates are supposed to be DER-encoded. However, a
+        // small fraction of Android apps uses X.509 certificates which are not DER-encoded. For
+        // such apps, re-encoding into DER changes the serialized form of the certificate, creating
+        // a mismatch with the serialized form stored in the PackageManager database, leading to the
+        // rejection of updates for the app.
+        //
+        // v1-only-with-rsa-1024-cert-not-der2.apk cert's signature is not DER-encoded. It is
+        // BER-encoded, with the BIT STRING value containing an extraneous leading 0x00 byte.
+        // v1-only-with-rsa-1024-cert-not-der2.apk META-INF/CERT.RSA was obtained from
+        // v1-only-with-rsa-1024.apk META-INF/CERT.RSA by manually modifying the ASN.1 structure.
+        ApkVerifier.Result result = verify("v1-only-with-rsa-1024-cert-not-der2.apk");
+        assertVerified(result);
+        List<X509Certificate> signingCerts = result.getSignerCertificates();
+        assertEquals(1, signingCerts.size());
+        assertEquals(
+                "da3da398de674541313deed77218ce94798531ea5131bb9b1bb4063ba4548cfb",
                 HexEncoding.encode(sha256(signingCerts.get(0).getEncoded())));
     }
 
@@ -627,6 +684,34 @@ public class ApkVerifierTest {
         assertVerified(
                 verifyForMaxSdkVersion(
                         "v1-sha1-sha256-manifest-and-sf-with-sha256-wrong-in-sf.apk", 17));
+    }
+
+    @Test
+    public void testV1WithUnsupportedCharacterInZipEntryName() throws Exception {
+        // Android Package Manager does not support ZIP entry names containing CR or LF
+        assertVerificationFailure(
+                verify("v1-only-with-cr-in-entry-name.apk"),
+                Issue.JAR_SIG_UNNNAMED_MANIFEST_SECTION);
+        assertVerificationFailure(
+                verify("v1-only-with-lf-in-entry-name.apk"),
+                Issue.JAR_SIG_UNNNAMED_MANIFEST_SECTION);
+    }
+
+    @Test
+    public void testWeirdZipCompressionMethod() throws Exception {
+        // Any ZIP compression method other than STORED is treated as DEFLATED by Android.
+        // This APK declares compression method 21 (neither STORED nor DEFLATED) for CERT.RSA entry,
+        // but the entry is actually Deflate-compressed.
+        assertVerified(verify("weird-compression-method.apk"));
+    }
+
+    @Test
+    public void testZipCompressionMethodMismatchBetweenLfhAndCd() throws Exception {
+        // Android Package Manager ignores compressionMethod field in Local File Header and always
+        // uses the compressionMethod from Central Directory instead.
+        // In this APK, compression method of CERT.RSA is declared as STORED in Local File Header
+        // and as DEFLATED in Central Directory. The entry is actually Deflate-compressed.
+        assertVerified(verify("mismatched-compression-method.apk"));
     }
 
     private ApkVerifier.Result verify(String apkFilenameInResources)
@@ -792,5 +877,14 @@ public class ApkVerifierTest {
 
     private static void assumeThatRsaPssAvailable() throws Exception {
         Assume.assumeTrue(Security.getProviders("Signature.SHA256withRSA/PSS") != null);
+    }
+
+    private static void assumeThatMd5AcceptedInPkcs7Signature() throws Exception {
+        String algs = Security.getProperty("jdk.jar.disabledAlgorithms");
+        if ((algs != null) && (algs.toLowerCase(Locale.US).contains("md5"))) {
+            Assume.assumeNoException(
+                    new RuntimeException("MD5 not accepted in PKCS #7 signatures"
+                            + " . jdk.jar.disabledAlgorithms: \"" + algs + "\""));
+        }
     }
 }

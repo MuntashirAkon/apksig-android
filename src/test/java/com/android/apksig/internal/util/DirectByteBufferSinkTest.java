@@ -17,7 +17,10 @@
 package com.android.apksig.internal.util;
 
 import java.nio.ByteBuffer;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class DirectByteBufferSinkTest extends ByteBufferSinkTestBase {
     @Override
     protected ByteBuffer createBuffer(int size) {
