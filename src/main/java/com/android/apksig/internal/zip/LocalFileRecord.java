@@ -38,7 +38,6 @@ public class LocalFileRecord {
     private static final int HEADER_SIZE_BYTES = 30;
 
     private static final int GP_FLAGS_OFFSET = 6;
-    private static final int COMPRESSION_METHOD_OFFSET = 8;
     private static final int CRC32_OFFSET = 14;
     private static final int COMPRESSED_SIZE_OFFSET = 18;
     private static final int UNCOMPRESSED_SIZE_OFFSET = 22;
@@ -175,6 +174,14 @@ public class LocalFileRecord {
         }
         short gpFlags = header.getShort(GP_FLAGS_OFFSET);
         boolean dataDescriptorUsed = (gpFlags & ZipUtils.GP_FLAG_DATA_DESCRIPTOR_USED) != 0;
+        boolean cdDataDescriptorUsed =
+                (cdRecord.getGpFlags() & ZipUtils.GP_FLAG_DATA_DESCRIPTOR_USED) != 0;
+        if (dataDescriptorUsed != cdDataDescriptorUsed) {
+            throw new ZipFormatException(
+                    "Data Descriptor presence mismatch between Local File Header and Central"
+                            + " Directory for entry " + entryName
+                            + ". LFH: " + dataDescriptorUsed + ", CD: " + cdDataDescriptorUsed);
+        }
         long uncompressedDataCrc32FromCdRecord = cdRecord.getCrc32();
         long compressedDataSizeFromCdRecord = cdRecord.getCompressedSize();
         long uncompressedDataSizeFromCdRecord = cdRecord.getUncompressedSize();
@@ -215,24 +222,10 @@ public class LocalFileRecord {
                             + name + "\", CD: \"" + entryName + "\"");
         }
         int extraLength = ZipUtils.getUnsignedInt16(header, EXTRA_LENGTH_OFFSET);
-
-        short compressionMethod = header.getShort(COMPRESSION_METHOD_OFFSET);
-        boolean compressed;
-        switch (compressionMethod) {
-            case ZipUtils.COMPRESSION_METHOD_STORED:
-                compressed = false;
-                break;
-            case ZipUtils.COMPRESSION_METHOD_DEFLATED:
-                compressed = true;
-                break;
-            default:
-                throw new ZipFormatException(
-                        "Unsupported compression method of entry " + entryName
-                                + ": " + (compressionMethod & 0xffff));
-        }
-
         long dataStartOffset = headerStartOffset + HEADER_SIZE_BYTES + nameLength + extraLength;
         long dataSize;
+        boolean compressed =
+                (cdRecord.getCompressionMethod() != ZipUtils.COMPRESSION_METHOD_STORED);
         if (compressed) {
             dataSize = compressedDataSizeFromCdRecord;
         } else {
