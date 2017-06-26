@@ -16,12 +16,8 @@
 
 package com.android.apksig.internal.asn1;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
-
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    com.android.apksig.internal.asn1.Asn1BerParserTest.class,
-    com.android.apksig.internal.asn1.ber.AllTests.class,
-})
-public class AllTests {}
+public enum Asn1Tagging {
+    NORMAL,
+    EXPLICIT,
+    IMPLICIT,
+}

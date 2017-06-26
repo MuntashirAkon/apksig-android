@@ -28,7 +28,7 @@ public interface BerDataValueReader {
     /**
      * Returns the next data value or {@code null} if end of input has been reached.
      *
-     * @throws BerDataValueFormatExcepton if the value being read is malformed.
+     * @throws BerDataValueFormatException if the value being read is malformed.
      */
     BerDataValue readDataValue() throws BerDataValueFormatException;
 }
