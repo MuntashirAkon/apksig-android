@@ -14,14 +14,20 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.asn1;
+package com.android.apksig.internal.util;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+import java.nio.ByteBuffer;
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    com.android.apksig.internal.asn1.Asn1BerParserTest.class,
-    com.android.apksig.internal.asn1.ber.AllTests.class,
-})
-public class AllTests {}
+public final class ByteBufferUtils {
+    private ByteBufferUtils() {}
+
+    /**
+     * Returns the remaining data of the provided buffer as a new byte array and advances the
+     * position of the buffer to the buffer's limit.
+     */
+    public static byte[] toByteArray(ByteBuffer buf) {
+        byte[] result = new byte[buf.remaining()];
+        buf.get(result);
+        return result;
+    }
+}

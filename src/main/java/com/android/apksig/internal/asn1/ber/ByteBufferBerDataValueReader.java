@@ -118,7 +118,7 @@ public class ByteBufferBerDataValueReader implements BerDataValueReader {
         return result;
     }
 
-    private int readShortFormLength(int firstLengthByte) throws BerDataValueFormatException {
+    private int readShortFormLength(int firstLengthByte) {
         return firstLengthByte & 0x7f;
     }
 

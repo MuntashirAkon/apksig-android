@@ -16,12 +16,15 @@
 
 package com.android.apksig.internal.asn1;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+public enum Asn1TagClass {
+    UNIVERSAL,
+    APPLICATION,
+    CONTEXT_SPECIFIC,
+    PRIVATE,
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    com.android.apksig.internal.asn1.Asn1BerParserTest.class,
-    com.android.apksig.internal.asn1.ber.AllTests.class,
-})
-public class AllTests {}
+    /**
+     * Not really an actual tag class: decoder/encoder will attempt to deduce the correct tag class
+     * automatically.
+     */
+    AUTOMATIC,
+}

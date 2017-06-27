@@ -16,12 +16,23 @@
 
 package com.android.apksig.internal.asn1;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+import java.nio.ByteBuffer;
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    com.android.apksig.internal.asn1.Asn1BerParserTest.class,
-    com.android.apksig.internal.asn1.ber.AllTests.class,
-})
-public class AllTests {}
+/**
+ * Opaque holder of encoded ASN.1 stuff.
+ */
+public class Asn1OpaqueObject {
+    private final ByteBuffer mEncoded;
+
+    public Asn1OpaqueObject(ByteBuffer encoded) {
+        mEncoded = encoded.slice();
+    }
+
+    public Asn1OpaqueObject(byte[] encoded) {
+        mEncoded = ByteBuffer.wrap(encoded);
+    }
+
+    public ByteBuffer getEncoded() {
+        return mEncoded.slice();
+    }
+}
