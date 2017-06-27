@@ -16,12 +16,17 @@
 
 package com.android.apksig.internal.asn1;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+/**
+ * Indicates that input could not be decoded into intended ASN.1 structure.
+ */
+public class Asn1DecodingException extends Exception {
+    private static final long serialVersionUID = 1L;
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    com.android.apksig.internal.asn1.Asn1BerParserTest.class,
-    com.android.apksig.internal.asn1.ber.AllTests.class,
-})
-public class AllTests {}
+    public Asn1DecodingException(String message) {
+        super(message);
+    }
+
+    public Asn1DecodingException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}

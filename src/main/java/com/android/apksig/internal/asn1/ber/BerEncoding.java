@@ -16,6 +16,9 @@
 
 package com.android.apksig.internal.asn1.ber;
 
+import com.android.apksig.internal.asn1.Asn1Type;
+import com.android.apksig.internal.asn1.Asn1TagClass;
+
 /**
  * ASN.1 Basic Encoding Rules (BER) constants and helper methods. See {@code X.690}.
  */
@@ -77,6 +80,61 @@ public abstract class BerEncoding {
      */
     public static final int TAG_NUMBER_SET = 0x11;
 
+    public static int getTagNumber(Asn1Type dataType) {
+        switch (dataType) {
+            case INTEGER:
+                return TAG_NUMBER_INTEGER;
+            case OBJECT_IDENTIFIER:
+                return TAG_NUMBER_OBJECT_IDENTIFIER;
+            case OCTET_STRING:
+                return TAG_NUMBER_OCTET_STRING;
+            case SET_OF:
+                return TAG_NUMBER_SET;
+            case SEQUENCE:
+            case SEQUENCE_OF:
+                return TAG_NUMBER_SEQUENCE;
+            default:
+                throw new IllegalArgumentException("Unsupported data type: " + dataType);
+        }
+    }
+
+    public static int getTagClass(Asn1TagClass tagClass) {
+        switch (tagClass) {
+            case APPLICATION:
+                return TAG_CLASS_APPLICATION;
+            case CONTEXT_SPECIFIC:
+                return TAG_CLASS_CONTEXT_SPECIFIC;
+            case PRIVATE:
+                return TAG_CLASS_PRIVATE;
+            case UNIVERSAL:
+                return TAG_CLASS_UNIVERSAL;
+            default:
+                throw new IllegalArgumentException("Unsupported tag class: " + tagClass);
+        }
+    }
+
+    public static String tagClassToString(int typeClass) {
+        switch (typeClass) {
+            case TAG_CLASS_APPLICATION:
+                return "APPLICATION";
+            case TAG_CLASS_CONTEXT_SPECIFIC:
+                return "";
+            case TAG_CLASS_PRIVATE:
+                return "PRIVATE";
+            case TAG_CLASS_UNIVERSAL:
+                return "UNIVERSAL";
+            default:
+                throw new IllegalArgumentException("Unsupported type class: " + typeClass);
+        }
+    }
+
+    public static String tagClassAndNumberToString(int tagClass, int tagNumber) {
+        String classString = tagClassToString(tagClass);
+        String numberString = tagNumberToString(tagNumber);
+        return classString.isEmpty() ? numberString : classString + " " + numberString;
+    }
+
+
     public static String tagNumberToString(int tagNumber) {
         switch (tagNumber) {
             case TAG_NUMBER_INTEGER:
@@ -121,4 +179,3 @@ public abstract class BerEncoding {
         return firstIdentifierByte & 0x1f;
     }
 }
-
