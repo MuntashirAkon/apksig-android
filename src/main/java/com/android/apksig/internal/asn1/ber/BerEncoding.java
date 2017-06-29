@@ -171,11 +171,19 @@ public abstract class BerEncoding {
         return (firstIdentifierByte & 0xff) >> 6;
     }
 
+    public static byte setTagClass(byte firstIdentifierByte, int tagClass) {
+        return (byte) ((firstIdentifierByte & 0x3f) | (tagClass << 6));
+    }
+
     /**
      * Returns the tag number encoded in the provided first identifier byte. See {@code TAG_NUMBER}
      * constants.
      */
     public static int getTagNumber(byte firstIdentifierByte) {
         return firstIdentifierByte & 0x1f;
+    }
+
+    public static byte setTagNumber(byte firstIdentifierByte, int tagNumber) {
+        return (byte) ((firstIdentifierByte & ~0x1f) | tagNumber);
     }
 }
