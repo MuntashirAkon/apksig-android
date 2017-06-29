@@ -522,7 +522,7 @@ public abstract class V1SchemeSigner {
 
         X500Name issuerName;
         try {
-            issuerName = new X500Name(signerCert.getIssuerX500Principal().getName());
+            issuerName = new X500Name(signerCert.getIssuerX500Principal().getEncoded());
         } catch (IOException e) {
             throw new CertificateParsingException(
                     "Failed to parse signer certificate issuer name", e);
