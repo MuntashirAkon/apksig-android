@@ -39,4 +39,7 @@ public @interface Asn1Field {
 
     /** {@code true} if this field is optional. Ignored for fields of CHOICE containers. */
     public boolean optional() default false;
+
+    /** Type of elements. Used only for SET_OF or SEQUENCE_OF. */
+    public Asn1Type elementType() default Asn1Type.ANY;
 }
