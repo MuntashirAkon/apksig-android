@@ -150,7 +150,7 @@ public abstract class BerDataValueReaderTestBase {
     public void testIndefiniteFormLength() throws Exception {
         assertByteBufferEquals(new byte[0], readDataValue("30800000").getEncodedContents());
         assertByteBufferEquals(
-                HexEncoding.decode("010203"), readDataValue("30800102030000").getEncodedContents());
+                HexEncoding.decode("020103"), readDataValue("30800201030000").getEncodedContents());
         assertByteBufferEquals(
                 HexEncoding.decode(
                         "000102030405060708090a0b0c0d0e0f"
@@ -171,7 +171,7 @@ public abstract class BerDataValueReaderTestBase {
                             + "000102030405060708090a0b0c0d0e0f"
                             + "000102030405060708090a0b0c0d0e0f"),
                 readDataValue(
-                        "3080"
+                        "0280"
                                 + "000102030405060708090a0b0c0d0e0f"
                                 + "000102030405060708090a0b0c0d0e0f"
                                 + "000102030405060708090a0b0c0d0e0f"
@@ -221,6 +221,38 @@ public abstract class BerDataValueReaderTestBase {
     @Test
     public void testEmptyIndefiniteLengthContents() throws Exception {
         assertByteBufferEquals(new byte[0], readDataValue("30800000").getEncodedContents());
+    }
+
+    @Test
+    public void testPrimitiveIndefiniteLengthContentsMustNotBeParsed()
+            throws Exception {
+        // INTEGER (0x0203) followed by 0x010000. This could be misinterpreted as INTEGER
+        // (0x0203000001) if the contents of the original INTEGER are parsed to find the 0x00 0x00
+        // indefinite length terminator. Such parsing must not take place for primitive (i.e., not
+        // constructed) values.
+        assertEquals(
+                "0203",
+                HexEncoding.encode(readDataValue("028002030000010000").getEncodedContents()));
+    }
+
+    @Test
+    public void testConstructedIndefiniteLengthContentsContainingIndefiniteLengthEncodedValues()
+            throws Exception {
+        // Indefinite length SEQUENCE containing elements which themselves use indefinite length
+        // encoding, followed by INTEGER (0x0e).
+        assertEquals(
+                "3080028001000000000280020000",
+                HexEncoding.encode(readDataValue(
+                        "30803080028001000000000280020000000002010c").getEncodedContents()));
+    }
+
+    @Test(expected = BerDataValueFormatException.class)
+    public void testConstructedIndefiniteLengthContentsContainingGarbage() throws Exception {
+        // Indefinite length SEQUENCE containing truncated data value. Parsing is expected to fail
+        // because the value of the sequence must be parsed (and this will fail because of garbage)
+        // to establish where to look for the 0x00 0x00 indefinite length terminator of the
+        // SEQUENCE.
+        readDataValue("3080020a030000");
     }
 
     @Test
