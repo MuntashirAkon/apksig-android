@@ -196,6 +196,68 @@ public class Asn1BerParserTest {
         parse("0200", ChoiceWithClashingOptions.class);
     }
 
+    @Test
+    public void testPrimitiveIndefiniteLengthEncodingWithGarbage() throws Exception {
+        // Indefinite length INTEGER containing what may look like a malformed definite length
+        // INTEGER, followed by an INTEGER. This tests that contents of indefinite length encoded
+        // primitive (i.e., not constructed) data values must not be parsed to locate the 0x00 0x00
+        // terminator.
+        ByteBuffer input = ByteBuffer.wrap(HexEncoding.decode("0280020401000002010c"));
+        ChoiceWithTwoOptions c = parse(input, ChoiceWithTwoOptions.class);
+        // Check what's remaining in the input buffer
+        assertEquals("02010c", HexEncoding.encode(input));
+        // Check what was consumed
+        assertEquals(0x020401, c.num.intValue());
+
+        // Indefinite length INTEGER containing what may look like a malformed indefinite length
+        // INTEGER, followed by an INTEGER
+        input = ByteBuffer.wrap(HexEncoding.decode("0280028001000002010c"));
+        c = parse(input, ChoiceWithTwoOptions.class);
+        // Check what's remaining in the input buffer
+        assertEquals("02010c", HexEncoding.encode(input));
+        // Check what was consumed
+        assertEquals(0x028001, c.num.intValue());
+    }
+
+    @Test
+    public void testConstructedIndefiniteLengthEncodingWithoutNestedIndefiniteLengthDataValues()
+            throws Exception {
+        // Indefinite length SEQUENCE containing an INTEGER whose encoding contains 0x00 0x00 which
+        // can be misinterpreted as indefinite length encoding terminator of the SEQUENCE, followed
+        // by an INTEGER
+        ByteBuffer input = ByteBuffer.wrap(HexEncoding.decode("308002020000000002010c"));
+        SequenceWithAsn1Opaque c = parse(input, SequenceWithAsn1Opaque.class);
+        // Check what's remaining in the input buffer
+        assertEquals("02010c", HexEncoding.encode(input));
+        // Check what was read
+        assertEquals("02020000", HexEncoding.encode(c.obj.getEncoded()));
+    }
+
+    @Test
+    public void testConstructedIndefiniteLengthEncodingWithNestedIndefiniteLengthDataValues()
+            throws Exception {
+        // Indefinite length SEQUENCE containing two INTEGER fields using indefinite
+        // length encoding, followed by an INTEGER. This tests that the 0x00 0x00 terminators used
+        // by the encoding of the two INTEGERs are not confused for the 0x00 0x00 terminator of the
+        // SEQUENCE.
+        ByteBuffer input =
+                ByteBuffer.wrap(HexEncoding.decode("308002800300000280030000020103000002010c"));
+        SequenceWithAsn1Opaque c = parse(input, SequenceWithAsn1Opaque.class);
+        // Check what's remaining in the input buffer
+        assertEquals("02010c", HexEncoding.encode(input));
+        // Check what was consumed
+        assertEquals("0280030000", HexEncoding.encode(c.obj.getEncoded()));
+    }
+
+    @Test(expected = Asn1DecodingException.class)
+    public void testConstructedIndefiniteLengthEncodingWithGarbage() throws Exception {
+        // Indefinite length SEQUENCE containing an indefinite length encoded SEQUENCE containing
+        // garbage which doesn't parse as BER, followed by an INTEGER. This tests that contents of
+        // the SEQUENCEs must be parsed to establish where their 0x00 0x00 terminators are located.
+        ByteBuffer input = ByteBuffer.wrap(HexEncoding.decode("3080308002040000000002010c"));
+        parse(input, SequenceWithAsn1Opaque.class);
+    }
+
     private static <T> T parse(String hexEncodedInput, Class<T> containerClass)
             throws Asn1DecodingException {
         ByteBuffer input =
@@ -308,5 +370,11 @@ public class Asn1BerParserTest {
     public static class SequenceWithSetOf {
         @Asn1Field(index = 0, type = Asn1Type.SET_OF)
         public List<EmptySequence> values;
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithAsn1Opaque {
+        @Asn1Field(type = Asn1Type.ANY)
+        public Asn1OpaqueObject obj;
     }
 }
