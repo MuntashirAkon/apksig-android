@@ -14,15 +14,23 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.asn1;
+package com.android.apksig.internal.pkcs7;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+import com.android.apksig.internal.asn1.Asn1Class;
+import com.android.apksig.internal.asn1.Asn1Field;
+import com.android.apksig.internal.asn1.Asn1OpaqueObject;
+import com.android.apksig.internal.asn1.Asn1Type;
+import java.util.List;
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    com.android.apksig.internal.asn1.Asn1BerParserTest.class,
-    com.android.apksig.internal.asn1.Asn1DerEncoderTest.class,
-    com.android.apksig.internal.asn1.ber.AllTests.class,
-})
-public class AllTests {}
+/**
+ * PKCS #7 {@code Attribute} as specified in RFC 5652.
+ */
+@Asn1Class(type = Asn1Type.SEQUENCE)
+public class Attribute {
+
+    @Asn1Field(index = 0, type = Asn1Type.OBJECT_IDENTIFIER)
+    public String attrType;
+
+    @Asn1Field(index = 1, type = Asn1Type.SET_OF)
+    public List<Asn1OpaqueObject> attrValues;
+}

@@ -35,10 +35,20 @@ public class InputStreamBerDataValueReader implements BerDataValueReader {
         mIn = in;
     }
 
-    @SuppressWarnings("resource")
     @Override
     public BerDataValue readDataValue() throws BerDataValueFormatException {
-        RecordingInputStream in = new RecordingInputStream(mIn);
+        return readDataValue(mIn);
+    }
+
+    /**
+     * Returns the next data value or {@code null} if end of input has been reached.
+     *
+     * @throws BerDataValueFormatException if the value being read is malformed.
+     */
+    @SuppressWarnings("resource")
+    private static BerDataValue readDataValue(InputStream input)
+            throws BerDataValueFormatException {
+        RecordingInputStream in = new RecordingInputStream(input);
 
         try {
             int firstIdentifierByte = in.read();
@@ -53,6 +63,7 @@ public class InputStreamBerDataValueReader implements BerDataValueReader {
                 throw new BerDataValueFormatException("Missing length");
             }
 
+            boolean constructed = BerEncoding.isConstructed((byte) firstIdentifierByte);
             int contentsLength;
             int contentsOffsetInDataValue;
             if ((firstLengthByte & 0x80) == 0) {
@@ -68,7 +79,10 @@ public class InputStreamBerDataValueReader implements BerDataValueReader {
             } else {
                 // indefinite length
                 contentsOffsetInDataValue = in.getReadByteCount();
-                contentsLength = skipIndefiniteLengthContents(in);
+                contentsLength =
+                        constructed
+                                ? skipConstructedIndefiniteLengthContents(in)
+                                : skipPrimitiveIndefiniteLengthContents(in);
             }
 
             byte[] encoded = in.getReadBytes();
@@ -78,7 +92,7 @@ public class InputStreamBerDataValueReader implements BerDataValueReader {
                     ByteBuffer.wrap(encoded),
                     encodedContents,
                     BerEncoding.getTagClass((byte) firstIdentifierByte),
-                    BerEncoding.isConstructed((byte) firstIdentifierByte),
+                    constructed,
                     tagNumber);
         } catch (IOException e) {
             throw new BerDataValueFormatException("Failed to read data value", e);
@@ -159,7 +173,7 @@ public class InputStreamBerDataValueReader implements BerDataValueReader {
         }
     }
 
-    private static int skipIndefiniteLengthContents(InputStream in)
+    private static int skipPrimitiveIndefiniteLengthContents(InputStream in)
             throws IOException, BerDataValueFormatException {
         // Contents are terminated by 0x00 0x00
         boolean prevZeroByte = false;
@@ -183,6 +197,34 @@ public class InputStreamBerDataValueReader implements BerDataValueReader {
                 continue;
             } else {
                 prevZeroByte = false;
+            }
+        }
+    }
+
+    private static int skipConstructedIndefiniteLengthContents(RecordingInputStream in)
+            throws BerDataValueFormatException {
+        // Contents are terminated by 0x00 0x00. However, this data value is constructed, meaning it
+        // can contain data values which are indefinite length encoded as well. As a result, we
+        // must parse the direct children of this data value to correctly skip over the contents of
+        // this data value.
+        int readByteCountBefore = in.getReadByteCount();
+        while (true) {
+            // We can't easily peek for the 0x00 0x00 terminator using the provided InputStream.
+            // Thus, we use the fact that 0x00 0x00 parses as a data value whose encoded form we
+            // then check below to see whether it's 0x00 0x00.
+            BerDataValue dataValue = readDataValue(in);
+            if (dataValue == null) {
+                throw new BerDataValueFormatException(
+                        "Truncated indefinite-length contents: "
+                                + (in.getReadByteCount() - readByteCountBefore) + " bytes read");
+            }
+            if (in.getReadByteCount() <= 0) {
+                throw new BerDataValueFormatException("Indefinite-length contents too long");
+            }
+            ByteBuffer encoded = dataValue.getEncoded();
+            if ((encoded.remaining() == 2) && (encoded.get(0) == 0) && (encoded.get(1) == 0)) {
+                // 0x00 0x00 encountered
+                return in.getReadByteCount() - readByteCountBefore - 2;
             }
         }
     }

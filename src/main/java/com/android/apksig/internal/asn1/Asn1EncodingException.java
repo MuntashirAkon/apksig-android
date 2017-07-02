@@ -16,13 +16,17 @@
 
 package com.android.apksig.internal.asn1;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+/**
+ * Indicates that an ASN.1 structure could not be encoded.
+ */
+public class Asn1EncodingException extends Exception {
+    private static final long serialVersionUID = 1L;
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    com.android.apksig.internal.asn1.Asn1BerParserTest.class,
-    com.android.apksig.internal.asn1.Asn1DerEncoderTest.class,
-    com.android.apksig.internal.asn1.ber.AllTests.class,
-})
-public class AllTests {}
+    public Asn1EncodingException(String message) {
+        super(message);
+    }
+
+    public Asn1EncodingException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}

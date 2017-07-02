@@ -358,7 +358,7 @@ public abstract class V1SchemeVerifier {
         }
     }
 
-    private static class Signer {
+    static class Signer {
         private final String mName;
         private final Result.SignerInfo mResult;
         private final CentralDirectoryRecord mSignatureFileEntry;
@@ -520,13 +520,13 @@ public abstract class V1SchemeVerifier {
         }
 
         private static final String OID_DIGEST_MD5 = "1.2.840.113549.2.5";
-        private static final String OID_DIGEST_SHA1 = "1.3.14.3.2.26";
+        static final String OID_DIGEST_SHA1 = "1.3.14.3.2.26";
         private static final String OID_DIGEST_SHA224 = "2.16.840.1.101.3.4.2.4";
-        private static final String OID_DIGEST_SHA256 = "2.16.840.1.101.3.4.2.1";
+        static final String OID_DIGEST_SHA256 = "2.16.840.1.101.3.4.2.1";
         private static final String OID_DIGEST_SHA384 = "2.16.840.1.101.3.4.2.2";
         private static final String OID_DIGEST_SHA512 = "2.16.840.1.101.3.4.2.3";
 
-        private static final String OID_SIG_RSA = "1.2.840.113549.1.1.1";
+        static final String OID_SIG_RSA = "1.2.840.113549.1.1.1";
         private static final String OID_SIG_MD5_WITH_RSA = "1.2.840.113549.1.1.4";
         private static final String OID_SIG_SHA1_WITH_RSA = "1.2.840.113549.1.1.5";
         private static final String OID_SIG_SHA224_WITH_RSA = "1.2.840.113549.1.1.14";
@@ -534,12 +534,12 @@ public abstract class V1SchemeVerifier {
         private static final String OID_SIG_SHA384_WITH_RSA = "1.2.840.113549.1.1.12";
         private static final String OID_SIG_SHA512_WITH_RSA = "1.2.840.113549.1.1.13";
 
-        private static final String OID_SIG_DSA = "1.2.840.10040.4.1";
+        static final String OID_SIG_DSA = "1.2.840.10040.4.1";
         private static final String OID_SIG_SHA1_WITH_DSA = "1.2.840.10040.4.3";
         private static final String OID_SIG_SHA224_WITH_DSA = "2.16.840.1.101.3.4.3.1";
-        private static final String OID_SIG_SHA256_WITH_DSA = "2.16.840.1.101.3.4.3.2";
+        static final String OID_SIG_SHA256_WITH_DSA = "2.16.840.1.101.3.4.3.2";
 
-        private static final String OID_SIG_EC_PUBLIC_KEY = "1.2.840.10045.2.1";
+        static final String OID_SIG_EC_PUBLIC_KEY = "1.2.840.10045.2.1";
         private static final String OID_SIG_SHA1_WITH_ECDSA = "1.2.840.10045.4.1";
         private static final String OID_SIG_SHA224_WITH_ECDSA = "1.2.840.10045.4.3.1";
         private static final String OID_SIG_SHA256_WITH_ECDSA = "1.2.840.10045.4.3.2";

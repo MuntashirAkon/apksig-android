@@ -40,6 +40,7 @@ public class ByteBufferBerDataValueReader implements BerDataValueReader {
         }
         byte firstIdentifierByte = mBuf.get();
         int tagNumber = readTagNumber(firstIdentifierByte);
+        boolean constructed = BerEncoding.isConstructed(firstIdentifierByte);
 
         if (!mBuf.hasRemaining()) {
             throw new BerDataValueFormatException("Missing length");
@@ -60,7 +61,10 @@ public class ByteBufferBerDataValueReader implements BerDataValueReader {
         } else {
             // indefinite length -- value ends with 0x00 0x00
             contentsOffsetInTag = mBuf.position() - startPosition;
-            contentsLength = skipIndefiniteLengthContents();
+            contentsLength =
+                    constructed
+                            ? skipConstructedIndefiniteLengthContents()
+                            : skipPrimitiveIndefiniteLengthContents();
         }
 
         // Create the encoded data value ByteBuffer
@@ -82,7 +86,7 @@ public class ByteBufferBerDataValueReader implements BerDataValueReader {
                 encoded,
                 encodedContents,
                 BerEncoding.getTagClass(firstIdentifierByte),
-                BerEncoding.isConstructed(firstIdentifierByte),
+                constructed,
                 tagNumber);
     }
 
@@ -153,7 +157,7 @@ public class ByteBufferBerDataValueReader implements BerDataValueReader {
         mBuf.position(mBuf.position() + contentsLength);
     }
 
-    private int skipIndefiniteLengthContents() throws BerDataValueFormatException {
+    private int skipPrimitiveIndefiniteLengthContents() throws BerDataValueFormatException {
         // Contents are terminated by 0x00 0x00
         boolean prevZeroByte = false;
         int bytesRead = 0;
@@ -178,5 +182,27 @@ public class ByteBufferBerDataValueReader implements BerDataValueReader {
                 prevZeroByte = false;
             }
         }
+    }
+
+    private int skipConstructedIndefiniteLengthContents() throws BerDataValueFormatException {
+        // Contents are terminated by 0x00 0x00. However, this data value is constructed, meaning it
+        // can contain data values which are themselves indefinite length encoded. As a result, we
+        // must parse the direct children of this data value to correctly skip over the contents of
+        // this data value.
+        int startPos = mBuf.position();
+        while (mBuf.hasRemaining()) {
+            // Check whether the 0x00 0x00 terminator is at current position
+            if ((mBuf.remaining() > 1) && (mBuf.getShort(mBuf.position()) == 0)) {
+                int contentsLength = mBuf.position() - startPos;
+                mBuf.position(mBuf.position() + 2);
+                return contentsLength;
+            }
+            // No luck. This must be a BER-encoded data value -- skip over it by parsing it
+            readDataValue();
+        }
+
+        throw new BerDataValueFormatException(
+                "Truncated indefinite-length contents: "
+                        + (mBuf.position() - startPos) + " bytes read");
     }
 }

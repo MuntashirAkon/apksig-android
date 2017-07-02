@@ -14,15 +14,14 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.asn1;
+package com.android.apksig.internal.pkcs7;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+/**
+ * Assorted PKCS #7 constants from RFC 5652.
+ */
+public abstract class Pkcs7Constants {
+    private Pkcs7Constants() {}
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    com.android.apksig.internal.asn1.Asn1BerParserTest.class,
-    com.android.apksig.internal.asn1.Asn1DerEncoderTest.class,
-    com.android.apksig.internal.asn1.ber.AllTests.class,
-})
-public class AllTests {}
+    public static final String OID_DATA = "1.2.840.113549.1.7.1";
+    public static final String OID_SIGNED_DATA = "1.2.840.113549.1.7.2";
+}
