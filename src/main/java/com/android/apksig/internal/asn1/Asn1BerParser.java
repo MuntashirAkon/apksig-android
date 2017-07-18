@@ -137,8 +137,8 @@ public final class Asn1BerParser {
         // Instantiate the container object / result
         T obj;
         try {
-            obj = containerClass.newInstance();
-        } catch (ReflectiveOperationException e) {
+            obj = containerClass.getConstructor().newInstance();
+        } catch (IllegalArgumentException | ReflectiveOperationException e) {
             throw new Asn1DecodingException("Failed to instantiate " + containerClass.getName(), e);
         }
 
@@ -179,8 +179,8 @@ public final class Asn1BerParser {
         // Instantiate the container object / result
         T t;
         try {
-            t = containerClass.newInstance();
-        } catch (ReflectiveOperationException e) {
+            t = containerClass.getConstructor().newInstance();
+        } catch (IllegalArgumentException | ReflectiveOperationException e) {
             throw new Asn1DecodingException("Failed to instantiate " + containerClass.getName(), e);
         }
 
