@@ -26,6 +26,15 @@ LOCAL_SRC_FILES := $(call all-java-files-under, src/main/java)
 # SignedData block generation, parsing, and verification.
 LOCAL_JAVACFLAGS := -XDignore.symbol.file
 
+# http://b/63748551 apksig relies on some (internal) sun.security.* imports.
+# Export the corresponding packages for now so it can compile under OpenJDK 9's
+# javac -target 1.9 -source 1.9
+ifeq ($(EXPERIMENTAL_USE_OPENJDK9),true)
+LOCAL_JAVACFLAGS += --add-exports java.base/sun.security.pkcs=ALL-UNNAMED
+LOCAL_JAVACFLAGS += --add-exports java.base/sun.security.util=ALL-UNNAMED
+LOCAL_JAVACFLAGS += --add-exports java.base/sun.security.x509=ALL-UNNAMED
+endif
+
 include $(BUILD_HOST_JAVA_LIBRARY)
 
 
