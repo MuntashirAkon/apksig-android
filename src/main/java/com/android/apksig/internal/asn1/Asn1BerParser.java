@@ -480,7 +480,7 @@ public final class Asn1BerParser {
 
     private static List<AnnotatedField> getAnnotatedFields(Class<?> containerClass)
             throws Asn1DecodingException {
-        Field declaredFields[] = containerClass.getDeclaredFields();
+        Field[] declaredFields = containerClass.getDeclaredFields();
         List<AnnotatedField> result = new ArrayList<>(declaredFields.length);
         for (Field field : declaredFields) {
             Asn1Field annotation = field.getDeclaredAnnotation(Asn1Field.class);
