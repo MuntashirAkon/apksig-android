@@ -179,7 +179,7 @@ public final class Asn1DerEncoder {
     private static List<AnnotatedField> getAnnotatedFields(Object container)
             throws Asn1EncodingException {
         Class<?> containerClass = container.getClass();
-        Field declaredFields[] = containerClass.getDeclaredFields();
+        Field[] declaredFields = containerClass.getDeclaredFields();
         List<AnnotatedField> result = new ArrayList<>(declaredFields.length);
         for (Field field : declaredFields) {
             Asn1Field annotation = field.getDeclaredAnnotation(Asn1Field.class);
