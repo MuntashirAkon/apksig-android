@@ -714,6 +714,57 @@ public class ApkVerifierTest {
         assertVerified(verify("mismatched-compression-method.apk"));
     }
 
+    @Test
+    public void testV1SignedAttrs() throws Exception {
+        assertVerified(verify("v1-only-with-signed-attrs.apk"));
+    }
+
+    @Test
+    public void testV1SignedAttrsNotInDerOrder() throws Exception {
+        // Android does not re-order SignedAttributes despite it being a SET OF. Pre-N, Android
+        // treated them as SEQUENCE OF, meaning no re-ordering is necessary. From N onwards, it
+        // treats them as SET OF, but does not re-encode into SET OF during verification if all
+        // attributes parsed fine.
+        assertVerified(verify("v1-only-with-signed-attrs-wrong-order.apk"));
+    }
+
+    @Test
+    public void testV1SignedAttrsMissingContentType() throws Exception {
+        // SignedAttributes must contain ContentType
+        assertVerificationFailure(
+                verify("v1-only-with-signed-attrs-missing-content-type.apk"),
+                Issue.JAR_SIG_VERIFY_EXCEPTION);
+    }
+
+    @Test
+    public void testV1SignedAttrsWrongContentType() throws Exception {
+        assertVerificationFailure(
+                verify("v1-only-with-signed-attrs-wrong-content-type.apk"),
+                Issue.JAR_SIG_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void testV1SignedAttrsMultipleGoodDigests() throws Exception {
+        // Only one digest must be present SignedAttributes
+        assertVerificationFailure(
+                verify("v1-only-with-signed-attrs-multiple-good-digests.apk"),
+                Issue.JAR_SIG_PARSE_EXCEPTION);
+    }
+
+    @Test
+    public void testV1SignedAttrsWrongDigest() throws Exception {
+        assertVerificationFailure(
+                verify("v1-only-with-signed-attrs-wrong-digest.apk"),
+                Issue.JAR_SIG_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void testV1SignedAttrsWrongSignature() throws Exception {
+        assertVerificationFailure(
+                verify("v1-only-with-signed-attrs-wrong-signature.apk"),
+                Issue.JAR_SIG_DID_NOT_VERIFY);
+    }
+
     private ApkVerifier.Result verify(String apkFilenameInResources)
             throws IOException, ApkFormatException, NoSuchAlgorithmException {
         return verify(apkFilenameInResources, null, null);
@@ -817,7 +868,8 @@ public class ApkVerifierTest {
                 if (msg.length() > 0) {
                     msg.append('\n');
                 }
-                msg.append("JAR signer ").append(signerName).append(": ").append(issue);
+                msg.append("JAR signer ").append(signerName).append(": ")
+                        .append(issue.getIssue()).append(" ").append(issue);
             }
         }
         for (ApkVerifier.Result.V2SchemeSignerInfo signer : result.getV2SchemeSigners()) {
