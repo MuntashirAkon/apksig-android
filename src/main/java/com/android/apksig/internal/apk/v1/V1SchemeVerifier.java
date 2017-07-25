@@ -463,12 +463,39 @@ public abstract class V1SchemeVerifier {
                     List<InclusiveIntRange> apiLevelsWhereDigestAlgorithmNotSupported =
                             desiredApiLevels.getValuesNotIn(apiLevelsWhereDigestAndSigAlgorithmSupported);
                     if (!apiLevelsWhereDigestAlgorithmNotSupported.isEmpty()) {
+                        String digestAlgorithmUserFriendly =
+                                OidToUserFriendlyNameMapper.getUserFriendlyNameForOid(
+                                        digestAlgorithmOid);
+                        if (digestAlgorithmUserFriendly == null) {
+                            digestAlgorithmUserFriendly = digestAlgorithmOid;
+                        }
+                        String signatureAlgorithmUserFriendly =
+                                OidToUserFriendlyNameMapper.getUserFriendlyNameForOid(
+                                        signatureAlgorithmOid);
+                        if (signatureAlgorithmUserFriendly == null) {
+                            signatureAlgorithmUserFriendly = signatureAlgorithmOid;
+                        }
+                        StringBuilder apiLevelsUserFriendly = new StringBuilder();
+                        for (InclusiveIntRange range : apiLevelsWhereDigestAlgorithmNotSupported) {
+                            if (apiLevelsUserFriendly.length() > 0) {
+                                apiLevelsUserFriendly.append(", ");
+                            }
+                            if (range.getMin() == range.getMax()) {
+                                apiLevelsUserFriendly.append(String.valueOf(range.getMin()));
+                            } else if (range.getMax() == Integer.MAX_VALUE) {
+                                apiLevelsUserFriendly.append(range.getMin() + "+");
+                            } else {
+                                apiLevelsUserFriendly.append(range.getMin() + "-" + range.getMax());
+                            }
+                        }
                         mResult.addError(
                                 Issue.JAR_SIG_UNSUPPORTED_SIG_ALG,
                                 mSignatureBlockEntry.getName(),
                                 digestAlgorithmOid,
                                 signatureAlgorithmOid,
-                                String.valueOf(apiLevelsWhereDigestAlgorithmNotSupported));
+                                apiLevelsUserFriendly.toString(),
+                                digestAlgorithmUserFriendly,
+                                signatureAlgorithmUserFriendly);
                         return;
                     }
                     try {
@@ -878,6 +905,45 @@ public abstract class V1SchemeVerifier {
             List<InclusiveIntRange> result =
                     SUPPORTED_SIG_ALG_OIDS.get(digestAlgorithmOid + "with" + signatureAlgorithmOid);
             return (result != null) ? result : Collections.emptyList();
+        }
+
+        private static class OidToUserFriendlyNameMapper {
+            private OidToUserFriendlyNameMapper() {}
+
+            private static final Map<String, String> OID_TO_USER_FRIENDLY_NAME = new HashMap<>();
+            static {
+                OID_TO_USER_FRIENDLY_NAME.put(OID_DIGEST_MD5, "MD5");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_DIGEST_SHA1, "SHA-1");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_DIGEST_SHA224, "SHA-224");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_DIGEST_SHA256, "SHA-256");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_DIGEST_SHA384, "SHA-384");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_DIGEST_SHA512, "SHA-512");
+
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_RSA, "RSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_MD5_WITH_RSA, "MD5 with RSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA1_WITH_RSA, "SHA-1 with RSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA224_WITH_RSA, "SHA-224 with RSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA256_WITH_RSA, "SHA-256 with RSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA384_WITH_RSA, "SHA-384 with RSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA512_WITH_RSA, "SHA-512 with RSA");
+
+
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_DSA, "DSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA1_WITH_DSA, "SHA-1 with DSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA224_WITH_DSA, "SHA-224 with DSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA256_WITH_DSA, "SHA-256 with DSA");
+
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_EC_PUBLIC_KEY, "ECDSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA1_WITH_ECDSA, "SHA-1 with ECDSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA224_WITH_ECDSA, "SHA-224 with ECDSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA256_WITH_ECDSA, "SHA-256 with ECDSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA384_WITH_ECDSA, "SHA-384 with ECDSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA512_WITH_ECDSA, "SHA-512 with ECDSA");
+            }
+
+            public static String getUserFriendlyNameForOid(String oid) {
+                return OID_TO_USER_FRIENDLY_NAME.get(oid);
+            }
         }
 
         public void verifySigFileAgainstManifest(
