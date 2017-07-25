@@ -136,7 +136,7 @@ file in X.509 format (see --key and --cert).
 
         JCA PROVIDER INSTALLATION OPTIONS
 These options enable you to install additional Java Crypto Architecture (JCA)
-Providers, such PKCS #11 providers. Use --next-provider to delimit options of
+Providers, such as PKCS #11 providers. Use --next-provider to delimit options of
 different providers. Providers are installed in the order in which they appear
 on the command-line.
 
