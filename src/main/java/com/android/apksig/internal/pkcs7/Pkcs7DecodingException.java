@@ -17,13 +17,16 @@
 package com.android.apksig.internal.pkcs7;
 
 /**
- * Assorted PKCS #7 constants from RFC 5652.
+ * Indicates that an error was encountered while decoding a PKCS #7 structure.
  */
-public abstract class Pkcs7Constants {
-    private Pkcs7Constants() {}
+public class Pkcs7DecodingException extends Exception {
+    private static final long serialVersionUID = 1L;
 
-    public static final String OID_DATA = "1.2.840.113549.1.7.1";
-    public static final String OID_SIGNED_DATA = "1.2.840.113549.1.7.2";
-    public static final String OID_CONTENT_TYPE = "1.2.840.113549.1.9.3";
-    public static final String OID_MESSAGE_DIGEST = "1.2.840.113549.1.9.4";
+    public Pkcs7DecodingException(String message) {
+        super(message);
+    }
+
+    public Pkcs7DecodingException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }
