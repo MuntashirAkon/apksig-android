@@ -877,14 +877,17 @@ public class ApkVerifier {
          * <ul>
          * <li>Parameter 1: name of the signature block file ({@code String})</li>
          * <li>Parameter 2: digest algorithm OID ({@code String})</li>
-         * <li>Parameter 2: signature algorithm OID ({@code String})</li>
-         * <li>Parameter 3: API Levels on which this combination of algorithms is not supported
+         * <li>Parameter 3: signature algorithm OID ({@code String})</li>
+         * <li>Parameter 4: API Levels on which this combination of algorithms is not supported
          *     ({@code String})</li>
+         * <li>Parameter 5: user-friendly variant of digest algorithm ({@code String})</li>
+         * <li>Parameter 6: user-friendly variant of signature algorithm ({@code String})</li>
          * </ul>
          */
         JAR_SIG_UNSUPPORTED_SIG_ALG(
-                "JAR signature %1$s uses digest algorithm %2$s and signature algorithm %3$s which"
-                        + " is not supported on API Levels %4$s"),
+                "JAR signature %1$s uses digest algorithm %5$s and signature algorithm %6$s which"
+                        + " is not supported on API Level(s) %4$s for which this APK is being"
+                        + " verified"),
 
         /**
          * An exception was encountered while parsing JAR signature contained in a signature block.
