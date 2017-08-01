@@ -18,6 +18,7 @@ package com.android.apksig.internal.pkcs7;
 
 import com.android.apksig.internal.asn1.Asn1Class;
 import com.android.apksig.internal.asn1.Asn1Field;
+import com.android.apksig.internal.asn1.Asn1OpaqueObject;
 import com.android.apksig.internal.asn1.Asn1Type;
 import com.android.apksig.internal.asn1.Asn1Tagging;
 import java.nio.ByteBuffer;
@@ -43,7 +44,7 @@ public class SignerInfo {
             type = Asn1Type.SET_OF,
             tagging = Asn1Tagging.IMPLICIT, tagNumber = 0,
             optional = true)
-    public List<Attribute> signedAttrs;
+    public Asn1OpaqueObject signedAttrs;
 
     @Asn1Field(index = 4, type = Asn1Type.SEQUENCE)
     public AlgorithmIdentifier signatureAlgorithm;
