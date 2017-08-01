@@ -66,8 +66,6 @@ public class ApkVerifierTest {
 
     @Test
     public void testV1OneSignerMD5withRSAAccepted() throws Exception {
-        assumeThatMd5AcceptedInPkcs7Signature();
-
         // APK signed with v1 scheme only, one signer
         assertVerifiedForEach(
                 "v1-only-with-rsa-pkcs1-md5-1.2.840.113549.1.1.1-%s.apk", RSA_KEY_NAMES);
@@ -801,6 +799,10 @@ public class ApkVerifierTest {
     }
 
     static void assertVerified(ApkVerifier.Result result) {
+        assertVerified(result, "APK");
+    }
+
+    static void assertVerified(ApkVerifier.Result result, String apkId) {
         if (result.isVerified()) {
             return;
         }
@@ -832,7 +834,7 @@ public class ApkVerifierTest {
             }
         }
 
-        fail("APK did not verify: " + msg);
+        fail(apkId + " did not verify: " + msg);
     }
 
     private void assertVerified(
@@ -840,7 +842,8 @@ public class ApkVerifierTest {
             Integer minSdkVersionOverride,
             Integer maxSdkVersionOverride) throws Exception {
         assertVerified(
-                verify(apkFilenameInResources, minSdkVersionOverride, maxSdkVersionOverride));
+                verify(apkFilenameInResources, minSdkVersionOverride, maxSdkVersionOverride),
+                apkFilenameInResources);
     }
 
     static void assertVerificationFailure(ApkVerifier.Result result, Issue expectedIssue) {
@@ -887,7 +890,7 @@ public class ApkVerifierTest {
         }
 
         fail("APK failed verification for the wrong reason"
-                + " . Expected: " + expectedIssue + ", actual: " + msg);
+                + ". Expected: " + expectedIssue + ", actual: " + msg);
     }
 
     private void assertVerificationFailure(
@@ -929,14 +932,5 @@ public class ApkVerifierTest {
 
     private static void assumeThatRsaPssAvailable() throws Exception {
         Assume.assumeTrue(Security.getProviders("Signature.SHA256withRSA/PSS") != null);
-    }
-
-    private static void assumeThatMd5AcceptedInPkcs7Signature() throws Exception {
-        String algs = Security.getProperty("jdk.jar.disabledAlgorithms");
-        if ((algs != null) && (algs.toLowerCase(Locale.US).contains("md5"))) {
-            Assume.assumeNoException(
-                    new RuntimeException("MD5 not accepted in PKCS #7 signatures"
-                            + " . jdk.jar.disabledAlgorithms: \"" + algs + "\""));
-        }
     }
 }

@@ -71,6 +71,42 @@ public final class Asn1BerParser {
         return parse(containerDataValue, containerClass);
     }
 
+    /**
+     * Returns the implicit {@code SET OF} contained in the provided ASN.1 BER input. Implicit means
+     * that this method does not care whether the tag number of this data structure is
+     * {@code SET OF} and whether the tag class is {@code UNIVERSAL}.
+     *
+     * <p>Note: The returned type is {@link List} rather than {@link Set} because ASN.1 SET may
+     * contain duplicate elements.
+     *
+     * @param encoded encoded input. If the decoding operation succeeds, the position of this buffer
+     *        is advanced to the first position following the end of the consumed structure.
+     * @param elementClass class describing the structure of the values/elements contained in this
+     *        container. The class must meet the following requirements:
+     *        <ul>
+     *        <li>The class must be annotated with {@link Asn1Class}.</li>
+     *        <li>The class must expose a public no-arg constructor.</li>
+     *        <li>Member fields of the class which are populated with parsed input must be
+     *            annotated with {@link Asn1Field} and be public and non-final.</li>
+     *        </ul>
+     *
+     * @throws Asn1DecodingException if the input could not be decoded into the specified Java
+     *         object
+     */
+    public static <T> List<T> parseImplicitSetOf(ByteBuffer encoded, Class<T> elementClass)
+            throws Asn1DecodingException {
+        BerDataValue containerDataValue;
+        try {
+            containerDataValue = new ByteBufferBerDataValueReader(encoded).readDataValue();
+        } catch (BerDataValueFormatException e) {
+            throw new Asn1DecodingException("Failed to decode top-level data value", e);
+        }
+        if (containerDataValue == null) {
+            throw new Asn1DecodingException("Empty input");
+        }
+        return parseSetOf(containerDataValue, elementClass);
+    }
+
     private static <T> T parse(BerDataValue container, Class<T> containerClass)
             throws Asn1DecodingException {
         if (container == null) {
@@ -517,8 +553,12 @@ public final class Asn1BerParser {
                 switch (type) {
                     case SET_OF:
                     case SEQUENCE_OF:
-                        field.set(obj, parseSetOf(dataValue, getElementType(field)));
-                        break;
+                        if (Asn1OpaqueObject.class.equals(field.getType())) {
+                            field.set(obj, convert(type, dataValue, field.getType()));
+                        } else {
+                            field.set(obj, parseSetOf(dataValue, getElementType(field)));
+                        }
+                        return;
                     default:
                         field.set(obj, convert(type, dataValue, field.getType()));
                         break;
