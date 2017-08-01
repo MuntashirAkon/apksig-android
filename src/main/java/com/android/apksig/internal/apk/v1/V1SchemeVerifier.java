@@ -20,21 +20,43 @@ import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.ApkVerifier.IssueWithParams;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
+import com.android.apksig.internal.asn1.Asn1BerParser;
+import com.android.apksig.internal.asn1.Asn1Class;
+import com.android.apksig.internal.asn1.Asn1DecodingException;
+import com.android.apksig.internal.asn1.Asn1Field;
+import com.android.apksig.internal.asn1.Asn1OpaqueObject;
+import com.android.apksig.internal.asn1.Asn1Type;
 import com.android.apksig.internal.jar.ManifestParser;
+import com.android.apksig.internal.pkcs7.Attribute;
+import com.android.apksig.internal.pkcs7.ContentInfo;
+import com.android.apksig.internal.pkcs7.IssuerAndSerialNumber;
+import com.android.apksig.internal.pkcs7.Pkcs7Constants;
+import com.android.apksig.internal.pkcs7.Pkcs7DecodingException;
+import com.android.apksig.internal.pkcs7.SignedData;
+import com.android.apksig.internal.pkcs7.SignerIdentifier;
+import com.android.apksig.internal.pkcs7.SignerInfo;
 import com.android.apksig.internal.util.AndroidSdkVersion;
+import com.android.apksig.internal.util.ByteBufferUtils;
+import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.util.InclusiveIntRange;
 import com.android.apksig.internal.util.MessageDigestSink;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.internal.zip.LocalFileRecord;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.zip.ZipFormatException;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.Principal;
+import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,8 +72,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.jar.Attributes;
-import sun.security.pkcs.PKCS7;
-import sun.security.pkcs.SignerInfo;
+import javax.security.auth.x500.X500Principal;
 
 /**
  * APK verifier which uses JAR signing (aka v1 signing scheme).
@@ -407,10 +428,10 @@ public abstract class V1SchemeVerifier {
             return mResult;
         }
 
-        @SuppressWarnings("restriction")
         public void verifySigBlockAgainstSigFile(
                 DataSource apk, long cdStartOffset, int minSdkVersion, int maxSdkVersion)
                         throws IOException, ApkFormatException, NoSuchAlgorithmException {
+            // Obtain the signature block from the APK
             byte[] sigBlockBytes;
             try {
                 sigBlockBytes =
@@ -420,6 +441,7 @@ public abstract class V1SchemeVerifier {
                 throw new ApkFormatException(
                         "Malformed ZIP entry: " + mSignatureBlockEntry.getName(), e);
             }
+            // Obtain the signature file from the APK
             try {
                 mSigFileBytes =
                         LocalFileRecord.getUncompressedData(
@@ -428,122 +450,351 @@ public abstract class V1SchemeVerifier {
                 throw new ApkFormatException(
                         "Malformed ZIP entry: " + mSignatureFileEntry.getName(), e);
             }
-            PKCS7 sigBlock;
+
+            // Extract PKCS #7 SignedData from the signature block
+            SignedData signedData;
             try {
-                sigBlock = new PKCS7(sigBlockBytes);
-            } catch (IOException e) {
-                if (e.getCause() instanceof CertificateException) {
-                    mResult.addError(
-                            Issue.JAR_SIG_MALFORMED_CERTIFICATE, mSignatureBlockEntry.getName(), e);
-                } else {
+                ContentInfo contentInfo =
+                        Asn1BerParser.parse(ByteBuffer.wrap(sigBlockBytes), ContentInfo.class);
+                if (!Pkcs7Constants.OID_SIGNED_DATA.equals(contentInfo.contentType)) {
+                    throw new Asn1DecodingException(
+                          "Unsupported ContentInfo.contentType: " + contentInfo.contentType);
+                }
+                signedData =
+                        Asn1BerParser.parse(contentInfo.content.getEncoded(), SignedData.class);
+            } catch (Asn1DecodingException e) {
+                e.printStackTrace();
+                mResult.addError(
+                        Issue.JAR_SIG_PARSE_EXCEPTION, mSignatureBlockEntry.getName(), e);
+                return;
+            }
+
+            if (signedData.signerInfos.isEmpty()) {
+                mResult.addError(Issue.JAR_SIG_NO_SIGNERS, mSignatureBlockEntry.getName());
+                return;
+            }
+
+            // Find the first SignedData.SignerInfos element which verifies against the signature
+            // file
+            SignerInfo firstVerifiedSignerInfo = null;
+            X509Certificate firstVerifiedSignerInfoSigningCertificate = null;
+            // Prior to Android N, Android attempts to verify only the first SignerInfo. From N
+            // onwards, Android attempts to verify all SignerInfos and then picks the first verified
+            // SignerInfo.
+            List<SignerInfo> unverifiedSignerInfosToTry;
+            if (minSdkVersion < AndroidSdkVersion.N) {
+                unverifiedSignerInfosToTry =
+                        Collections.singletonList(signedData.signerInfos.get(0));
+            } else {
+                unverifiedSignerInfosToTry = signedData.signerInfos;
+            }
+            List<X509Certificate> signedDataCertificates = null;
+            for (SignerInfo unverifiedSignerInfo : unverifiedSignerInfosToTry) {
+                // Parse SignedData.certificates -- they are needed to verify SignerInfo
+                if (signedDataCertificates == null) {
+                    try {
+                        signedDataCertificates = parseCertificates(signedData.certificates);
+                    } catch (CertificateException e) {
+                        mResult.addError(
+                                Issue.JAR_SIG_PARSE_EXCEPTION, mSignatureBlockEntry.getName(), e);
+                        return;
+                    }
+                }
+
+                // Verify SignerInfo
+                X509Certificate signingCertificate;
+                try {
+                    signingCertificate =
+                            verifySignerInfoAgainstSigFile(
+                                    signedData,
+                                    signedDataCertificates,
+                                    unverifiedSignerInfo,
+                                    mSigFileBytes,
+                                    minSdkVersion,
+                                    maxSdkVersion);
+                    if (mResult.containsErrors()) {
+                        return;
+                    }
+                    if (signingCertificate != null) {
+                        // SignerInfo verified
+                        if (firstVerifiedSignerInfo == null) {
+                            firstVerifiedSignerInfo = unverifiedSignerInfo;
+                            firstVerifiedSignerInfoSigningCertificate = signingCertificate;
+                        }
+                    }
+                } catch (Pkcs7DecodingException e) {
                     mResult.addError(
                             Issue.JAR_SIG_PARSE_EXCEPTION, mSignatureBlockEntry.getName(), e);
+                    return;
+                } catch (InvalidKeyException | SignatureException e) {
+                    mResult.addError(
+                            Issue.JAR_SIG_VERIFY_EXCEPTION,
+                            mSignatureBlockEntry.getName(),
+                            mSignatureFileEntry.getName(),
+                            e);
+                    return;
                 }
+            }
+            if (firstVerifiedSignerInfo == null) {
+                // No SignerInfo verified
+                mResult.addError(
+                        Issue.JAR_SIG_DID_NOT_VERIFY,
+                        mSignatureBlockEntry.getName(),
+                        mSignatureFileEntry.getName());
                 return;
             }
-            SignerInfo[] unverifiedSignerInfos = sigBlock.getSignerInfos();
-            if ((unverifiedSignerInfos == null) || (unverifiedSignerInfos.length == 0)) {
-                mResult.addError(Issue.JAR_SIG_NO_SIGNERS, mSignatureBlockEntry.getName());
-                return;
+            // Verified
+            List<X509Certificate> signingCertChain =
+                    getCertificateChain(
+                            signedDataCertificates, firstVerifiedSignerInfoSigningCertificate);
+            mResult.certChain.clear();
+            mResult.certChain.addAll(signingCertChain);
+        }
+
+        /**
+         * Returns the signing certificate if the provided {@link SignerInfo} verifies against the
+         * contents of the provided signature file, or {@code null} if it does not verify.
+         */
+        private X509Certificate verifySignerInfoAgainstSigFile(
+                SignedData signedData,
+                Collection<X509Certificate> signedDataCertificates,
+                SignerInfo signerInfo,
+                byte[] signatureFile,
+                int minSdkVersion,
+                int maxSdkVersion)
+                        throws Pkcs7DecodingException, NoSuchAlgorithmException,
+                                InvalidKeyException, SignatureException {
+            String digestAlgorithmOid = signerInfo.digestAlgorithm.algorithm;
+            String signatureAlgorithmOid = signerInfo.signatureAlgorithm.algorithm;
+            InclusiveIntRange desiredApiLevels =
+                    InclusiveIntRange.fromTo(minSdkVersion, maxSdkVersion);
+            List<InclusiveIntRange> apiLevelsWhereDigestAndSigAlgorithmSupported =
+                    getSigAlgSupportedApiLevels(digestAlgorithmOid, signatureAlgorithmOid);
+            List<InclusiveIntRange> apiLevelsWhereDigestAlgorithmNotSupported =
+                    desiredApiLevels.getValuesNotIn(apiLevelsWhereDigestAndSigAlgorithmSupported);
+            if (!apiLevelsWhereDigestAlgorithmNotSupported.isEmpty()) {
+                String digestAlgorithmUserFriendly =
+                        OidToUserFriendlyNameMapper.getUserFriendlyNameForOid(
+                                digestAlgorithmOid);
+                if (digestAlgorithmUserFriendly == null) {
+                    digestAlgorithmUserFriendly = digestAlgorithmOid;
+                }
+                String signatureAlgorithmUserFriendly =
+                        OidToUserFriendlyNameMapper.getUserFriendlyNameForOid(
+                                signatureAlgorithmOid);
+                if (signatureAlgorithmUserFriendly == null) {
+                    signatureAlgorithmUserFriendly = signatureAlgorithmOid;
+                }
+                StringBuilder apiLevelsUserFriendly = new StringBuilder();
+                for (InclusiveIntRange range : apiLevelsWhereDigestAlgorithmNotSupported) {
+                    if (apiLevelsUserFriendly.length() > 0) {
+                        apiLevelsUserFriendly.append(", ");
+                    }
+                    if (range.getMin() == range.getMax()) {
+                        apiLevelsUserFriendly.append(String.valueOf(range.getMin()));
+                    } else if (range.getMax() == Integer.MAX_VALUE) {
+                        apiLevelsUserFriendly.append(range.getMin() + "+");
+                    } else {
+                        apiLevelsUserFriendly.append(range.getMin() + "-" + range.getMax());
+                    }
+                }
+                mResult.addError(
+                        Issue.JAR_SIG_UNSUPPORTED_SIG_ALG,
+                        mSignatureBlockEntry.getName(),
+                        digestAlgorithmOid,
+                        signatureAlgorithmOid,
+                        apiLevelsUserFriendly.toString(),
+                        digestAlgorithmUserFriendly,
+                        signatureAlgorithmUserFriendly);
+                return null;
             }
 
-            SignerInfo verifiedSignerInfo = null;
-            if ((unverifiedSignerInfos != null) && (unverifiedSignerInfos.length > 0)) {
-                for (int i = 0; i < unverifiedSignerInfos.length; i++) {
-                    SignerInfo unverifiedSignerInfo = unverifiedSignerInfos[i];
-                    String digestAlgorithmOid =
-                            unverifiedSignerInfo.getDigestAlgorithmId().getOID().toString();
-                    String signatureAlgorithmOid =
-                            unverifiedSignerInfo
-                                    .getDigestEncryptionAlgorithmId().getOID().toString();
-                    InclusiveIntRange desiredApiLevels =
-                            InclusiveIntRange.fromTo(minSdkVersion, maxSdkVersion);
-                    List<InclusiveIntRange> apiLevelsWhereDigestAndSigAlgorithmSupported =
-                            getSigAlgSupportedApiLevels(digestAlgorithmOid, signatureAlgorithmOid);
-                    List<InclusiveIntRange> apiLevelsWhereDigestAlgorithmNotSupported =
-                            desiredApiLevels.getValuesNotIn(apiLevelsWhereDigestAndSigAlgorithmSupported);
-                    if (!apiLevelsWhereDigestAlgorithmNotSupported.isEmpty()) {
-                        String digestAlgorithmUserFriendly =
-                                OidToUserFriendlyNameMapper.getUserFriendlyNameForOid(
-                                        digestAlgorithmOid);
-                        if (digestAlgorithmUserFriendly == null) {
-                            digestAlgorithmUserFriendly = digestAlgorithmOid;
-                        }
-                        String signatureAlgorithmUserFriendly =
-                                OidToUserFriendlyNameMapper.getUserFriendlyNameForOid(
-                                        signatureAlgorithmOid);
-                        if (signatureAlgorithmUserFriendly == null) {
-                            signatureAlgorithmUserFriendly = signatureAlgorithmOid;
-                        }
-                        StringBuilder apiLevelsUserFriendly = new StringBuilder();
-                        for (InclusiveIntRange range : apiLevelsWhereDigestAlgorithmNotSupported) {
-                            if (apiLevelsUserFriendly.length() > 0) {
-                                apiLevelsUserFriendly.append(", ");
-                            }
-                            if (range.getMin() == range.getMax()) {
-                                apiLevelsUserFriendly.append(String.valueOf(range.getMin()));
-                            } else if (range.getMax() == Integer.MAX_VALUE) {
-                                apiLevelsUserFriendly.append(range.getMin() + "+");
-                            } else {
-                                apiLevelsUserFriendly.append(range.getMin() + "-" + range.getMax());
-                            }
-                        }
-                        mResult.addError(
-                                Issue.JAR_SIG_UNSUPPORTED_SIG_ALG,
-                                mSignatureBlockEntry.getName(),
-                                digestAlgorithmOid,
-                                signatureAlgorithmOid,
-                                apiLevelsUserFriendly.toString(),
-                                digestAlgorithmUserFriendly,
-                                signatureAlgorithmUserFriendly);
-                        return;
+            // From the bag of certs, obtain the certificate referenced by the SignerInfo,
+            // and verify the cryptographic signature in the SignerInfo against the certificate.
+
+            // Locate the signing certificate referenced by the SignerInfo
+            X509Certificate signingCertificate =
+                    findCertificate(signedDataCertificates, signerInfo.sid);
+            if (signingCertificate == null) {
+                throw new SignatureException(
+                        "Signing certificate referenced in SignerInfo not found in"
+                                + " SignedData");
+            }
+
+            // Check whether the signing certificate is acceptable. Android performs these
+            // checks explicitly, instead of delegating this to
+            // Signature.initVerify(Certificate).
+            if (signingCertificate.hasUnsupportedCriticalExtension()) {
+                throw new SignatureException(
+                        "Signing certificate has unsupported critical extensions");
+            }
+            boolean[] keyUsageExtension = signingCertificate.getKeyUsage();
+            if (keyUsageExtension != null) {
+                boolean digitalSignature =
+                        (keyUsageExtension.length >= 1) && (keyUsageExtension[0]);
+                boolean nonRepudiation =
+                        (keyUsageExtension.length >= 2) && (keyUsageExtension[1]);
+                if ((!digitalSignature) && (!nonRepudiation)) {
+                    throw new SignatureException(
+                            "Signing certificate not authorized for use in digital signatures"
+                                    + ": keyUsage extension missing digitalSignature and"
+                                    + " nonRepudiation");
+                }
+            }
+
+            // Verify the cryptographic signature in SignerInfo against the certificate's
+            // public key
+            String jcaSignatureAlgorithm =
+                    getJcaSignatureAlgorithm(digestAlgorithmOid, signatureAlgorithmOid);
+            Signature s = Signature.getInstance(jcaSignatureAlgorithm);
+            s.initVerify(signingCertificate.getPublicKey());
+            if (signerInfo.signedAttrs != null) {
+                // Signed attributes present -- verify signature against the ASN.1 DER encoded form
+                // of signed attributes. This verifies integrity of the signature file because
+                // signed attributes must contain the digest of the signature file.
+                try {
+                    List<Attribute> signedAttributes =
+                            Asn1BerParser.parseImplicitSetOf(
+                                    signerInfo.signedAttrs.getEncoded(), Attribute.class);
+                    SignedAttributes signedAttrs = new SignedAttributes(signedAttributes);
+                    String contentType =
+                            signedAttrs.getSingleObjectIdentifierValue(
+                                    Pkcs7Constants.OID_CONTENT_TYPE);
+                    if (contentType == null) {
+                        throw new SignatureException("No Content Type in signed attributes");
                     }
-                    try {
-                        verifiedSignerInfo = sigBlock.verify(unverifiedSignerInfo, mSigFileBytes);
-                    } catch (SignatureException e) {
-                        mResult.addError(
-                                Issue.JAR_SIG_VERIFY_EXCEPTION,
-                                mSignatureBlockEntry.getName(),
-                                mSignatureFileEntry.getName(),
-                                e);
-                        return;
+                    if (!contentType.equals(signedData.encapContentInfo.contentType)) {
+                        // Did not verify: Content type signed attribute does not match
+                        // SignedData.encapContentInfo.eContentType
+                        return null;
                     }
-                    if (verifiedSignerInfo != null) {
-                        // Verified
+                    byte[] expectedSignatureFileDigest =
+                            signedAttrs.getSingleOctetStringValue(
+                                    Pkcs7Constants.OID_MESSAGE_DIGEST);
+                    if (expectedSignatureFileDigest == null) {
+                        // Skip verification: no signature file digest in signed attributes
+                        return null;
+                    }
+                    byte[] actualSignatureFileDigest =
+                            MessageDigest.getInstance(
+                                    getJcaDigestAlgorithm(digestAlgorithmOid))
+                                    .digest(mSigFileBytes);
+                    if (!Arrays.equals(
+                            expectedSignatureFileDigest, actualSignatureFileDigest)) {
+                        // Skip verification: signature file digest in signed attributes does not
+                        // match the signature file
+                        return null;
+                    }
+                } catch (Asn1DecodingException e) {
+                    throw new SignatureException("Failed to parse signed attributes", e);
+                }
+                // PKCS #7 requires that signature is over signed attributes re-encoded as
+                // ASN.1 DER. However, Android does not re-encode except for changing the
+                // first byte of encoded form from IMPLICIT [0] to UNIVERSAL SET. We do the
+                // same for maximum compatibility.
+                ByteBuffer signedAttrsOriginalEncoding = signerInfo.signedAttrs.getEncoded();
+                s.update((byte) 0x31); // UNIVERSAL SET
+                signedAttrsOriginalEncoding.position(1);
+                s.update(signedAttrsOriginalEncoding);
+            } else {
+                // No signed attributes present -- verify signature against the contents of the
+                // signature file
+                s.update(mSigFileBytes);
+            }
+            byte[] sigBytes = ByteBufferUtils.toByteArray(signerInfo.signature.slice());
+            if (!s.verify(sigBytes)) {
+                // Cryptographic signature did not verify
+                return null;
+            }
+            // Cryptographic signature verified
+            return signingCertificate;
+        }
+
+        private static List<X509Certificate> parseCertificates(
+                List<Asn1OpaqueObject> encodedCertificates) throws CertificateException {
+            if (encodedCertificates.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            CertificateFactory certFactory;
+            try {
+                certFactory = CertificateFactory.getInstance("X.509");
+            } catch (CertificateException e) {
+                throw new RuntimeException("Failed to create X.509 CertificateFactory", e);
+            }
+
+            List<X509Certificate> result = new ArrayList<>(encodedCertificates.size());
+            for (int i = 0; i < encodedCertificates.size(); i++) {
+                Asn1OpaqueObject encodedCertificate = encodedCertificates.get(i);
+                X509Certificate certificate;
+                byte[] encodedForm = ByteBufferUtils.toByteArray(encodedCertificate.getEncoded());
+                try {
+                    certificate =
+                            (X509Certificate) certFactory.generateCertificate(
+                                    new ByteArrayInputStream(encodedForm));
+                } catch (CertificateException e) {
+                    throw new CertificateException("Failed to parse certificate #" + (i + 1), e);
+                }
+                // Wrap the cert so that the result's getEncoded returns exactly the original
+                // encoded form. Without this, getEncoded may return a different form from what was
+                // stored in the signature. This is because some X509Certificate(Factory)
+                // implementations re-encode certificates and/or some implementations of
+                // X509Certificate.getEncoded() re-encode certificates.
+                certificate = new GuaranteedEncodedFormX509Certificate(certificate, encodedForm);
+                result.add(certificate);
+            }
+            return result;
+        }
+
+        public static X509Certificate findCertificate(
+                Collection<X509Certificate> certs, SignerIdentifier id) {
+            for (X509Certificate cert : certs) {
+                if (isMatchingCerticicate(cert, id)) {
+                    return cert;
+                }
+            }
+            return null;
+        }
+
+        public static List<X509Certificate> getCertificateChain(
+                List<X509Certificate> certs, X509Certificate leaf) {
+            List<X509Certificate> unusedCerts = new ArrayList<>(certs);
+            List<X509Certificate> result = new ArrayList<>(1);
+            result.add(leaf);
+            unusedCerts.remove(leaf);
+            X509Certificate root = leaf;
+            while (!root.getSubjectDN().equals(root.getIssuerDN())) {
+                Principal targetDn = root.getIssuerDN();
+                boolean issuerFound = false;
+                for (int i = 0; i < unusedCerts.size(); i++) {
+                    X509Certificate unusedCert = unusedCerts.get(i);
+                    if (targetDn.equals(unusedCert.getSubjectDN())) {
+                        issuerFound = true;
+                        unusedCerts.remove(i);
+                        result.add(unusedCert);
+                        root = unusedCert;
                         break;
                     }
-
-                    // Did not verify
-                    if (minSdkVersion < AndroidSdkVersion.N) {
-                        // Prior to N, Android attempted to verify only the first SignerInfo.
-                        mResult.addError(
-                                Issue.JAR_SIG_DID_NOT_VERIFY,
-                                mSignatureBlockEntry.getName(),
-                                mSignatureFileEntry.getName());
-                        return;
-                    }
+                }
+                if (!issuerFound) {
+                    break;
                 }
             }
-            if (verifiedSignerInfo == null) {
-                mResult.addError(Issue.JAR_SIG_NO_SIGNERS, mSignatureBlockEntry.getName());
-                return;
-            }
+            return result;
+        }
 
-            // TODO: PKCS7 class doesn't guarantee that returned certificates' getEncoded returns
-            // the original encoded form of certificates rather than the DER re-encoded form. We
-            // need to replace the PKCS7 parser/verifier.
-            List<X509Certificate> certChain;
-            try {
-                certChain = verifiedSignerInfo.getCertificateChain(sigBlock);
-            } catch (IOException e) {
-                throw new RuntimeException(
-                        "Failed to obtain cert chain from " + mSignatureBlockEntry.getName(), e);
+        private static boolean isMatchingCerticicate(X509Certificate cert, SignerIdentifier id) {
+            if (id.issuerAndSerialNumber == null) {
+                // Android doesn't support any other means of identifying the signing certificate
+                return false;
             }
-            if ((certChain == null) || (certChain.isEmpty())) {
-                throw new RuntimeException("Verified SignerInfo does not have a certificate chain");
-            }
-            mResult.certChain.clear();
-            mResult.certChain.addAll(certChain);
+            IssuerAndSerialNumber issuerAndSerialNumber = id.issuerAndSerialNumber;
+            byte[] encodedIssuer =
+                    ByteBufferUtils.toByteArray(issuerAndSerialNumber.issuer.getEncoded());
+            X500Principal idIssuer = new X500Principal(encodedIssuer);
+            BigInteger idSerialNumber = issuerAndSerialNumber.certificateSerialNumber;
+            return idSerialNumber.equals(cert.getSerialNumber())
+                    && idIssuer.equals(cert.getIssuerX500Principal());
         }
 
         private static final String OID_DIGEST_MD5 = "1.2.840.113549.2.5";
@@ -944,6 +1195,78 @@ public abstract class V1SchemeVerifier {
             public static String getUserFriendlyNameForOid(String oid) {
                 return OID_TO_USER_FRIENDLY_NAME.get(oid);
             }
+        }
+
+        private static Map<String, String> OID_TO_JCA_DIGEST_ALG = new HashMap<>();
+        static {
+            OID_TO_JCA_DIGEST_ALG.put(OID_DIGEST_MD5, "MD5");
+            OID_TO_JCA_DIGEST_ALG.put(OID_DIGEST_SHA1, "SHA-1");
+            OID_TO_JCA_DIGEST_ALG.put(OID_DIGEST_SHA224, "SHA-224");
+            OID_TO_JCA_DIGEST_ALG.put(OID_DIGEST_SHA256, "SHA-256");
+            OID_TO_JCA_DIGEST_ALG.put(OID_DIGEST_SHA384, "SHA-384");
+            OID_TO_JCA_DIGEST_ALG.put(OID_DIGEST_SHA512, "SHA-512");
+        }
+
+        private static String getJcaDigestAlgorithm(String oid)
+                throws SignatureException {
+            String result = OID_TO_JCA_DIGEST_ALG.get(oid);
+            if (result == null) {
+                throw new SignatureException("Unsupported digest algorithm: " + oid);
+            }
+            return result;
+        }
+
+        private static Map<String, String> OID_TO_JCA_SIGNATURE_ALG = new HashMap<>();
+        static {
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_MD5_WITH_RSA, "MD5withRSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA1_WITH_RSA, "SHA1withRSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA224_WITH_RSA, "SHA224withRSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA256_WITH_RSA, "SHA256withRSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA384_WITH_RSA, "SHA384withRSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA512_WITH_RSA, "SHA512withRSA");
+
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA1_WITH_DSA, "SHA1withDSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA224_WITH_DSA, "SHA224withDSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA256_WITH_DSA, "SHA256withDSA");
+
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA1_WITH_ECDSA, "SHA1withECDSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA224_WITH_ECDSA, "SHA224withECDSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA256_WITH_ECDSA, "SHA256withECDSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA384_WITH_ECDSA, "SHA384withECDSA");
+            OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA512_WITH_ECDSA, "SHA512withECDSA");
+        }
+
+        private static String getJcaSignatureAlgorithm(
+                String digestAlgorithmOid,
+                String signatureAlgorithmOid) throws SignatureException {
+            // First check whether the signature algorithm OID alone is sufficient
+            String result = OID_TO_JCA_SIGNATURE_ALG.get(signatureAlgorithmOid);
+            if (result != null) {
+                return result;
+            }
+
+            // Signature algorithm OID alone is insufficient. Need to combine digest algorithm OID
+            // with signature algorithm OID.
+            String suffix;
+            if (OID_SIG_RSA.equals(signatureAlgorithmOid)) {
+                suffix = "RSA";
+            } else if (OID_SIG_DSA.equals(signatureAlgorithmOid)) {
+                suffix = "DSA";
+            } else if (OID_SIG_EC_PUBLIC_KEY.equals(signatureAlgorithmOid)) {
+                suffix = "ECDSA";
+            } else {
+                throw new SignatureException(
+                        "Unsupported JCA Signature algorithm"
+                                + " . Digest algorithm: " + digestAlgorithmOid
+                                + ", signature algorithm: " + signatureAlgorithmOid);
+            }
+            String jcaDigestAlg = getJcaDigestAlgorithm(digestAlgorithmOid);
+            // Canonical name for SHA-1 with ... is SHA1with, rather than SHA1. Same for all other
+            // SHA algorithms.
+            if (jcaDigestAlg.startsWith("SHA-")) {
+                jcaDigestAlg = "SHA" + jcaDigestAlg.substring("SHA-".length());
+            }
+            return jcaDigestAlg + "with" + suffix;
         }
 
         public void verifySigFileAgainstManifest(
@@ -1658,5 +1981,66 @@ public abstract class V1SchemeVerifier {
                 return mWarnings;
             }
         }
+    }
+
+    private static class SignedAttributes {
+        private Map<String, List<Asn1OpaqueObject>> mAttrs;
+
+        public SignedAttributes(Collection<Attribute> attrs) throws Pkcs7DecodingException {
+            Map<String, List<Asn1OpaqueObject>> result = new HashMap<>(attrs.size());
+            for (Attribute attr : attrs) {
+                if (result.put(attr.attrType, attr.attrValues) != null) {
+                    throw new Pkcs7DecodingException("Duplicate signed attribute: " + attr.attrType);
+                }
+            }
+            mAttrs = result;
+        }
+
+        private Asn1OpaqueObject getSingleValue(String attrOid) throws Pkcs7DecodingException {
+            List<Asn1OpaqueObject> values = mAttrs.get(attrOid);
+            if ((values == null) || (values.isEmpty())) {
+                return null;
+            }
+            if (values.size() > 1) {
+                throw new Pkcs7DecodingException("Attribute " + attrOid + " has multiple values");
+            }
+            return values.get(0);
+        }
+
+        public String getSingleObjectIdentifierValue(String attrOid) throws Pkcs7DecodingException {
+            Asn1OpaqueObject value = getSingleValue(attrOid);
+            if (value == null) {
+                return null;
+            }
+            try {
+                return Asn1BerParser.parse(value.getEncoded(), ObjectIdentifierChoice.class).value;
+            } catch (Asn1DecodingException e) {
+                throw new Pkcs7DecodingException("Failed to decode OBJECT IDENTIFIER", e);
+            }
+        }
+
+        public byte[] getSingleOctetStringValue(String attrOid) throws Pkcs7DecodingException {
+            Asn1OpaqueObject value = getSingleValue(attrOid);
+            if (value == null) {
+                return null;
+            }
+            try {
+                return Asn1BerParser.parse(value.getEncoded(), OctetStringChoice.class).value;
+            } catch (Asn1DecodingException e) {
+                throw new Pkcs7DecodingException("Failed to decode OBJECT IDENTIFIER", e);
+            }
+        }
+    }
+
+    @Asn1Class(type = Asn1Type.CHOICE)
+    public static class OctetStringChoice {
+        @Asn1Field(type = Asn1Type.OCTET_STRING)
+        public byte[] value;
+    }
+
+    @Asn1Class(type = Asn1Type.CHOICE)
+    public static class ObjectIdentifierChoice {
+        @Asn1Field(type = Asn1Type.OBJECT_IDENTIFIER)
+        public String value;
     }
 }
