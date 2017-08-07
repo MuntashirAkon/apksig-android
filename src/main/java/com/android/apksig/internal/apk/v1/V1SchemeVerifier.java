@@ -652,37 +652,61 @@ public abstract class V1SchemeVerifier {
                 // Signed attributes present -- verify signature against the ASN.1 DER encoded form
                 // of signed attributes. This verifies integrity of the signature file because
                 // signed attributes must contain the digest of the signature file.
+                if (minSdkVersion < AndroidSdkVersion.KITKAT) {
+                    // Prior to Android KitKat, APKs with signed attributes are unsafe:
+                    // * The APK's contents are not protected by the JAR signature because the
+                    //   digest in signed attributes is not verified. This means an attacker can
+                    //   arbitrarily modify the APK without invalidating its signature.
+                    // * Luckily, the signature over signed attributes was verified incorrectly
+                    //   (over the verbatim IMPLICIT [0] form rather than over re-encoded
+                    //   UNIVERSAL SET form) which means that JAR signatures which would verify on
+                    //   pre-KitKat Android and yet do not protect the APK from modification could
+                    //   be generated only by broken tools or on purpose by the entity signing the
+                    //   APK.
+                    //
+                    // We thus reject such unsafe APKs, even if they verify on platforms before
+                    // KitKat.
+                    throw new SignatureException(
+                            "APKs with Signed Attributes broken on platforms with API Level < "
+                                    + AndroidSdkVersion.KITKAT);
+                }
                 try {
                     List<Attribute> signedAttributes =
                             Asn1BerParser.parseImplicitSetOf(
                                     signerInfo.signedAttrs.getEncoded(), Attribute.class);
                     SignedAttributes signedAttrs = new SignedAttributes(signedAttributes);
-                    String contentType =
-                            signedAttrs.getSingleObjectIdentifierValue(
-                                    Pkcs7Constants.OID_CONTENT_TYPE);
-                    if (contentType == null) {
-                        throw new SignatureException("No Content Type in signed attributes");
-                    }
-                    if (!contentType.equals(signedData.encapContentInfo.contentType)) {
-                        // Did not verify: Content type signed attribute does not match
-                        // SignedData.encapContentInfo.eContentType
-                        return null;
+                    if (maxSdkVersion >= AndroidSdkVersion.N) {
+                        // Content Type attribute is checked only on Android N and newer
+                        String contentType =
+                                signedAttrs.getSingleObjectIdentifierValue(
+                                        Pkcs7Constants.OID_CONTENT_TYPE);
+                        if (contentType == null) {
+                            throw new SignatureException("No Content Type in signed attributes");
+                        }
+                        if (!contentType.equals(signedData.encapContentInfo.contentType)) {
+                            // Did not verify: Content type signed attribute does not match
+                            // SignedData.encapContentInfo.eContentType. This fails verification of
+                            // this SignerInfo but should not prevent verification of other
+                            // SignerInfos. Hence, no exception is thrown.
+                            return null;
+                        }
                     }
                     byte[] expectedSignatureFileDigest =
                             signedAttrs.getSingleOctetStringValue(
                                     Pkcs7Constants.OID_MESSAGE_DIGEST);
                     if (expectedSignatureFileDigest == null) {
-                        // Skip verification: no signature file digest in signed attributes
-                        return null;
+                        throw new SignatureException("No content digest in signed attributes");
                     }
                     byte[] actualSignatureFileDigest =
                             MessageDigest.getInstance(
                                     getJcaDigestAlgorithm(digestAlgorithmOid))
-                                    .digest(mSigFileBytes);
+                                    .digest(signatureFile);
                     if (!Arrays.equals(
                             expectedSignatureFileDigest, actualSignatureFileDigest)) {
                         // Skip verification: signature file digest in signed attributes does not
-                        // match the signature file
+                        // match the signature file. This fails verification of
+                        // this SignerInfo but should not prevent verification of other
+                        // SignerInfos. Hence, no exception is thrown.
                         return null;
                     }
                 } catch (Asn1DecodingException e) {
@@ -699,11 +723,13 @@ public abstract class V1SchemeVerifier {
             } else {
                 // No signed attributes present -- verify signature against the contents of the
                 // signature file
-                s.update(mSigFileBytes);
+                s.update(signatureFile);
             }
             byte[] sigBytes = ByteBufferUtils.toByteArray(signerInfo.signature.slice());
             if (!s.verify(sigBytes)) {
-                // Cryptographic signature did not verify
+                // Cryptographic signature did not verify. This fails verification of this
+                // SignerInfo but should not prevent verification of other SignerInfos. Hence, no
+                // exception is thrown.
                 return null;
             }
             // Cryptographic signature verified

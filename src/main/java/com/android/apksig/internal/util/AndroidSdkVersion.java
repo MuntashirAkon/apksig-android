@@ -30,6 +30,9 @@ public abstract class AndroidSdkVersion {
     /** Android 4.3. The revenge of the beans. */
     public static final int JELLY_BEAN_MR2 = 18;
 
+    /** Android 4.4. KitKat, another tasty treat. */
+    public static final int KITKAT = 19;
+
     /** Android 5.0. A flat one with beautiful shadows. But still tasty. */
     public static final int LOLLIPOP = 21;
 

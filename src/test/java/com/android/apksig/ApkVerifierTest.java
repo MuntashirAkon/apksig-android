@@ -714,7 +714,17 @@ public class ApkVerifierTest {
 
     @Test
     public void testV1SignedAttrs() throws Exception {
-        assertVerified(verify("v1-only-with-signed-attrs.apk"));
+        String apk = "v1-only-with-signed-attrs.apk";
+        assertVerificationFailure(
+                verifyForMinSdkVersion(apk, AndroidSdkVersion.JELLY_BEAN_MR2),
+                Issue.JAR_SIG_VERIFY_EXCEPTION);
+        assertVerified(verifyForMinSdkVersion(apk, AndroidSdkVersion.KITKAT));
+
+        apk = "v1-only-with-signed-attrs-signerInfo1-good-signerInfo2-good.apk";
+        assertVerificationFailure(
+                verifyForMinSdkVersion(apk, AndroidSdkVersion.JELLY_BEAN_MR2),
+                Issue.JAR_SIG_VERIFY_EXCEPTION);
+        assertVerified(verifyForMinSdkVersion(apk, AndroidSdkVersion.KITKAT));
     }
 
     @Test
@@ -724,43 +734,116 @@ public class ApkVerifierTest {
         // treats them as SET OF, but does not re-encode into SET OF during verification if all
         // attributes parsed fine.
         assertVerified(verify("v1-only-with-signed-attrs-wrong-order.apk"));
+        assertVerified(
+                verify("v1-only-with-signed-attrs-signerInfo1-wrong-order-signerInfo2-good.apk"));
     }
 
     @Test
     public void testV1SignedAttrsMissingContentType() throws Exception {
-        // SignedAttributes must contain ContentType
-        assertVerificationFailure(
-                verify("v1-only-with-signed-attrs-missing-content-type.apk"),
-                Issue.JAR_SIG_VERIFY_EXCEPTION);
+        // SignedAttributes must contain ContentType. Pre-N, Android ignores this requirement.
+        // Android N onwards rejects such APKs.
+        String apk = "v1-only-with-signed-attrs-missing-content-type.apk";
+        assertVerified(verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1));
+        assertVerificationFailure(verify(apk), Issue.JAR_SIG_VERIFY_EXCEPTION);
+        // Assert that this issue fails verification of the entire signature block, rather than
+        // skipping the broken SignerInfo. The second signer info SignerInfo verifies fine, but
+        // verification does not get there.
+        apk = "v1-only-with-signed-attrs-signerInfo1-missing-content-type-signerInfo2-good.apk";
+        assertVerified(verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1));
+        assertVerificationFailure(verify(apk), Issue.JAR_SIG_VERIFY_EXCEPTION);
     }
 
     @Test
     public void testV1SignedAttrsWrongContentType() throws Exception {
+        // ContentType of SignedAttributes must equal SignedData.encapContentInfo.eContentType.
+        // Pre-N, Android ignores this requirement.
+        // From N onwards, Android rejects such SignerInfos.
+        String apk = "v1-only-with-signed-attrs-wrong-content-type.apk";
+        assertVerified(verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1));
+        assertVerificationFailure(verify(apk), Issue.JAR_SIG_DID_NOT_VERIFY);
+        // First SignerInfo does not verify on Android N and newer, but verification moves on to the
+        // second SignerInfo, which verifies.
+        apk = "v1-only-with-signed-attrs-signerInfo1-wrong-content-type-signerInfo2-good.apk";
+        assertVerified(verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1));
+        assertVerified(verifyForMinSdkVersion(apk, AndroidSdkVersion.N));
+        // Although the APK's signature verifies on pre-N and N+, we reject such APKs because the
+        // APK's verification results in different verified SignerInfos (and thus potentially
+        // different signing certs) between pre-N and N+.
+        assertVerificationFailure(verify(apk), Issue.JAR_SIG_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void testV1SignedAttrsMissingDigest() throws Exception {
+        // Content digest must be present in SignedAttributes
+        String apk = "v1-only-with-signed-attrs-missing-digest.apk";
         assertVerificationFailure(
-                verify("v1-only-with-signed-attrs-wrong-content-type.apk"),
-                Issue.JAR_SIG_DID_NOT_VERIFY);
+                verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1),
+                Issue.JAR_SIG_VERIFY_EXCEPTION);
+        assertVerificationFailure(
+                verifyForMinSdkVersion(apk, AndroidSdkVersion.N),
+                Issue.JAR_SIG_VERIFY_EXCEPTION);
+        // Assert that this issue fails verification of the entire signature block, rather than
+        // skipping the broken SignerInfo. The second signer info SignerInfo verifies fine, but
+        // verification does not get there.
+        apk = "v1-only-with-signed-attrs-signerInfo1-missing-digest-signerInfo2-good.apk";
+        assertVerificationFailure(
+                verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1),
+                Issue.JAR_SIG_VERIFY_EXCEPTION);
+        assertVerificationFailure(
+                verifyForMinSdkVersion(apk, AndroidSdkVersion.N),
+                Issue.JAR_SIG_VERIFY_EXCEPTION);
     }
 
     @Test
     public void testV1SignedAttrsMultipleGoodDigests() throws Exception {
-        // Only one digest must be present SignedAttributes
+        // Only one content digest must be present in SignedAttributes
+        String apk = "v1-only-with-signed-attrs-multiple-good-digests.apk";
         assertVerificationFailure(
-                verify("v1-only-with-signed-attrs-multiple-good-digests.apk"),
+                verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1),
                 Issue.JAR_SIG_PARSE_EXCEPTION);
+        assertVerificationFailure(
+                verifyForMinSdkVersion(apk, AndroidSdkVersion.N), Issue.JAR_SIG_PARSE_EXCEPTION);
+        // Assert that this issue fails verification of the entire signature block, rather than
+        // skipping the broken SignerInfo. The second signer info SignerInfo verifies fine, but
+        // verification does not get there.
+        apk = "v1-only-with-signed-attrs-signerInfo1-multiple-good-digests-signerInfo2-good.apk";
+        assertVerificationFailure(
+                verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1),
+                Issue.JAR_SIG_PARSE_EXCEPTION);
+        assertVerificationFailure(
+                verifyForMinSdkVersion(apk, AndroidSdkVersion.N), Issue.JAR_SIG_PARSE_EXCEPTION);
     }
 
     @Test
     public void testV1SignedAttrsWrongDigest() throws Exception {
+        // Content digest in SignedAttributes does not match the contents
+        String apk = "v1-only-with-signed-attrs-wrong-digest.apk";
         assertVerificationFailure(
-                verify("v1-only-with-signed-attrs-wrong-digest.apk"),
-                Issue.JAR_SIG_DID_NOT_VERIFY);
+                verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1), Issue.JAR_SIG_DID_NOT_VERIFY);
+        assertVerificationFailure(
+                verifyForMinSdkVersion(apk, AndroidSdkVersion.N), Issue.JAR_SIG_DID_NOT_VERIFY);
+        // First SignerInfo does not verify, but Android N and newer moves on to the second
+        // SignerInfo, which verifies.
+        apk = "v1-only-with-signed-attrs-signerInfo1-wrong-digest-signerInfo2-good.apk";
+        assertVerificationFailure(
+                verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1), Issue.JAR_SIG_DID_NOT_VERIFY);
+        assertVerified(verifyForMinSdkVersion(apk, AndroidSdkVersion.N));
     }
 
     @Test
     public void testV1SignedAttrsWrongSignature() throws Exception {
+        // Signature over SignedAttributes does not verify
+        String apk = "v1-only-with-signed-attrs-wrong-signature.apk";
         assertVerificationFailure(
-                verify("v1-only-with-signed-attrs-wrong-signature.apk"),
-                Issue.JAR_SIG_DID_NOT_VERIFY);
+                verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1), Issue.JAR_SIG_DID_NOT_VERIFY);
+        assertVerificationFailure(
+                verifyForMinSdkVersion(apk, AndroidSdkVersion.N), Issue.JAR_SIG_DID_NOT_VERIFY);
+        // First SignerInfo does not verify, but Android N and newer moves on to the second
+        // SignerInfo, which verifies.
+        apk = "v1-only-with-signed-attrs-signerInfo1-wrong-signature-signerInfo2-good.apk";
+        assertVerificationFailure(
+                verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1), Issue.JAR_SIG_DID_NOT_VERIFY);
+        assertVerified(verifyForMinSdkVersion(apk, AndroidSdkVersion.N));
     }
 
     private ApkVerifier.Result verify(String apkFilenameInResources)
@@ -820,7 +903,8 @@ public class ApkVerifierTest {
                 if (msg.length() > 0) {
                     msg.append('\n');
                 }
-                msg.append("JAR signer ").append(signerName).append(": ").append(issue);
+                msg.append("JAR signer ").append(signerName).append(": ")
+                        .append(issue.getIssue()).append(": ").append(issue);
             }
         }
         for (ApkVerifier.Result.V2SchemeSignerInfo signer : result.getV2SchemeSigners()) {
@@ -830,7 +914,8 @@ public class ApkVerifierTest {
                     msg.append('\n');
                 }
                 msg.append("APK Signature Scheme v2 signer ")
-                        .append(signerName).append(": ").append(issue);
+                        .append(signerName).append(": ")
+                        .append(issue.getIssue()).append(": ").append(issue);
             }
         }
 
