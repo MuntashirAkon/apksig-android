@@ -28,6 +28,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -161,6 +162,16 @@ public class ApkSignerTool {
                         optionsParser.getRequiredValue("KeyStore password");
             } else if ("key-pass".equals(optionName)) {
                 signerParams.keyPasswordSpec = optionsParser.getRequiredValue("Key password");
+            } else if ("pass-encoding".equals(optionName)) {
+                String charsetName =
+                        optionsParser.getRequiredValue("Password character encoding");
+                try {
+                    signerParams.passwordCharset = PasswordRetriever.getCharsetByName(charsetName);
+                } catch (IllegalArgumentException e) {
+                    throw new ParameterException(
+                            "Unsupported password character encoding requested using"
+                                    + " --pass-encoding: " + charsetName);
+                }
             } else if ("v1-signer-name".equals(optionName)) {
                 signerParams.v1SigFileBasename =
                         optionsParser.getRequiredValue("JAR signature file basename");
@@ -604,6 +615,7 @@ public class ApkSignerTool {
         String keystoreKeyAlias;
         String keystorePasswordSpec;
         String keyPasswordSpec;
+        Charset passwordCharset;
         String keystoreType;
         String keystoreProviderName;
         String keystoreProviderClass;
@@ -623,6 +635,7 @@ public class ApkSignerTool {
                     && (keystoreKeyAlias == null)
                     && (keystorePasswordSpec == null)
                     && (keyPasswordSpec == null)
+                    && (passwordCharset == null)
                     && (keystoreType == null)
                     && (keystoreProviderName == null)
                     && (keystoreProviderClass == null)
@@ -690,13 +703,19 @@ public class ApkSignerTool {
 
             // 2. Load the KeyStore
             List<char[]> keystorePasswords;
+            Charset[] additionalPasswordEncodings;
             {
                 String keystorePasswordSpec =
                         (this.keystorePasswordSpec != null)
                                 ?  this.keystorePasswordSpec : PasswordRetriever.SPEC_STDIN;
+                additionalPasswordEncodings =
+                        (passwordCharset != null)
+                                ? new Charset[] {passwordCharset} : new Charset[0];
                 keystorePasswords =
                         passwordRetriever.getPasswords(
-                                keystorePasswordSpec, "Keystore password for " + name);
+                                keystorePasswordSpec,
+                                "Keystore password for " + name,
+                                additionalPasswordEncodings);
                 loadKeyStoreFromFile(
                         ks,
                         "NONE".equals(keystoreFile) ? null : keystoreFile,
@@ -746,7 +765,8 @@ public class ApkSignerTool {
                     List<char[]> keyPasswords =
                             passwordRetriever.getPasswords(
                                     keyPasswordSpec,
-                                    "Key \"" + keyAlias + "\" password for " + name);
+                                    "Key \"" + keyAlias + "\" password for " + name,
+                                    additionalPasswordEncodings);
                     entryKey = getKeyStoreKey(ks, keyAlias, keyPasswords);
                 } else {
                     // Key password spec is not specified. This means we should assume that key
@@ -759,7 +779,8 @@ public class ApkSignerTool {
                         List<char[]> keyPasswords =
                                 passwordRetriever.getPasswords(
                                         PasswordRetriever.SPEC_STDIN,
-                                        "Key \"" + keyAlias + "\" password for " + name);
+                                        "Key \"" + keyAlias + "\" password for " + name,
+                                        additionalPasswordEncodings);
                         entryKey = getKeyStoreKey(ks, keyAlias, keyPasswords);
                     }
                 }
@@ -858,9 +879,14 @@ public class ApkSignerTool {
                 // The blob is indeed an encrypted private key blob
                 String passwordSpec =
                         (keyPasswordSpec != null) ? keyPasswordSpec : PasswordRetriever.SPEC_STDIN;
+                Charset[] additionalPasswordEncodings =
+                        (passwordCharset != null)
+                                ? new Charset[] {passwordCharset} : new Charset[0];
                 List<char[]> keyPasswords =
                         passwordRetriver.getPasswords(
-                                passwordSpec, "Private key password for " + name);
+                                passwordSpec,
+                                "Private key password for " + name,
+                                additionalPasswordEncodings);
                 keySpec = decryptPkcs8EncodedKey(encryptedPrivateKeyInfo, keyPasswords);
             } catch (IOException e) {
                 // The blob is not an encrypted private key blob
