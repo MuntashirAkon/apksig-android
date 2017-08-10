@@ -1223,7 +1223,7 @@ public abstract class V1SchemeVerifier {
             }
         }
 
-        private static Map<String, String> OID_TO_JCA_DIGEST_ALG = new HashMap<>();
+        private static final Map<String, String> OID_TO_JCA_DIGEST_ALG = new HashMap<>();
         static {
             OID_TO_JCA_DIGEST_ALG.put(OID_DIGEST_MD5, "MD5");
             OID_TO_JCA_DIGEST_ALG.put(OID_DIGEST_SHA1, "SHA-1");
@@ -1242,7 +1242,7 @@ public abstract class V1SchemeVerifier {
             return result;
         }
 
-        private static Map<String, String> OID_TO_JCA_SIGNATURE_ALG = new HashMap<>();
+        private static final Map<String, String> OID_TO_JCA_SIGNATURE_ALG = new HashMap<>();
         static {
             OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_MD5_WITH_RSA, "MD5withRSA");
             OID_TO_JCA_SIGNATURE_ALG.put(OID_SIG_SHA1_WITH_RSA, "SHA1withRSA");
