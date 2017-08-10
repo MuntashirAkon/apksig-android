@@ -21,7 +21,7 @@ import com.android.apksig.ApkVerifier.IssueWithParams;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.util.ByteBufferDataSource;
-import com.android.apksig.internal.util.DelegatingX509Certificate;
+import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;
@@ -38,7 +38,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
-import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -295,8 +294,8 @@ public abstract class V2SchemeVerifier {
             }
             // Wrap the cert so that the result's getEncoded returns exactly the original encoded
             // form. Without this, getEncoded may return a different form from what was stored in
-            // the signature. This is becase some X509Certificate(Factory) implementations re-encode
-            // certificates.
+            // the signature. This is because some X509Certificate(Factory) implementations
+            // re-encode certificates.
             certificate = new GuaranteedEncodedFormX509Certificate(certificate, encodedCert);
             result.certs.add(certificate);
         }
@@ -796,24 +795,6 @@ public abstract class V2SchemeVerifier {
         byte[] result = new byte[len];
         buf.get(result);
         return result;
-    }
-
-    /**
-     * {@link X509Certificate} whose {@link #getEncoded()} returns the data provided at construction
-     * time.
-     */
-    private static class GuaranteedEncodedFormX509Certificate extends DelegatingX509Certificate {
-        private byte[] mEncodedForm;
-
-        public GuaranteedEncodedFormX509Certificate(X509Certificate wrapped, byte[] encodedForm) {
-            super(wrapped);
-            this.mEncodedForm = (encodedForm != null) ? encodedForm.clone() : null;
-        }
-
-        @Override
-        public byte[] getEncoded() throws CertificateEncodingException {
-            return (mEncodedForm != null) ? mEncodedForm.clone() : null;
-        }
     }
 
     private static final char[] HEX_DIGITS = "01234567890abcdef".toCharArray();
