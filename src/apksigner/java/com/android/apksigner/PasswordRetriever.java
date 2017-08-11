@@ -42,23 +42,29 @@ import java.util.Map;
  * input) which adds the need to keep some sources open across password retrievals. This class
  * addresses the need.
  *
- * <p>To use this retriever, construct a new instance, use {@link #getPasswords(String, String)} to
- * retrieve passwords, and then invoke {@link #close()} on the instance when done, enabling the
- * instance to release any held resources.
+ * <p>To use this retriever, construct a new instance, use
+ * {@link #getPasswords(String, String, Charset...)} to retrieve passwords, and then invoke
+ * {@link #close()} on the instance when done, enabling the instance to release any held resources.
  */
 class PasswordRetriever implements AutoCloseable {
     public static final String SPEC_STDIN = "stdin";
 
-    private static final Charset CONSOLE_CHARSET = getConsoleEncoding();
+    /** Character encoding used by the console or {@code null} if not known. */
+    private final Charset mConsoleEncoding;
 
     private final Map<File, InputStream> mFileInputStreams = new HashMap<>();
 
     private boolean mClosed;
 
+    PasswordRetriever() {
+        mConsoleEncoding = getConsoleEncoding();
+    }
+
     /**
      * Returns the passwords described by the provided spec. The reason there may be more than one
      * password is compatibility with {@code keytool} and {@code jarsigner} which in certain cases
-     * use the form of passwords encoded using the console's character encoding.
+     * use the form of passwords encoded using the console's character encoding or the JVM default
+     * encoding.
      *
      * <p>Supported specs:
      * <ul>
@@ -72,8 +78,17 @@ class PasswordRetriever implements AutoCloseable {
      *
      * <p>When the same file (including standard input) is used for providing multiple passwords,
      * the passwords are read from the file one line at a time.
+     *
+     * @param additionalPwdEncodings additional encodings for converting the password into KeyStore
+     *        or PKCS #8 encrypted key password. These encoding are used in addition to using the
+     *        password verbatim or encoded using JVM default character encoding. A useful encoding
+     *        to provide is the console character encoding on Windows machines where the console
+     *        may be different from the JVM default encoding. Unfortunately, there is no public API
+     *        to obtain the console's character encoding.
      */
-    public List<char[]> getPasswords(String spec, String description) throws IOException {
+    public List<char[]> getPasswords(
+            String spec, String description, Charset... additionalPwdEncodings)
+                    throws IOException {
         // IMPLEMENTATION NOTE: Java KeyStore and PBEKeySpec APIs take passwords as arrays of
         // Unicode characters (char[]). Unfortunately, it appears that Sun/Oracle keytool and
         // jarsigner in some cases use passwords which are the encoded form obtained using the
@@ -82,12 +97,13 @@ class PasswordRetriever implements AutoCloseable {
         // encoded form to char. This occurs only when the password is read from stdin/console, and
         // does not occur when the password is read from a command-line parameter.
         // There are other tools which use the Java KeyStore API correctly.
-        // Thus, for each password spec, there may be up to three passwords:
+        // Thus, for each password spec, a valid password is typically one of these three:
         // * Unicode characters,
         // * characters (upcast bytes) obtained from encoding the password using the console's
-        //   character encoding,
+        //   character encoding of the console used on the environment where the KeyStore was
+        //   created,
         // * characters (upcast bytes) obtained from encoding the password using the JVM's default
-        //   character encoding.
+        //   character encoding of the machine where the KeyStore was created.
         //
         // For a sample password "\u0061\u0062\u00a1\u00e4\u044e\u0031":
         // On Windows 10 with English US as the UI language, IBM437 is used as console encoding and
@@ -106,14 +122,25 @@ class PasswordRetriever implements AutoCloseable {
         //   generates a keystore and key which decrypt only with
         //   "\u0061\u0062\u00c2\u00a1\u00c3\u00a4\u00d1\u008e\u0031"
         // * keytool -genkey -v -keystore native.jks -keyalg RSA -keysize 2048 -validity 10000
-        //     -alias test
+        //     -alias test -storepass <pass here>
         //   generates a keystore and key which decrypt only with
         //   "\u0061\u0062\u00a1\u00e4\u044e\u0031"
+        //
+        // We optimize for the case where the KeyStore was created on the same machine where
+        // apksigner is executed. Thus, we can assume the JVM default encoding used for creating the
+        // KeyStore is the same as the current JVM's default encoding. We can make a similar
+        // assumption about the console's encoding. However, there is no public API for obtaining
+        // the console's character encoding. Prior to Java 9, we could cheat by using Reflection API
+        // to access Console.encoding field. However, in the official Java 9 JVM this field is not
+        // only inaccessible, but results in warnings being spewed to stdout during access attempts.
+        // As a result, we cannot auto-detect the console's encoding and thus rely on the user to
+        // explicitly provide it to apksigner as a command-line parameter (and passed into this
+        // method as additionalPwdEncodings), if the password is using non-ASCII characters.
 
         assertNotClosed();
         if (spec.startsWith("pass:")) {
             char[] pwd = spec.substring("pass:".length()).toCharArray();
-            return getPasswords(pwd);
+            return getPasswords(pwd, additionalPwdEncodings);
         } else if (SPEC_STDIN.equals(spec)) {
             Console console = System.console();
             if (console != null) {
@@ -122,9 +149,9 @@ class PasswordRetriever implements AutoCloseable {
                 if (pwd == null) {
                     throw new IOException("Failed to read " + description + ": console closed");
                 }
-                return getPasswords(pwd);
+                return getPasswords(pwd, additionalPwdEncodings);
             } else {
-                // Console not available -- reading from redirected input
+                // Console not available -- reading from standard input
                 System.out.println(description + ": ");
                 byte[] encodedPwd = readEncodedPassword(System.in);
                 if (encodedPwd.length == 0) {
@@ -132,9 +159,8 @@ class PasswordRetriever implements AutoCloseable {
                             "Failed to read " + description + ": standard input closed");
                 }
                 // By default, textual input obtained via standard input is supposed to be decoded
-                // using the in JVM default character encoding but we also try the console's
-                // encoding just in case.
-                return getPasswords(encodedPwd, Charset.defaultCharset(), CONSOLE_CHARSET);
+                // using the in JVM default character encoding.
+                return getPasswords(encodedPwd, Charset.defaultCharset(), additionalPwdEncodings);
             }
         } else if (spec.startsWith("file:")) {
             String name = spec.substring("file:".length());
@@ -151,7 +177,7 @@ class PasswordRetriever implements AutoCloseable {
             }
             // By default, textual input from files is supposed to be treated as encoded using JVM's
             // default character encoding.
-            return getPasswords(encodedPwd, Charset.defaultCharset());
+            return getPasswords(encodedPwd, Charset.defaultCharset(), additionalPwdEncodings);
         } else if (spec.startsWith("env:")) {
             String name = spec.substring("env:".length());
             String value = System.getenv(name);
@@ -160,7 +186,7 @@ class PasswordRetriever implements AutoCloseable {
                         "Failed to read " + description + ": environment variable " + value
                                 + " not specified");
             }
-            return getPasswords(value.toCharArray());
+            return getPasswords(value.toCharArray(), additionalPwdEncodings);
         } else {
             throw new IOException("Unsupported password spec for " + description + ": " + spec);
         }
@@ -170,9 +196,9 @@ class PasswordRetriever implements AutoCloseable {
      * Returns the provided password and all password variants derived from the password. The
      * resulting list is guaranteed to contain at least one element.
      */
-    private static List<char[]> getPasswords(char[] pwd) {
+    private List<char[]> getPasswords(char[] pwd, Charset... additionalEncodings) {
         List<char[]> passwords = new ArrayList<>(3);
-        addPasswords(passwords, pwd);
+        addPasswords(passwords, pwd, additionalEncodings);
         return passwords;
     }
 
@@ -180,19 +206,18 @@ class PasswordRetriever implements AutoCloseable {
      * Returns the provided password and all password variants derived from the password. The
      * resulting list is guaranteed to contain at least one element.
      *
-     * @param encodedPwd password encoded using the provided character encoding.
-     * @param encodings character encodings in which the password is encoded in {@code encodedPwd}.
+     * @param encodedPwd password encoded using {@code encodingForDecoding}.
      */
-    private static List<char[]> getPasswords(byte[] encodedPwd, Charset... encodings) {
+    private List<char[]> getPasswords(
+            byte[] encodedPwd, Charset encodingForDecoding,
+            Charset... additionalEncodings) {
         List<char[]> passwords = new ArrayList<>(4);
 
-        for (Charset encoding : encodings) {
-            // Decode password and add it and its variants to the list
-            try {
-                char[] pwd = decodePassword(encodedPwd, encoding);
-                addPasswords(passwords, pwd);
-            } catch (IOException ignored) {}
-        }
+        // Decode password and add it and its variants to the list
+        try {
+            char[] pwd = decodePassword(encodedPwd, encodingForDecoding);
+            addPasswords(passwords, pwd, additionalEncodings);
+        } catch (IOException ignored) {}
 
         // Add the original encoded form
         addPassword(passwords, castBytesToChars(encodedPwd));
@@ -204,23 +229,34 @@ class PasswordRetriever implements AutoCloseable {
      *
      * <p>NOTE: This method adds only the passwords/variants which are not yet in the list.
      */
-    private static void addPasswords(List<char[]> passwords, char[] pwd) {
+    private void addPasswords(List<char[]> passwords, char[] pwd, Charset... additionalEncodings) {
+        if ((additionalEncodings != null) && (additionalEncodings.length > 0)) {
+            for (Charset encoding : additionalEncodings) {
+                // Password encoded using provided encoding (usually the console's character
+                // encoding) and upcast into char[]
+                try {
+                    char[] encodedPwd = castBytesToChars(encodePassword(pwd, encoding));
+                    addPassword(passwords, encodedPwd);
+                } catch (IOException ignored) {}
+            }
+        }
+
         // Verbatim password
         addPassword(passwords, pwd);
+
+        // Password encoded using the console encoding and upcast into char[]
+        if (mConsoleEncoding != null) {
+            try {
+                char[] encodedPwd = castBytesToChars(encodePassword(pwd, mConsoleEncoding));
+                addPassword(passwords, encodedPwd);
+            } catch (IOException ignored) {}
+        }
 
         // Password encoded using the JVM default character encoding and upcast into char[]
         try {
             char[] encodedPwd = castBytesToChars(encodePassword(pwd, Charset.defaultCharset()));
             addPassword(passwords, encodedPwd);
         } catch (IOException ignored) {}
-
-        // Password encoded using console character encoding and upcast into char[]
-        if (!CONSOLE_CHARSET.equals(Charset.defaultCharset())) {
-            try {
-                char[] encodedPwd = castBytesToChars(encodePassword(pwd, CONSOLE_CHARSET));
-                addPassword(passwords, encodedPwd);
-            } catch (IOException ignored) {}
-        }
     }
 
     /**
@@ -274,42 +310,59 @@ class PasswordRetriever implements AutoCloseable {
         return chars;
     }
 
+    private static boolean isJava9OrHigherErrOnTheSideOfCaution() {
+        // Before Java 9, this string is of major.minor form, such as "1.8" for Java 8.
+        // From Java 9 onwards, this is a single number: major, such as "9" for Java 9.
+        // See JEP 223: New Version-String Scheme.
+
+        String versionString = System.getProperty("java.specification.version");
+        if (versionString == null) {
+            // Better safe than sorry
+            return true;
+        }
+        return !versionString.startsWith("1.");
+    }
+
     /**
-     * Returns the character encoding used by the console.
+     * Returns the character encoding used by the console or {@code null} if the encoding is not
+     * known.
      */
     private static Charset getConsoleEncoding() {
         // IMPLEMENTATION NOTE: There is no public API for obtaining the console's character
         // encoding. We thus cheat by using implementation details of the most popular JVMs.
-        String consoleCharsetName;
+        // Unfortunately, this doesn't work on Java 9 JVMs where access to Console.encoding is
+        // restricted by default and leads to spewing to stdout at runtime.
+        if (isJava9OrHigherErrOnTheSideOfCaution()) {
+            return null;
+        }
+        String consoleCharsetName = null;
         try {
             Method encodingMethod = Console.class.getDeclaredMethod("encoding");
             encodingMethod.setAccessible(true);
             consoleCharsetName = (String) encodingMethod.invoke(null);
-            if (consoleCharsetName == null) {
-              return Charset.defaultCharset();
-            }
-        } catch (ReflectiveOperationException e) {
-          Charset defaultCharset = Charset.defaultCharset();
-          System.err.println(
-                  "warning: Failed to obtain console character encoding name. Assuming "
-                          + defaultCharset);
-          return defaultCharset;
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+
+        if (consoleCharsetName == null) {
+            // Console encoding is the same as this JVM's default encoding
+            return Charset.defaultCharset();
         }
 
         try {
-            return Charset.forName(consoleCharsetName);
+            return getCharsetByName(consoleCharsetName);
         } catch (IllegalArgumentException e) {
-            // On Windows 10, cp65001 is the UTF-8 code page. For some reason, popular JVMs don't
-            // have a mapping for cp65001...
-            if ("cp65001".equals(consoleCharsetName)) {
-                return StandardCharsets.UTF_8;
-            }
-            Charset defaultCharset = Charset.defaultCharset();
-            System.err.println(
-                    "warning: Console uses unknown character encoding: " + consoleCharsetName
-                            + ". Using " + defaultCharset + " instead");
-            return defaultCharset;
+            return null;
         }
+    }
+
+    public static Charset getCharsetByName(String charsetName) throws IllegalArgumentException {
+        // On Windows 10, cp65001 is the UTF-8 code page. For some reason, popular JVMs don't
+        // have a mapping for cp65001...
+        if ("cp65001".equalsIgnoreCase(charsetName)) {
+            return StandardCharsets.UTF_8;
+        }
+        return Charset.forName(charsetName);
     }
 
     private static byte[] readEncodedPassword(InputStream in) throws IOException {
