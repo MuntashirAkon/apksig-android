@@ -23,5 +23,6 @@ import org.junit.runners.Suite;
 @Suite.SuiteClasses({
     ArrayBackedByteBufferSinkTest.class,
     DirectByteBufferSinkTest.class,
+    VerityTreeBuilderTest.class,
 })
 public class AllTests {}
