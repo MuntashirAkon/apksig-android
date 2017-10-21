@@ -16,6 +16,7 @@
 
 package com.android.apksig.internal.apk.v2;
 
+import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.Pair;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.MGF1ParameterSpec;
@@ -35,7 +36,8 @@ public enum SignatureAlgorithm {
             "RSA",
             Pair.of("SHA256withRSA/PSS",
                     new PSSParameterSpec(
-                            "SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 256 / 8, 1))),
+                            "SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 256 / 8, 1)),
+            AndroidSdkVersion.N),
 
     /**
      * RSASSA-PSS with SHA2-512 digest, SHA2-512 MGF1, 64 bytes of salt, trailer: 0xbc, content
@@ -48,56 +50,65 @@ public enum SignatureAlgorithm {
             Pair.of(
                     "SHA512withRSA/PSS",
                     new PSSParameterSpec(
-                            "SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 512 / 8, 1))),
+                            "SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 512 / 8, 1)),
+            AndroidSdkVersion.N),
 
     /** RSASSA-PKCS1-v1_5 with SHA2-256 digest, content digested using SHA2-256 in 1 MB chunks. */
     RSA_PKCS1_V1_5_WITH_SHA256(
             0x0103,
             ContentDigestAlgorithm.CHUNKED_SHA256,
             "RSA",
-            Pair.of("SHA256withRSA", null)),
+            Pair.of("SHA256withRSA", null),
+            AndroidSdkVersion.N),
 
     /** RSASSA-PKCS1-v1_5 with SHA2-512 digest, content digested using SHA2-512 in 1 MB chunks. */
     RSA_PKCS1_V1_5_WITH_SHA512(
             0x0104,
             ContentDigestAlgorithm.CHUNKED_SHA512,
             "RSA",
-            Pair.of("SHA512withRSA", null)),
+            Pair.of("SHA512withRSA", null),
+            AndroidSdkVersion.N),
 
     /** ECDSA with SHA2-256 digest, content digested using SHA2-256 in 1 MB chunks. */
     ECDSA_WITH_SHA256(
             0x0201,
             ContentDigestAlgorithm.CHUNKED_SHA256,
             "EC",
-            Pair.of("SHA256withECDSA", null)),
+            Pair.of("SHA256withECDSA", null),
+            AndroidSdkVersion.N),
 
     /** ECDSA with SHA2-512 digest, content digested using SHA2-512 in 1 MB chunks. */
     ECDSA_WITH_SHA512(
             0x0202,
             ContentDigestAlgorithm.CHUNKED_SHA512,
             "EC",
-            Pair.of("SHA512withECDSA", null)),
+            Pair.of("SHA512withECDSA", null),
+            AndroidSdkVersion.N),
 
     /** DSA with SHA2-256 digest, content digested using SHA2-256 in 1 MB chunks. */
     DSA_WITH_SHA256(
             0x0301,
             ContentDigestAlgorithm.CHUNKED_SHA256,
             "DSA",
-            Pair.of("SHA256withDSA", null));
+            Pair.of("SHA256withDSA", null),
+            AndroidSdkVersion.N);
 
     private final int mId;
     private final String mJcaKeyAlgorithm;
     private final ContentDigestAlgorithm mContentDigestAlgorithm;
     private final Pair<String, ? extends AlgorithmParameterSpec> mJcaSignatureAlgAndParams;
+    private final int mMinSdkVersion;
 
     private SignatureAlgorithm(int id,
             ContentDigestAlgorithm contentDigestAlgorithm,
             String jcaKeyAlgorithm,
-            Pair<String, ? extends AlgorithmParameterSpec> jcaSignatureAlgAndParams) {
+            Pair<String, ? extends AlgorithmParameterSpec> jcaSignatureAlgAndParams,
+            int minSdkVersion) {
         mId = id;
         mContentDigestAlgorithm = contentDigestAlgorithm;
         mJcaKeyAlgorithm = jcaKeyAlgorithm;
         mJcaSignatureAlgAndParams = jcaSignatureAlgAndParams;
+        mMinSdkVersion = minSdkVersion;
     }
 
     /**
@@ -127,6 +138,10 @@ public enum SignatureAlgorithm {
      */
     Pair<String, ? extends AlgorithmParameterSpec> getJcaSignatureAlgorithmAndParams() {
         return mJcaSignatureAlgAndParams;
+    }
+
+    int getMinSdkVersion() {
+        return mMinSdkVersion;
     }
 
     static SignatureAlgorithm findById(int id) {

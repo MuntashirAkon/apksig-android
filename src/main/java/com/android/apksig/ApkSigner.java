@@ -77,6 +77,8 @@ public class ApkSigner {
      */
     private static final short ALIGNMENT_ZIP_EXTRA_DATA_FIELD_MIN_SIZE_BYTES = 6;
 
+    private static final short ANDROID_COMMON_PAGE_ALIGNMENT_BYTES = 4096;
+
     /**
      * Name of the Android manifest ZIP entry in APKs.
      */
@@ -440,7 +442,16 @@ public class ApkSigner {
             outputJarSignatureRequest.done();
         }
 
-        // Step 8. Construct output ZIP Central Directory in an in-memory buffer
+        // Step 8. Generate padding to complete 4 KB page so that the APK Signing Block will be 4 KB
+        // aligned.
+        if (outputOffset % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES != 0) {
+            long apkSigningBlockPadSize = ANDROID_COMMON_PAGE_ALIGNMENT_BYTES -
+                    outputOffset % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES;
+            outputApkOut.consume(ByteBuffer.allocate((int) apkSigningBlockPadSize));
+            outputOffset += apkSigningBlockPadSize;
+        }
+
+        // Step 9. Construct output ZIP Central Directory in an in-memory buffer
         long outputCentralDirSizeBytes = 0;
         for (CentralDirectoryRecord record : outputCdRecords) {
             outputCentralDirSizeBytes += record.getSize();
@@ -459,7 +470,7 @@ public class ApkSigner {
         long outputCentralDirStartOffset = outputOffset;
         int outputCentralDirRecordCount = outputCdRecords.size();
 
-        // Step 9. Construct output ZIP End of Central Directory record in an in-memory buffer
+        // Step 10. Construct output ZIP End of Central Directory record in an in-memory buffer
         ByteBuffer outputEocd =
                 EocdRecord.createWithModifiedCentralDirectoryInfo(
                         inputZipSections.getZipEndOfCentralDirectory(),
@@ -467,7 +478,7 @@ public class ApkSigner {
                         outputCentralDirDataSource.size(),
                         outputCentralDirStartOffset);
 
-        // Step 10. Generate and output APK Signature Scheme v2 signatures, if necessary. This may
+        // Step 11. Generate and output APK Signature Scheme v2 signatures, if necessary. This may
         // insert an APK Signing Block just before the output's ZIP Central Directory
         ApkSignerEngine.OutputApkSigningBlockRequest outputApkSigingBlockRequest =
                 signerEngine.outputZipSections(
@@ -482,7 +493,7 @@ public class ApkSigner {
             outputApkSigingBlockRequest.done();
         }
 
-        // Step 11. Output ZIP Central Directory and ZIP End of Central Directory
+        // Step 12. Output ZIP Central Directory and ZIP End of Central Directory
         outputCentralDirDataSource.feed(0, outputCentralDirDataSource.size(), outputApkOut);
         outputApkOut.consume(outputEocd);
         signerEngine.outputDone();
@@ -577,7 +588,7 @@ public class ApkSigner {
         }
 
         // Fall back to filename-based defaults
-        return (entry.getName().endsWith(".so")) ? 4096 : 4;
+        return (entry.getName().endsWith(".so")) ? ANDROID_COMMON_PAGE_ALIGNMENT_BYTES : 4;
     }
 
     private static ByteBuffer createExtraFieldToAlignData(
