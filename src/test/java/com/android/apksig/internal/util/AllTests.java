@@ -22,6 +22,7 @@ import org.junit.runners.Suite;
 @RunWith(Suite.class)
 @Suite.SuiteClasses({
     ArrayBackedByteBufferSinkTest.class,
+    ChainedDataSourceTest.class,
     DirectByteBufferSinkTest.class,
     VerityTreeBuilderTest.class,
 })
