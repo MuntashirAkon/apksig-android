@@ -16,12 +16,15 @@
 
 package com.android.apksig.internal.util;
 
+import com.android.apksig.internal.zip.EocdRecord;
+import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -50,6 +53,34 @@ public class VerityTreeBuilder {
     }
 
     /**
+     * Returns the root hash of the APK verity tree built from ZIP blocks.
+     *
+     * Specifically, APK verity tree is built from the APK, but as if the APK Signing Block (which
+     * must be page aligned) and the "Central Directory offset" field in End of Central Directory
+     * are skipped.
+     */
+    public byte[] generateVerityTreeRootHash(DataSource beforeApkSigningBlock,
+            DataSource centralDir, DataSource eocd) throws IOException {
+        if (beforeApkSigningBlock.size() % CHUNK_SIZE != 0) {
+            throw new IllegalStateException("APK Signing Block size not a multiple of " + CHUNK_SIZE
+                    + ": " + beforeApkSigningBlock.size());
+        }
+
+        // Ensure that, when digesting, ZIP End of Central Directory record's Central Directory
+        // offset field is treated as pointing to the offset at which the APK Signing Block will
+        // start.
+        long centralDirOffsetForDigesting = beforeApkSigningBlock.size();
+        ByteBuffer eocdBuf = ByteBuffer.allocate((int) eocd.size());
+        eocdBuf.order(ByteOrder.LITTLE_ENDIAN);
+        eocd.copyTo(0, (int) eocd.size(), eocdBuf);
+        eocdBuf.flip();
+        ZipUtils.setZipEocdCentralDirectoryOffset(eocdBuf, centralDirOffsetForDigesting);
+
+        return generateVerityTreeRootHash(new ChainedDataSource(beforeApkSigningBlock, centralDir,
+                    DataSources.asDataSource(eocdBuf)));
+    }
+
+    /**
      * Returns the root hash of the verity tree built from the data source.
      *
      * The tree is built bottom up. The bottom level has 256-bit digest for each 4 KB block in the
@@ -61,8 +92,10 @@ public class VerityTreeBuilder {
      *
      * The tree is currently stored only in memory and is never written out.  Nevertheless, it is
      * the actual verity tree format on disk, and is supposed to be re-generated on device.
+     *
+     * This is package-private for testing purpose.
      */
-    public byte[] generateVerityTreeRootHash(DataSource fileSource) throws IOException {
+    byte[] generateVerityTreeRootHash(DataSource fileSource) throws IOException {
         int digestSize = mMd.getDigestLength();
 
         // Calculate the summed area table of level size. In other word, this is the offset
@@ -73,16 +106,17 @@ public class VerityTreeBuilder {
 
         // Generate the hash tree bottom-up.
         for (int i = levelOffset.length - 2; i >= 0; i--) {
+            DataSink middleBufferSink = new ByteBufferSink(
+                    slice(verityBuffer, levelOffset[i], levelOffset[i + 1]));
             DataSource src;
             if (i == levelOffset.length - 2) {
                 src = fileSource;
+                digestDataByChunks(src, middleBufferSink, false);
             } else {
                 src = DataSources.asDataSource(slice(verityBuffer.asReadOnlyBuffer(),
                             levelOffset[i + 1], levelOffset[i + 2]));
+                digestDataByChunks(src, middleBufferSink, true);
             }
-            DataSink middleBufferSink = new ByteBufferSink(
-                    slice(verityBuffer, levelOffset[i], levelOffset[i + 1]));
-            digestDataByChunks(src, middleBufferSink);
 
             // If the output is not full chunk, pad with 0s.
             long totalOutput = divideRoundup(src.size(), CHUNK_SIZE) * digestSize;
@@ -130,9 +164,11 @@ public class VerityTreeBuilder {
 
     /**
      * Digest data source by chunks then feeds them to the sink one by one.  If the last unit is
-     * less than the chunk size, feed with extra padding 0 to fill up the chunk.
+     * less than the chunk size and padding is desired, feed with extra padding 0 to fill up the
+     * chunk before digesting.
      */
-    private void digestDataByChunks(DataSource dataSource, DataSink dataSink) throws IOException {
+    private void digestDataByChunks(DataSource dataSource, DataSink dataSink, boolean padLastChunk)
+            throws IOException {
         long size = dataSource.size();
         long offset = 0;
         for (; offset + CHUNK_SIZE <= size; offset += CHUNK_SIZE) {
@@ -146,9 +182,14 @@ public class VerityTreeBuilder {
         // Send the last incomplete chunk with 0 padding to the sink at once.
         int remaining = (int) (size % CHUNK_SIZE);
         if (remaining > 0) {
-            ByteBuffer buffer = ByteBuffer.allocate(CHUNK_SIZE);  // initialized to 0.
-            dataSource.copyTo(offset, remaining, buffer);
-            buffer.rewind();
+            ByteBuffer buffer;
+            if (padLastChunk) {
+                buffer = ByteBuffer.allocate(CHUNK_SIZE);  // initialized to 0.
+                dataSource.copyTo(offset, remaining, buffer);
+                buffer.rewind();
+            } else {
+                buffer = dataSource.getByteBuffer(offset, remaining);
+            }
             byte[] hash = saltedDigest(buffer);
             dataSink.consume(hash, 0, hash.length);
         }
