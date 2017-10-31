@@ -17,6 +17,7 @@
 package com.android.apksig;
 
 import com.android.apksig.apk.ApkFormatException;
+import com.android.apksig.internal.util.Pair;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
 import java.io.Closeable;
@@ -208,6 +209,9 @@ public interface ApkSignerEngine extends Closeable {
      * <p>The provided data sources are guaranteed to not be used by the engine after this method
      * terminates.
      *
+     * @deprecated This is now superseded by {@link #outputZipSections2(DataSource, DataSource,
+     * DataSource)}.
+     *
      * @param zipEntries the section of ZIP archive containing Local File Header records and data of
      *        the ZIP entries. In a well-formed archive, this section starts at the start of the
      *        archive and extends all the way to the ZIP Central Directory.
@@ -230,7 +234,43 @@ public interface ApkSignerEngine extends Closeable {
      * @throws IllegalStateException if there are unfulfilled requests, such as to inspect some JAR
      *         entries or to output JAR signature, or if the engine is closed
      */
+    @Deprecated
     OutputApkSigningBlockRequest outputZipSections(
+            DataSource zipEntries,
+            DataSource zipCentralDirectory,
+            DataSource zipEocd)
+                    throws IOException, ApkFormatException, NoSuchAlgorithmException,
+                            InvalidKeyException, SignatureException, IllegalStateException;
+
+    /**
+     * Indicates to this engine that the ZIP sections comprising the output APK have been output.
+     *
+     * <p>The provided data sources are guaranteed to not be used by the engine after this method
+     * terminates.
+     *
+     * @param zipEntries the section of ZIP archive containing Local File Header records and data of
+     *        the ZIP entries. In a well-formed archive, this section starts at the start of the
+     *        archive and extends all the way to the ZIP Central Directory.
+     * @param zipCentralDirectory ZIP Central Directory section
+     * @param zipEocd ZIP End of Central Directory (EoCD) record
+     *
+     * @return request to add an APK Signing Block to the output or {@code null} if the output must
+     *         not contain an APK Signing Block. The request must be fulfilled before
+     *         {@link #outputDone()} is invoked.
+     *
+     * @throws IOException if an I/O error occurs while reading the provided ZIP sections
+     * @throws ApkFormatException if the provided APK is malformed in a way which prevents this
+     *         engine from producing a valid signature. For example, if the APK Signing Block
+     *         provided to the engine is malformed.
+     * @throws NoSuchAlgorithmException if a signature could not be generated because a required
+     *         cryptographic algorithm implementation is missing
+     * @throws InvalidKeyException if a signature could not be generated because a signing key is
+     *         not suitable for generating the signature
+     * @throws SignatureException if an error occurred while generating a signature
+     * @throws IllegalStateException if there are unfulfilled requests, such as to inspect some JAR
+     *         entries or to output JAR signature, or if the engine is closed
+     */
+    OutputApkSigningBlockRequest2 outputZipSections2(
             DataSource zipEntries,
             DataSource zipCentralDirectory,
             DataSource zipEocd)
@@ -410,7 +450,10 @@ public interface ApkSignerEngine extends Closeable {
      *
      * <p>If the output contains an APK Signing Block, that block must be replaced by the block
      * contained in this request.
+     *
+     * @deprecated This is now superseded by {@link OutputApkSigningBlockRequest2}.
      */
+    @Deprecated
     interface OutputApkSigningBlockRequest {
 
         /**
@@ -422,5 +465,37 @@ public interface ApkSignerEngine extends Closeable {
          * Indicates that the APK Signing Block was output as requested.
          */
         void done();
+    }
+
+    /**
+     * Request to add the specified APK Signing Block to the output APK. APK Signature Scheme v2
+     * signature(s) of the APK are contained in this block.
+     *
+     * <p>The APK Signing Block returned by {@link #getApkSigningBlock()} must be placed into the
+     * output APK such that the block is immediately before the ZIP Central Directory. Immediately
+     * before the APK Signing Block must be padding consists of the number of 0x00 bytes returned by
+     * {@link getPaddingSizeBeforeApkSigningBlock()}. The offset of ZIP Central Directory in the ZIP
+     * End of Central Directory record must be adjusted accordingly, and then {@link #done()} must
+     * be invoked.
+     *
+     * <p>If the output contains an APK Signing Block, that block must be replaced by the block
+     * contained in this request.
+     */
+    interface OutputApkSigningBlockRequest2 {
+        /**
+         * Returns the APK Signing Block.
+         */
+        byte[] getApkSigningBlock();
+
+        /**
+         * Indicates that the APK Signing Block was output as requested.
+         */
+        void done();
+
+        /**
+         * Returns the number of 0x00 bytes the caller must place immediately before APK Signing
+         * Block.
+         */
+        int getPaddingSizeBeforeApkSigningBlock();
     }
 }
