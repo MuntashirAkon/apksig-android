@@ -453,6 +453,26 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             DataSource zipEocd)
                     throws IOException, InvalidKeyException, SignatureException,
                             NoSuchAlgorithmException {
+        return outputZipSectionsInternal(zipEntries, zipCentralDirectory, zipEocd, false);
+    }
+
+    @Override
+    public OutputApkSigningBlockRequest2 outputZipSections2(
+            DataSource zipEntries,
+            DataSource zipCentralDirectory,
+            DataSource zipEocd)
+                    throws IOException, InvalidKeyException, SignatureException,
+                            NoSuchAlgorithmException {
+        return outputZipSectionsInternal(zipEntries, zipCentralDirectory, zipEocd, true);
+    }
+
+    private OutputApkSigningBlockRequestImpl outputZipSectionsInternal(
+            DataSource zipEntries,
+            DataSource zipCentralDirectory,
+            DataSource zipEocd,
+            boolean apkSigningBlockPaddingSupported)
+                    throws IOException, InvalidKeyException, SignatureException,
+                            NoSuchAlgorithmException {
         checkNotClosed();
         checkV1SigningDoneIfEnabled();
         if (!mV2SigningEnabled) {
@@ -460,11 +480,15 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
         invalidateV2Signature();
 
-        byte[] apkSigningBlock =
+        Pair<byte[], Integer> result =
                 V2SchemeSigner.generateApkSigningBlock(
-                        zipEntries, zipCentralDirectory, zipEocd, mV2SignerConfigs);
+                        zipEntries, zipCentralDirectory, zipEocd, mV2SignerConfigs,
+                        apkSigningBlockPaddingSupported);
+        byte[] apkSigningBlock = result.getFirst();
+        int padSizeBeforeApkSigningBlock  = result.getSecond();
 
-        mAddV2SignatureRequest = new OutputApkSigningBlockRequestImpl(apkSigningBlock);
+        mAddV2SignatureRequest = new OutputApkSigningBlockRequestImpl(apkSigningBlock,
+                padSizeBeforeApkSigningBlock);
         return mAddV2SignatureRequest;
     }
 
@@ -602,12 +626,15 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
     }
 
-    private static class OutputApkSigningBlockRequestImpl implements OutputApkSigningBlockRequest {
+    private static class OutputApkSigningBlockRequestImpl
+            implements OutputApkSigningBlockRequest, OutputApkSigningBlockRequest2 {
         private final byte[] mApkSigningBlock;
+        private final int mPaddingBeforeApkSigningBlock;
         private volatile boolean mDone;
 
-        private OutputApkSigningBlockRequestImpl(byte[] apkSigingBlock) {
+        private OutputApkSigningBlockRequestImpl(byte[] apkSigingBlock, int paddingBefore) {
             mApkSigningBlock = apkSigingBlock.clone();
+            mPaddingBeforeApkSigningBlock = paddingBefore;
         }
 
         @Override
@@ -622,6 +649,11 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
         private boolean isDone() {
             return mDone;
+        }
+
+        @Override
+        public int getPaddingSizeBeforeApkSigningBlock() {
+            return mPaddingBeforeApkSigningBlock;
         }
     }
 
