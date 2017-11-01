@@ -65,9 +65,12 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     private final boolean mV2SigningEnabled;
     private final boolean mOtherSignersSignaturesPreserved;
     private final String mCreatedBy;
-    private final List<V1SchemeSigner.SignerConfig> mV1SignerConfigs;
-    private final DigestAlgorithm mV1ContentDigestAlgorithm;
-    private final List<V2SchemeSigner.SignerConfig> mV2SignerConfigs;
+    private final List<SignerConfig> mSignerConfigs;
+    private final int mMinSdkVersion;
+
+    private List<V1SchemeSigner.SignerConfig> mV1SignerConfigs = Collections.emptyList();
+    private DigestAlgorithm mV1ContentDigestAlgorithm;
+    private List<V2SchemeSigner.SignerConfig> mV2SignerConfigs;
 
     private boolean mClosed;
 
@@ -76,7 +79,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     /**
      * Names of JAR entries which this engine is expected to output as part of v1 signing.
      */
-    private final Set<String> mSignatureExpectedOutputJarEntryNames;
+    private Set<String> mSignatureExpectedOutputJarEntryNames = Collections.emptySet();
 
     /** Requests for digests of output JAR entries. */
     private final Map<String, GetJarEntryDataDigestRequest> mOutputJarEntryDigestRequests =
@@ -129,72 +132,82 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         mV2SignaturePending = v2SigningEnabled;
         mOtherSignersSignaturesPreserved = otherSignersSignaturesPreserved;
         mCreatedBy = createdBy;
-        mV1SignerConfigs =
-                (v1SigningEnabled)
-                        ? new ArrayList<>(signerConfigs.size()) : Collections.emptyList();
-        mV2SignerConfigs =
-                (v2SigningEnabled)
-                        ? new ArrayList<>(signerConfigs.size()) : Collections.emptyList();
+        mSignerConfigs = signerConfigs;
+        mMinSdkVersion = minSdkVersion;
 
-        Map<String, Integer> v1SignerNameToSignerIndex =
-                (v1SigningEnabled) ? new HashMap<>(signerConfigs.size()) : Collections.emptyMap();
+        if (v1SigningEnabled) {
+            createV1SignerConfigs(signerConfigs, minSdkVersion);
+        }
+    }
+
+    private void createV1SignerConfigs(List<SignerConfig> signerConfigs, int minSdkVersion)
+            throws InvalidKeyException {
+        mV1SignerConfigs = new ArrayList<>(signerConfigs.size());
+        Map<String, Integer> v1SignerNameToSignerIndex = new HashMap<>(signerConfigs.size());
         DigestAlgorithm v1ContentDigestAlgorithm = null;
         for (int i = 0; i < signerConfigs.size(); i++) {
             SignerConfig signerConfig = signerConfigs.get(i);
             List<X509Certificate> certificates = signerConfig.getCertificates();
             PublicKey publicKey = certificates.get(0).getPublicKey();
 
-            if (v1SigningEnabled) {
-                String v1SignerName = V1SchemeSigner.getSafeSignerName(signerConfig.getName());
-                // Check whether the signer's name is unique among all v1 signers
-                Integer indexOfOtherSignerWithSameName =
-                        v1SignerNameToSignerIndex.put(v1SignerName, i);
-                if (indexOfOtherSignerWithSameName != null) {
-                    throw new IllegalArgumentException(
-                            "Signers #" + (indexOfOtherSignerWithSameName + 1)
-                            + " and #" + (i + 1)
-                            + " have the same name: " + v1SignerName
-                            + ". v1 signer names must be unique");
-                }
+            String v1SignerName = V1SchemeSigner.getSafeSignerName(signerConfig.getName());
+            // Check whether the signer's name is unique among all v1 signers
+            Integer indexOfOtherSignerWithSameName =
+                    v1SignerNameToSignerIndex.put(v1SignerName, i);
+            if (indexOfOtherSignerWithSameName != null) {
+                throw new IllegalArgumentException(
+                        "Signers #" + (indexOfOtherSignerWithSameName + 1)
+                        + " and #" + (i + 1)
+                        + " have the same name: " + v1SignerName
+                        + ". v1 signer names must be unique");
+            }
 
-                DigestAlgorithm v1SignatureDigestAlgorithm =
-                        V1SchemeSigner.getSuggestedSignatureDigestAlgorithm(
-                                publicKey, minSdkVersion);
-                V1SchemeSigner.SignerConfig v1SignerConfig = new V1SchemeSigner.SignerConfig();
-                v1SignerConfig.name = v1SignerName;
-                v1SignerConfig.privateKey = signerConfig.getPrivateKey();
-                v1SignerConfig.certificates = certificates;
-                v1SignerConfig.signatureDigestAlgorithm = v1SignatureDigestAlgorithm;
-                // For digesting contents of APK entries and of MANIFEST.MF, pick the algorithm
-                // of comparable strength to the digest algorithm used for computing the signature.
-                // When there are multiple signers, pick the strongest digest algorithm out of their
-                // signature digest algorithms. This avoids reducing the digest strength used by any
-                // of the signers to protect APK contents.
-                if (v1ContentDigestAlgorithm == null) {
+            DigestAlgorithm v1SignatureDigestAlgorithm =
+                    V1SchemeSigner.getSuggestedSignatureDigestAlgorithm(
+                            publicKey, minSdkVersion);
+            V1SchemeSigner.SignerConfig v1SignerConfig = new V1SchemeSigner.SignerConfig();
+            v1SignerConfig.name = v1SignerName;
+            v1SignerConfig.privateKey = signerConfig.getPrivateKey();
+            v1SignerConfig.certificates = certificates;
+            v1SignerConfig.signatureDigestAlgorithm = v1SignatureDigestAlgorithm;
+            // For digesting contents of APK entries and of MANIFEST.MF, pick the algorithm
+            // of comparable strength to the digest algorithm used for computing the signature.
+            // When there are multiple signers, pick the strongest digest algorithm out of their
+            // signature digest algorithms. This avoids reducing the digest strength used by any
+            // of the signers to protect APK contents.
+            if (v1ContentDigestAlgorithm == null) {
+                v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
+            } else {
+                if (DigestAlgorithm.BY_STRENGTH_COMPARATOR.compare(
+                        v1SignatureDigestAlgorithm, v1ContentDigestAlgorithm) > 0) {
                     v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
-                } else {
-                    if (DigestAlgorithm.BY_STRENGTH_COMPARATOR.compare(
-                            v1SignatureDigestAlgorithm, v1ContentDigestAlgorithm) > 0) {
-                        v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
-                    }
                 }
-                mV1SignerConfigs.add(v1SignerConfig);
             }
-
-            if (v2SigningEnabled) {
-                V2SchemeSigner.SignerConfig v2SignerConfig = new V2SchemeSigner.SignerConfig();
-                v2SignerConfig.privateKey = signerConfig.getPrivateKey();
-                v2SignerConfig.certificates = certificates;
-                v2SignerConfig.signatureAlgorithms =
-                        V2SchemeSigner.getSuggestedSignatureAlgorithms(publicKey, minSdkVersion);
-                mV2SignerConfigs.add(v2SignerConfig);
-            }
+            mV1SignerConfigs.add(v1SignerConfig);
         }
         mV1ContentDigestAlgorithm = v1ContentDigestAlgorithm;
         mSignatureExpectedOutputJarEntryNames =
-                (v1SigningEnabled)
-                        ? V1SchemeSigner.getOutputEntryNames(mV1SignerConfigs)
-                        : Collections.emptySet();
+                V1SchemeSigner.getOutputEntryNames(mV1SignerConfigs);
+    }
+
+    private List<V2SchemeSigner.SignerConfig> getV2SignerConfigs() throws InvalidKeyException {
+        if (mV2SignerConfigs != null) {
+            return mV2SignerConfigs;
+        }
+        mV2SignerConfigs = new ArrayList<>(mSignerConfigs.size());
+        for (int i = 0; i < mSignerConfigs.size(); i++) {
+            SignerConfig signerConfig = mSignerConfigs.get(i);
+            List<X509Certificate> certificates = signerConfig.getCertificates();
+            PublicKey publicKey = certificates.get(0).getPublicKey();
+
+            V2SchemeSigner.SignerConfig v2SignerConfig = new V2SchemeSigner.SignerConfig();
+            v2SignerConfig.privateKey = signerConfig.getPrivateKey();
+            v2SignerConfig.certificates = certificates;
+            v2SignerConfig.signatureAlgorithms =
+                    V2SchemeSigner.getSuggestedSignatureAlgorithms(publicKey, mMinSdkVersion);
+            mV2SignerConfigs.add(v2SignerConfig);
+        }
+        return mV2SignerConfigs;
     }
 
     @Override
@@ -479,10 +492,10 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return null;
         }
         invalidateV2Signature();
-
+        List<V2SchemeSigner.SignerConfig> v2SignerConfigs = getV2SignerConfigs();
         Pair<byte[], Integer> result =
                 V2SchemeSigner.generateApkSigningBlock(
-                        zipEntries, zipCentralDirectory, zipEocd, mV2SignerConfigs,
+                        zipEntries, zipCentralDirectory, zipEocd, v2SignerConfigs,
                         apkSigningBlockPaddingSupported);
         byte[] apkSigningBlock = result.getFirst();
         int padSizeBeforeApkSigningBlock  = result.getSecond();
