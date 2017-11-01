@@ -77,6 +77,8 @@ public class ApkSigner {
      */
     private static final short ALIGNMENT_ZIP_EXTRA_DATA_FIELD_MIN_SIZE_BYTES = 6;
 
+    private static final short ANDROID_COMMON_PAGE_ALIGNMENT_BYTES = 4096;
+
     /**
      * Name of the Android manifest ZIP entry in APKs.
      */
@@ -469,17 +471,20 @@ public class ApkSigner {
 
         // Step 10. Generate and output APK Signature Scheme v2 signatures, if necessary. This may
         // insert an APK Signing Block just before the output's ZIP Central Directory
-        ApkSignerEngine.OutputApkSigningBlockRequest outputApkSigingBlockRequest =
-                signerEngine.outputZipSections(
+        ApkSignerEngine.OutputApkSigningBlockRequest2 outputApkSigningBlockRequest =
+                signerEngine.outputZipSections2(
                         outputApkIn,
                         outputCentralDirDataSource,
                         DataSources.asDataSource(outputEocd));
-        if (outputApkSigingBlockRequest != null) {
-            byte[] outputApkSigningBlock = outputApkSigingBlockRequest.getApkSigningBlock();
+
+        if (outputApkSigningBlockRequest != null) {
+            int padding = outputApkSigningBlockRequest.getPaddingSizeBeforeApkSigningBlock();
+            outputApkOut.consume(ByteBuffer.allocate(padding));
+            byte[] outputApkSigningBlock = outputApkSigningBlockRequest.getApkSigningBlock();
             outputApkOut.consume(outputApkSigningBlock, 0, outputApkSigningBlock.length);
-            ZipUtils.setZipEocdCentralDirectoryOffset(
-                    outputEocd, outputCentralDirStartOffset + outputApkSigningBlock.length);
-            outputApkSigingBlockRequest.done();
+            ZipUtils.setZipEocdCentralDirectoryOffset(outputEocd,
+                    outputCentralDirStartOffset + padding + outputApkSigningBlock.length);
+            outputApkSigningBlockRequest.done();
         }
 
         // Step 11. Output ZIP Central Directory and ZIP End of Central Directory
@@ -577,7 +582,7 @@ public class ApkSigner {
         }
 
         // Fall back to filename-based defaults
-        return (entry.getName().endsWith(".so")) ? 4096 : 4;
+        return (entry.getName().endsWith(".so")) ? ANDROID_COMMON_PAGE_ALIGNMENT_BYTES : 4;
     }
 
     private static ByteBuffer createExtraFieldToAlignData(
@@ -690,12 +695,12 @@ public class ApkSigner {
     }
 
     /**
-     * Returns the minimum Android version (API Level) supported by the provided APK. This is based
-     * on the {@code android:minSdkVersion} attributes of the APK's {@code AndroidManifest.xml}.
+     * Returns the contents of the APK's {@code AndroidManifest.xml} or {@code null} if this entry
+     * is not present in the APK.
      */
-    static int getMinSdkVersionFromApk(
+    static ByteBuffer getAndroidManifestFromApk(
             List<CentralDirectoryRecord> cdRecords, DataSource lhfSection)
-                    throws IOException, MinSdkVersionException {
+                    throws IOException, ApkFormatException, ZipFormatException {
         CentralDirectoryRecord androidManifestCdRecord = null;
         for (CentralDirectoryRecord cdRecord : cdRecords) {
             if (ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(cdRecord.getName())) {
@@ -704,22 +709,30 @@ public class ApkSigner {
             }
         }
         if (androidManifestCdRecord == null) {
-            throw new MinSdkVersionException(
-                    "Unable to determine APK's minimum supported Android platform version"
-                            + ": APK is missing " + ANDROID_MANIFEST_ZIP_ENTRY_NAME);
+            throw new ApkFormatException("Missing " + ANDROID_MANIFEST_ZIP_ENTRY_NAME);
         }
-        byte[] androidManifest;
+
+        return ByteBuffer.wrap(
+                LocalFileRecord.getUncompressedData(
+                        lhfSection, androidManifestCdRecord, lhfSection.size()));
+    }
+
+    /**
+     * Returns the minimum Android version (API Level) supported by the provided APK. This is based
+     * on the {@code android:minSdkVersion} attributes of the APK's {@code AndroidManifest.xml}.
+     */
+    private static int getMinSdkVersionFromApk(
+            List<CentralDirectoryRecord> cdRecords, DataSource lhfSection)
+                    throws IOException, MinSdkVersionException {
+        ByteBuffer androidManifest;
         try {
-            androidManifest =
-                    LocalFileRecord.getUncompressedData(
-                            lhfSection, androidManifestCdRecord, lhfSection.size());
-        } catch (ZipFormatException e) {
+            androidManifest = getAndroidManifestFromApk(cdRecords, lhfSection);
+        } catch (ZipFormatException | ApkFormatException e) {
             throw new MinSdkVersionException(
-                    "Unable to determine APK's minimum supported Android platform version"
-                            + ": malformed ZIP entry: " + androidManifestCdRecord.getName(),
+                    "Failed to determine APK's minimum supported Android platform version",
                     e);
         }
-        return ApkUtils.getMinSdkVersionFromBinaryAndroidManifest(ByteBuffer.wrap(androidManifest));
+        return ApkUtils.getMinSdkVersionFromBinaryAndroidManifest(androidManifest);
     }
 
     /**

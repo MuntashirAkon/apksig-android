@@ -21,11 +21,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := apksig
 LOCAL_SRC_FILES := $(call all-java-files-under, src/main/java)
 
-# Disable warnnings about our use of internal proprietary OpenJDK API.
-# TODO: Remove this workaround by moving to our own implementation of PKCS #7
-# SignedData block generation, parsing, and verification.
-LOCAL_JAVACFLAGS := -XDignore.symbol.file
-
 include $(BUILD_HOST_JAVA_LIBRARY)
 
 

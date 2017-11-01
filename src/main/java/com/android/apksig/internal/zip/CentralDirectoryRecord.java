@@ -38,11 +38,13 @@ public class CentralDirectoryRecord {
     private static final int RECORD_SIGNATURE = 0x02014b50;
     private static final int HEADER_SIZE_BYTES = 46;
 
-    private static final int LAST_MODIFICATION_TIME_OFFSET =  12;
+    private static final int GP_FLAGS_OFFSET = 8;
     private static final int LOCAL_FILE_HEADER_OFFSET_OFFSET = 42;
     private static final int NAME_OFFSET = HEADER_SIZE_BYTES;
 
     private final ByteBuffer mData;
+    private final short mGpFlags;
+    private final short mCompressionMethod;
     private final int mLastModificationTime;
     private final int mLastModificationDate;
     private final long mCrc32;
@@ -54,6 +56,8 @@ public class CentralDirectoryRecord {
 
     private CentralDirectoryRecord(
             ByteBuffer data,
+            short gpFlags,
+            short compressionMethod,
             int lastModificationTime,
             int lastModificationDate,
             long crc32,
@@ -63,6 +67,8 @@ public class CentralDirectoryRecord {
             String name,
             int nameSizeBytes) {
         mData = data;
+        mGpFlags = gpFlags;
+        mCompressionMethod = compressionMethod;
         mLastModificationDate = lastModificationDate;
         mLastModificationTime = lastModificationTime;
         mCrc32 = crc32;
@@ -83,6 +89,14 @@ public class CentralDirectoryRecord {
 
     public int getNameSizeBytes() {
         return mNameSizeBytes;
+    }
+
+    public short getGpFlags() {
+        return mGpFlags;
+    }
+
+    public short getCompressionMethod() {
+        return mCompressionMethod;
     }
 
     public int getLastModificationTime() {
@@ -128,7 +142,9 @@ public class CentralDirectoryRecord {
                     "Not a Central Directory record. Signature: 0x"
                             + Long.toHexString(recordSignature & 0xffffffffL));
         }
-        buf.position(originalPosition + LAST_MODIFICATION_TIME_OFFSET);
+        buf.position(originalPosition + GP_FLAGS_OFFSET);
+        short gpFlags = buf.getShort();
+        short compressionMethod = buf.getShort();
         int lastModificationTime = ZipUtils.getUnsignedInt16(buf);
         int lastModificationDate = ZipUtils.getUnsignedInt16(buf);
         long crc32 = ZipUtils.getUnsignedInt32(buf);
@@ -162,6 +178,8 @@ public class CentralDirectoryRecord {
         buf.position(recordEndInBuf);
         return new CentralDirectoryRecord(
                 recordBuf,
+                gpFlags,
+                compressionMethod,
                 lastModificationTime,
                 lastModificationDate,
                 crc32,
@@ -185,6 +203,8 @@ public class CentralDirectoryRecord {
         ZipUtils.setUnsignedInt32(result, LOCAL_FILE_HEADER_OFFSET_OFFSET, localFileHeaderOffset);
         return new CentralDirectoryRecord(
                 result,
+                mGpFlags,
+                mCompressionMethod,
                 mLastModificationTime,
                 mLastModificationDate,
                 mCrc32,
@@ -204,14 +224,16 @@ public class CentralDirectoryRecord {
             long uncompressedSize,
             long localFileHeaderOffset) {
         byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
+        short gpFlags = ZipUtils.GP_FLAG_EFS; // UTF-8 character encoding used for entry name
+        short compressionMethod = ZipUtils.COMPRESSION_METHOD_DEFLATED;
         int recordSize = HEADER_SIZE_BYTES + nameBytes.length;
         ByteBuffer result = ByteBuffer.allocate(recordSize);
         result.order(ByteOrder.LITTLE_ENDIAN);
         result.putInt(RECORD_SIGNATURE);
         ZipUtils.putUnsignedInt16(result, 0x14); // Version made by
         ZipUtils.putUnsignedInt16(result, 0x14); // Minimum version needed to extract
-        result.putShort(ZipUtils.GP_FLAG_EFS); // UTF-8 character encoding used for entry name
-        result.putShort(ZipUtils.COMPRESSION_METHOD_DEFLATED);
+        result.putShort(gpFlags);
+        result.putShort(compressionMethod);
         ZipUtils.putUnsignedInt16(result, lastModifiedTime);
         ZipUtils.putUnsignedInt16(result, lastModifiedDate);
         ZipUtils.putUnsignedInt32(result, crc32);
@@ -232,6 +254,8 @@ public class CentralDirectoryRecord {
         result.flip();
         return new CentralDirectoryRecord(
                 result,
+                gpFlags,
+                compressionMethod,
                 lastModifiedTime,
                 lastModifiedDate,
                 crc32,

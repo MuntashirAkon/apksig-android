@@ -18,7 +18,7 @@ package com.android.apksig;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
-import com.android.apksig.apk.MinSdkVersionException;
+import com.android.apksig.internal.apk.AndroidBinXmlParser;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.v2.SignatureAlgorithm;
@@ -32,6 +32,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
@@ -135,6 +136,8 @@ public class ApkVerifier {
                                 + ")");
             }
         }
+        int maxSdkVersion = mMaxSdkVersion;
+
         ApkUtils.ZipSections zipSections;
         try {
             zipSections = ApkUtils.findZipSections(apk);
@@ -142,29 +145,25 @@ public class ApkVerifier {
             throw new ApkFormatException("Malformed APK: not a ZIP archive", e);
         }
 
+        ByteBuffer androidManifest = null;
+
         int minSdkVersion;
         if (mMinSdkVersion != null) {
             // No need to obtain minSdkVersion from the APK's AndroidManifest.xml
             minSdkVersion = mMinSdkVersion;
         } else {
             // Need to obtain minSdkVersion from the APK's AndroidManifest.xml
-            List<CentralDirectoryRecord> cdRecords;
-            try {
-                cdRecords = V1SchemeVerifier.parseZipCentralDirectory(apk, zipSections);
-            } catch (ApkFormatException e) {
-                throw new MinSdkVersionException(
-                        "Unable to determine APK's minimum supported Android platform version", e);
+            if (androidManifest == null) {
+                androidManifest = getAndroidManifestFromApk(apk, zipSections);
             }
             minSdkVersion =
-                    ApkSigner.getMinSdkVersionFromApk(
-                            cdRecords, apk.slice(0, zipSections.getZipCentralDirectoryOffset()));
+                    ApkUtils.getMinSdkVersionFromBinaryAndroidManifest(androidManifest.slice());
             if (minSdkVersion > mMaxSdkVersion) {
                 throw new IllegalArgumentException(
                         "minSdkVersion from APK (" + minSdkVersion + ") > maxSdkVersion ("
                                 + mMaxSdkVersion + ")");
             }
         }
-        int maxSdkVersion = mMaxSdkVersion;
 
         Result result = new Result();
 
@@ -175,7 +174,8 @@ public class ApkVerifier {
         if (maxSdkVersion >= AndroidSdkVersion.N) {
             foundApkSigSchemeIds = new HashSet<>(1);
             try {
-                V2SchemeVerifier.Result v2Result = V2SchemeVerifier.verify(apk, zipSections);
+                V2SchemeVerifier.Result v2Result = V2SchemeVerifier.verify(apk, zipSections,
+                        Math.max(minSdkVersion, AndroidSdkVersion.N), maxSdkVersion);
                 foundApkSigSchemeIds.add(APK_SIGNATURE_SCHEME_V2_ID);
                 result.mergeFrom(v2Result);
             } catch (V2SchemeVerifier.SignatureNotFoundException ignored) {}
@@ -184,6 +184,23 @@ public class ApkVerifier {
             }
         } else {
             foundApkSigSchemeIds = Collections.emptySet();
+        }
+
+        // Android O and newer requires that APKs targeting security sandbox version 2 and higher
+        // are signed using APK Signature Scheme v2 or newer.
+        if (maxSdkVersion >= AndroidSdkVersion.O) {
+            if (androidManifest == null) {
+                androidManifest = getAndroidManifestFromApk(apk, zipSections);
+            }
+            int targetSandboxVersion =
+                    getTargetSandboxVersionFromBinaryAndroidManifest(androidManifest.slice());
+            if (targetSandboxVersion > 1) {
+                if (foundApkSigSchemeIds.isEmpty()) {
+                    result.addError(
+                            Issue.NO_SIG_FOR_TARGET_SANDBOX_VERSION,
+                            targetSandboxVersion);
+                }
+            }
         }
 
         // Attempt to verify the APK using JAR signing if necessary. Platforms prior to Android N
@@ -272,6 +289,83 @@ public class ApkVerifier {
         return result;
     }
 
+    private static ByteBuffer getAndroidManifestFromApk(
+            DataSource apk, ApkUtils.ZipSections zipSections)
+                    throws IOException, ApkFormatException {
+        List<CentralDirectoryRecord> cdRecords =
+                V1SchemeVerifier.parseZipCentralDirectory(apk, zipSections);
+        try {
+            return ApkSigner.getAndroidManifestFromApk(
+                    cdRecords,
+                    apk.slice(0, zipSections.getZipCentralDirectoryOffset()));
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Failed to read AndroidManifest.xml", e);
+        }
+    }
+
+    /**
+     * Android resource ID of the {@code android:targetSandboxVersion} attribute in
+     * AndroidManifest.xml.
+     */
+    private static final int TARGET_SANDBOX_VERSION_ATTR_ID = 0x0101054c;
+
+    /**
+     * Returns the security sandbox version targeted by an APK with the provided
+     * {@code AndroidManifest.xml}.
+     *
+     * @param androidManifestContents contents of {@code AndroidManifest.xml} in binary Android
+     *        resource format
+     *
+     * @throws ApkFormatException if an error occurred while determining the version
+     */
+    private static int getTargetSandboxVersionFromBinaryAndroidManifest(
+            ByteBuffer androidManifestContents) throws ApkFormatException {
+        // Return the value of the android:targetSandboxVersion attribute of the top-level manifest
+        // element
+        try {
+            AndroidBinXmlParser parser = new AndroidBinXmlParser(androidManifestContents);
+            int eventType = parser.getEventType();
+            while (eventType != AndroidBinXmlParser.EVENT_END_DOCUMENT) {
+                if ((eventType == AndroidBinXmlParser.EVENT_START_ELEMENT)
+                        && (parser.getDepth() == 1)
+                        && ("manifest".equals(parser.getName()))
+                        && (parser.getNamespace().isEmpty())) {
+                    // In each manifest element, targetSandboxVersion defaults to 1
+                    int result = 1;
+                    for (int i = 0; i < parser.getAttributeCount(); i++) {
+                        if (parser.getAttributeNameResourceId(i)
+                                == TARGET_SANDBOX_VERSION_ATTR_ID) {
+                            int valueType = parser.getAttributeValueType(i);
+                            switch (valueType) {
+                                case AndroidBinXmlParser.VALUE_TYPE_INT:
+                                    result = parser.getAttributeIntValue(i);
+                                    break;
+                                default:
+                                    throw new ApkFormatException(
+                                            "Failed to determine APK's target sandbox version"
+                                                    + ": unsupported value type of"
+                                                    + " AndroidManifest.xml"
+                                                    + " android:targetSandboxVersion"
+                                                    + ". Only integer values supported.");
+                            }
+                            break;
+                        }
+                    }
+                    return result;
+                }
+                eventType = parser.next();
+            }
+            throw new ApkFormatException(
+                    "Failed to determine APK's target sandbox version"
+                            + " : no manifest element in AndroidManifest.xml");
+        } catch (AndroidBinXmlParser.XmlParserException e) {
+            throw new ApkFormatException(
+                    "Failed to determine APK's target sandbox version"
+                            + ": malformed AndroidManifest.xml",
+                    e);
+        }
+    }
+
     /**
      * Result of verifying an APKs signatures. The APK can be considered verified iff
      * {@link #isVerified()} returns {@code true}.
@@ -351,6 +445,10 @@ public class ApkVerifier {
          */
         public List<V2SchemeSignerInfo> getV2SchemeSigners() {
             return mV2SchemeSigners;
+        }
+
+        void addError(Issue msg, Object... parameters) {
+            mErrors.add(new IssueWithParams(msg, parameters));
         }
 
         /**
@@ -780,14 +878,17 @@ public class ApkVerifier {
          * <ul>
          * <li>Parameter 1: name of the signature block file ({@code String})</li>
          * <li>Parameter 2: digest algorithm OID ({@code String})</li>
-         * <li>Parameter 2: signature algorithm OID ({@code String})</li>
-         * <li>Parameter 3: API Levels on which this combination of algorithms is not supported
+         * <li>Parameter 3: signature algorithm OID ({@code String})</li>
+         * <li>Parameter 4: API Levels on which this combination of algorithms is not supported
          *     ({@code String})</li>
+         * <li>Parameter 5: user-friendly variant of digest algorithm ({@code String})</li>
+         * <li>Parameter 6: user-friendly variant of signature algorithm ({@code String})</li>
          * </ul>
          */
         JAR_SIG_UNSUPPORTED_SIG_ALG(
-                "JAR signature %1$s uses digest algorithm %2$s and signature algorithm %3$s which"
-                        + " is not supported on API Levels %4$s"),
+                "JAR signature %1$s uses digest algorithm %5$s and signature algorithm %6$s which"
+                        + " is not supported on API Level(s) %4$s for which this APK is being"
+                        + " verified"),
 
         /**
          * An exception was encountered while parsing JAR signature contained in a signature block.
@@ -895,6 +996,18 @@ public class ApkVerifier {
          * from this signer.
          */
         JAR_SIG_MISSING("No JAR signature from this signer"),
+
+        /**
+         * APK is targeting a sandbox version which requires APK Signature Scheme v2 signature but
+         * no such signature was found.
+         *
+         * <ul>
+         * <li>Parameter 1: target sandbox version ({@code Integer})</li>
+         * </ul>
+         */
+        NO_SIG_FOR_TARGET_SANDBOX_VERSION(
+                "Missing APK Signature Scheme v2 signature required for target sandbox version"
+                        + " %1$d"),
 
         /**
          * APK which is both JAR-signed and signed using APK Signature Scheme v2 contains a JAR

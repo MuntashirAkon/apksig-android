@@ -28,17 +28,21 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyFactory;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.Provider;
 import java.security.PublicKey;
+import java.security.Security;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
@@ -65,7 +69,7 @@ import javax.crypto.spec.PBEKeySpec;
  */
 public class ApkSignerTool {
 
-    private static final String VERSION = "0.4";
+    private static final String VERSION = "0.8";
     private static final String HELP_PAGE_GENERAL = "help.txt";
     private static final String HELP_PAGE_SIGN = "help_sign.txt";
     private static final String HELP_PAGE_VERIFY = "help_verify.txt";
@@ -120,6 +124,8 @@ public class ApkSignerTool {
         int maxSdkVersion = Integer.MAX_VALUE;
         List<SignerParams> signers = new ArrayList<>(1);
         SignerParams signerParams = new SignerParams();
+        List<ProviderInstallSpec> providers = new ArrayList<>();
+        ProviderInstallSpec providerParams = new ProviderInstallSpec();
         OptionsParser optionsParser = new OptionsParser(params);
         String optionName;
         String optionOriginalForm = null;
@@ -156,6 +162,16 @@ public class ApkSignerTool {
                         optionsParser.getRequiredValue("KeyStore password");
             } else if ("key-pass".equals(optionName)) {
                 signerParams.keyPasswordSpec = optionsParser.getRequiredValue("Key password");
+            } else if ("pass-encoding".equals(optionName)) {
+                String charsetName =
+                        optionsParser.getRequiredValue("Password character encoding");
+                try {
+                    signerParams.passwordCharset = PasswordRetriever.getCharsetByName(charsetName);
+                } catch (IllegalArgumentException e) {
+                    throw new ParameterException(
+                            "Unsupported password character encoding requested using"
+                                    + " --pass-encoding: " + charsetName);
+                }
             } else if ("v1-signer-name".equals(optionName)) {
                 signerParams.v1SigFileBasename =
                         optionsParser.getRequiredValue("JAR signature file basename");
@@ -177,6 +193,20 @@ public class ApkSignerTool {
                 signerParams.certFile = optionsParser.getRequiredValue("Certificate file");
             } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
                 verbose = optionsParser.getOptionalBooleanValue(true);
+            } else if ("next-provider".equals(optionName)) {
+                if (!providerParams.isEmpty()) {
+                    providers.add(providerParams);
+                    providerParams = new ProviderInstallSpec();
+                }
+            } else if ("provider-class".equals(optionName)) {
+                providerParams.className =
+                        optionsParser.getRequiredValue("JCA Provider class name");
+            } else if ("provider-arg".equals(optionName)) {
+                providerParams.constructorParam =
+                        optionsParser.getRequiredValue("JCA Provider constructor argument");
+            } else if ("provider-pos".equals(optionName)) {
+                providerParams.position =
+                        optionsParser.getRequiredIntValue("JCA Provider position");
             } else {
                 throw new ParameterException(
                         "Unsupported option: " + optionOriginalForm + ". See --help for supported"
@@ -187,6 +217,10 @@ public class ApkSignerTool {
             signers.add(signerParams);
         }
         signerParams = null;
+        if (!providerParams.isEmpty()) {
+            providers.add(providerParams);
+        }
+        providerParams = null;
 
         if (signers.isEmpty()) {
             throw new ParameterException("At least one signer must be specified");
@@ -215,6 +249,11 @@ public class ApkSignerTool {
             throw new ParameterException(
                     "Min API Level (" + minSdkVersion + ") > max API Level (" + maxSdkVersion
                             + ")");
+        }
+
+        // Install additional JCA Providers
+        for (ProviderInstallSpec providerInstallSpec : providers) {
+            providerInstallSpec.installProvider();
         }
 
         List<ApkSigner.SignerConfig> signerConfigs = new ArrayList<>(signers.size());
@@ -529,6 +568,46 @@ public class ApkSignerTool {
         }
     }
 
+    private static class ProviderInstallSpec {
+        String className;
+        String constructorParam;
+        Integer position;
+
+        private boolean isEmpty() {
+            return (className == null) && (constructorParam == null) && (position == null);
+        }
+
+        private void installProvider() throws Exception {
+            if (className == null) {
+                throw new ParameterException(
+                        "JCA Provider class name (--provider-class) must be specified");
+            }
+
+            Class<?> providerClass = Class.forName(className);
+            if (!Provider.class.isAssignableFrom(providerClass)) {
+                throw new ParameterException(
+                        "JCA Provider class " + providerClass + " not subclass of "
+                                + Provider.class.getName());
+            }
+            Provider provider;
+            if (constructorParam != null) {
+                // Single-arg Provider constructor
+                provider =
+                        (Provider) providerClass.getConstructor(String.class)
+                                .newInstance(constructorParam);
+            } else {
+                // No-arg Provider constructor
+                provider = (Provider) providerClass.getConstructor().newInstance();
+            }
+
+            if (position == null) {
+                Security.addProvider(provider);
+            } else {
+                Security.insertProviderAt(provider, position);
+            }
+        }
+    }
+
     private static class SignerParams {
         String name;
 
@@ -536,6 +615,7 @@ public class ApkSignerTool {
         String keystoreKeyAlias;
         String keystorePasswordSpec;
         String keyPasswordSpec;
+        Charset passwordCharset;
         String keystoreType;
         String keystoreProviderName;
         String keystoreProviderClass;
@@ -555,6 +635,7 @@ public class ApkSignerTool {
                     && (keystoreKeyAlias == null)
                     && (keystorePasswordSpec == null)
                     && (keyPasswordSpec == null)
+                    && (passwordCharset == null)
                     && (keystoreType == null)
                     && (keystoreProviderName == null)
                     && (keystoreProviderClass == null)
@@ -621,31 +702,27 @@ public class ApkSignerTool {
             }
 
             // 2. Load the KeyStore
-            char[] keystorePwd = null;
-            if ("NONE".equals(keystoreFile)) {
-                ks.load(null);
-            } else {
+            List<char[]> keystorePasswords;
+            Charset[] additionalPasswordEncodings;
+            {
                 String keystorePasswordSpec =
                         (this.keystorePasswordSpec != null)
                                 ?  this.keystorePasswordSpec : PasswordRetriever.SPEC_STDIN;
-                String keystorePwdString =
-                        passwordRetriever.getPassword(
-                                keystorePasswordSpec, "Keystore password for " + name);
-                keystorePwd = keystorePwdString.toCharArray();
-                try (FileInputStream in = new FileInputStream(keystoreFile)) {
-                    ks.load(in, keystorePwd);
-                }
+                additionalPasswordEncodings =
+                        (passwordCharset != null)
+                                ? new Charset[] {passwordCharset} : new Charset[0];
+                keystorePasswords =
+                        passwordRetriever.getPasswords(
+                                keystorePasswordSpec,
+                                "Keystore password for " + name,
+                                additionalPasswordEncodings);
+                loadKeyStoreFromFile(
+                        ks,
+                        "NONE".equals(keystoreFile) ? null : keystoreFile,
+                        keystorePasswords);
             }
 
             // 3. Load the PrivateKey and cert chain from KeyStore
-            char[] keyPwd;
-            if (keyPasswordSpec == null) {
-                keyPwd = keystorePwd;
-            } else {
-                keyPwd =
-                        passwordRetriever.getPassword(keyPasswordSpec, "Key password for " + name)
-                                .toCharArray();
-            }
             String keyAlias = null;
             PrivateKey key = null;
             try {
@@ -680,25 +757,34 @@ public class ApkSignerTool {
                     throw new ParameterException(
                             keystoreFile + " entry \"" + keyAlias + "\" does not contain a key");
                 }
+
                 Key entryKey;
-                if (keyPwd != null) {
-                    // Key password specified -- load this key as a password-protected key
-                    entryKey = ks.getKey(keyAlias, keyPwd);
+                if (keyPasswordSpec != null) {
+                    // Key password spec is explicitly specified. Use this spec to obtain the
+                    // password and then load the key using that password.
+                    List<char[]> keyPasswords =
+                            passwordRetriever.getPasswords(
+                                    keyPasswordSpec,
+                                    "Key \"" + keyAlias + "\" password for " + name,
+                                    additionalPasswordEncodings);
+                    entryKey = getKeyStoreKey(ks, keyAlias, keyPasswords);
                 } else {
-                    // Key password not specified -- try to load this key without using a password
+                    // Key password spec is not specified. This means we should assume that key
+                    // password is the same as the keystore password and that, if this assumption is
+                    // wrong, we should prompt for key password and retry loading the key using that
+                    // password.
                     try {
-                        entryKey = ks.getKey(keyAlias, null);
+                        entryKey = getKeyStoreKey(ks, keyAlias, keystorePasswords);
                     } catch (UnrecoverableKeyException expected) {
-                        // Looks like this might be a password-protected key. Prompt for password
-                        // and try loading the key using the password.
-                        keyPwd =
-                                passwordRetriever.getPassword(
+                        List<char[]> keyPasswords =
+                                passwordRetriever.getPasswords(
                                         PasswordRetriever.SPEC_STDIN,
-                                        "Password for key with alias \"" + keyAlias + "\"")
-                                                .toCharArray();
-                        entryKey = ks.getKey(keyAlias, keyPwd);
+                                        "Key \"" + keyAlias + "\" password for " + name,
+                                        additionalPasswordEncodings);
+                        entryKey = getKeyStoreKey(ks, keyAlias, keyPasswords);
                     }
                 }
+
                 if (entryKey == null) {
                     throw new ParameterException(
                             keystoreFile + " entry \"" + keyAlias + "\" does not contain a key");
@@ -727,6 +813,53 @@ public class ApkSignerTool {
             }
         }
 
+        /**
+         * Loads the password-protected keystore from storage.
+         *
+         * @param file file backing the keystore or {@code null} if the keystore is not file-backed,
+         *        for example, a PKCS #11 KeyStore.
+         */
+        private static void loadKeyStoreFromFile(KeyStore ks, String file, List<char[]> passwords)
+                throws Exception {
+            Exception lastFailure = null;
+            for (char[] password : passwords) {
+                try {
+                    if (file != null) {
+                        try (FileInputStream in = new FileInputStream(file)) {
+                            ks.load(in, password);
+                        }
+                    } else {
+                        ks.load(null, password);
+                    }
+                    return;
+                } catch (Exception e) {
+                    lastFailure = e;
+                }
+            }
+            if (lastFailure == null) {
+                throw new RuntimeException("No keystore passwords");
+            } else {
+                throw lastFailure;
+            }
+        }
+
+        private static Key getKeyStoreKey(KeyStore ks, String keyAlias, List<char[]> passwords)
+                throws UnrecoverableKeyException, NoSuchAlgorithmException, KeyStoreException {
+            UnrecoverableKeyException lastFailure = null;
+            for (char[] password : passwords) {
+                try {
+                    return ks.getKey(keyAlias, password);
+                } catch (UnrecoverableKeyException e) {
+                    lastFailure = e;
+                }
+            }
+            if (lastFailure == null) {
+                throw new RuntimeException("No key passwords");
+            } else {
+                throw lastFailure;
+            }
+        }
+
         private void loadPrivateKeyAndCertsFromFiles(PasswordRetriever passwordRetriver)
                 throws Exception {
             if (keyFile == null) {
@@ -746,15 +879,15 @@ public class ApkSignerTool {
                 // The blob is indeed an encrypted private key blob
                 String passwordSpec =
                         (keyPasswordSpec != null) ? keyPasswordSpec : PasswordRetriever.SPEC_STDIN;
-                String keyPassword =
-                        passwordRetriver.getPassword(
-                                passwordSpec, "Private key password for " + name);
-
-                PBEKeySpec decryptionKeySpec = new PBEKeySpec(keyPassword.toCharArray());
-                SecretKey decryptionKey =
-                        SecretKeyFactory.getInstance(encryptedPrivateKeyInfo.getAlgName())
-                                .generateSecret(decryptionKeySpec);
-                keySpec = encryptedPrivateKeyInfo.getKeySpec(decryptionKey);
+                Charset[] additionalPasswordEncodings =
+                        (passwordCharset != null)
+                                ? new Charset[] {passwordCharset} : new Charset[0];
+                List<char[]> keyPasswords =
+                        passwordRetriver.getPasswords(
+                                passwordSpec,
+                                "Private key password for " + name,
+                                additionalPasswordEncodings);
+                keySpec = decryptPkcs8EncodedKey(encryptedPrivateKeyInfo, keyPasswords);
             } catch (IOException e) {
                 // The blob is not an encrypted private key blob
                 if (keyPasswordSpec == null) {
@@ -785,6 +918,33 @@ public class ApkSignerTool {
                 certList.add((X509Certificate) cert);
             }
             this.certs = certList;
+        }
+
+        private static PKCS8EncodedKeySpec decryptPkcs8EncodedKey(
+                EncryptedPrivateKeyInfo encryptedPrivateKeyInfo, List<char[]> passwords)
+                throws NoSuchAlgorithmException, InvalidKeySpecException, InvalidKeyException {
+            SecretKeyFactory keyFactory =
+                    SecretKeyFactory.getInstance(encryptedPrivateKeyInfo.getAlgName());
+            InvalidKeySpecException lastKeySpecException = null;
+            InvalidKeyException lastKeyException = null;
+            for (char[] password : passwords) {
+                PBEKeySpec decryptionKeySpec = new PBEKeySpec(password);
+                try {
+                    SecretKey decryptionKey = keyFactory.generateSecret(decryptionKeySpec);
+                    return encryptedPrivateKeyInfo.getKeySpec(decryptionKey);
+                } catch (InvalidKeySpecException e) {
+                    lastKeySpecException = e;
+                } catch (InvalidKeyException e) {
+                    lastKeyException = e;
+                }
+            }
+            if ((lastKeyException == null) && (lastKeySpecException == null)) {
+                throw new RuntimeException("No passwords");
+            } else if (lastKeyException != null) {
+                throw lastKeyException;
+            } else {
+                throw lastKeySpecException;
+            }
         }
 
         private static PrivateKey loadPkcs8EncodedPrivateKey(PKCS8EncodedKeySpec spec)

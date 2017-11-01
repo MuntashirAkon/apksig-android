@@ -20,8 +20,9 @@ import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.ApkVerifier.IssueWithParams;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
+import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.ByteBufferDataSource;
-import com.android.apksig.internal.util.DelegatingX509Certificate;
+import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;
@@ -38,7 +39,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
-import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -46,12 +46,14 @@ import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * APK Signature Scheme v2 verifier.
@@ -84,9 +86,9 @@ public abstract class V2SchemeVerifier {
      * @throws SignatureNotFoundException if no APK Signature Scheme v2 signatures are found
      * @throws IOException if an I/O error occurs when reading the APK
      */
-    public static Result verify(DataSource apk, ApkUtils.ZipSections zipSections)
-            throws IOException, ApkFormatException, NoSuchAlgorithmException,
-                    SignatureNotFoundException {
+    public static Result verify(DataSource apk, ApkUtils.ZipSections zipSections, int minSdkVersion,
+            int maxSdkVersion) throws IOException, ApkFormatException, NoSuchAlgorithmException,
+           SignatureNotFoundException {
         Result result = new Result();
         SignatureInfo signatureInfo = findSignature(apk, zipSections, result);
 
@@ -101,6 +103,8 @@ public abstract class V2SchemeVerifier {
                 signatureInfo.signatureBlock,
                 centralDir,
                 eocd,
+                minSdkVersion,
+                maxSdkVersion,
                 result);
         return result;
     }
@@ -115,14 +119,17 @@ public abstract class V2SchemeVerifier {
             ByteBuffer apkSignatureSchemeV2Block,
             DataSource centralDir,
             ByteBuffer eocd,
-            Result result) throws IOException, NoSuchAlgorithmException {
+            int minSdkVersion,
+            int maxSdkVersion,
+            Result result)
+            throws IOException, NoSuchAlgorithmException, SignatureNotFoundException {
         Set<ContentDigestAlgorithm> contentDigestsToVerify = new HashSet<>(1);
-        parseSigners(apkSignatureSchemeV2Block, contentDigestsToVerify, result);
+        parseSigners(apkSignatureSchemeV2Block, contentDigestsToVerify, minSdkVersion,
+                maxSdkVersion, result);
         if (result.containsErrors()) {
             return;
         }
-        verifyIntegrity(
-                beforeApkSigningBlock, centralDir, eocd, contentDigestsToVerify, result);
+        verifyIntegrity(beforeApkSigningBlock, centralDir, eocd, contentDigestsToVerify, result);
         if (!result.containsErrors()) {
             result.verified = true;
         }
@@ -139,7 +146,9 @@ public abstract class V2SchemeVerifier {
     private static void parseSigners(
             ByteBuffer apkSignatureSchemeV2Block,
             Set<ContentDigestAlgorithm> contentDigestsToVerify,
-            Result result) throws NoSuchAlgorithmException {
+            int minSdkVersion,
+            int maxSdkVersion,
+            Result result) throws NoSuchAlgorithmException, SignatureNotFoundException {
         ByteBuffer signers;
         try {
             signers = getLengthPrefixedSlice(apkSignatureSchemeV2Block);
@@ -167,7 +176,8 @@ public abstract class V2SchemeVerifier {
             result.signers.add(signerInfo);
             try {
                 ByteBuffer signer = getLengthPrefixedSlice(signers);
-                parseSigner(signer, certFactory, signerInfo, contentDigestsToVerify);
+                parseSigner(signer, certFactory, signerInfo, contentDigestsToVerify, minSdkVersion,
+                        maxSdkVersion);
             } catch (ApkFormatException | BufferUnderflowException e) {
                 signerInfo.addError(Issue.V2_SIG_MALFORMED_SIGNER);
                 return;
@@ -186,7 +196,9 @@ public abstract class V2SchemeVerifier {
             ByteBuffer signerBlock,
             CertificateFactory certFactory,
             Result.SignerInfo result,
-            Set<ContentDigestAlgorithm> contentDigestsToVerify)
+            Set<ContentDigestAlgorithm> contentDigestsToVerify,
+            int minSdkVersion,
+            int maxSdkVersion)
                     throws ApkFormatException, NoSuchAlgorithmException {
         ByteBuffer signedData = getLengthPrefixedSlice(signerBlock);
         byte[] signedDataBytes = new byte[signedData.remaining()];
@@ -225,8 +237,11 @@ public abstract class V2SchemeVerifier {
         }
 
         // Verify signatures over signed-data block using the public key
-        List<SupportedSignature> signaturesToVerify = getSignaturesToVerify(supportedSignatures);
-        if (signaturesToVerify.isEmpty()) {
+        List<SupportedSignature> signaturesToVerify = null;
+        try {
+            signaturesToVerify = getSignaturesToVerify(supportedSignatures, minSdkVersion,
+                    maxSdkVersion);
+        } catch (NoSupportedSignaturesException e) {
             result.addError(Issue.V2_SIG_NO_SUPPORTED_SIGNATURES);
             return;
         }
@@ -295,8 +310,8 @@ public abstract class V2SchemeVerifier {
             }
             // Wrap the cert so that the result's getEncoded returns exactly the original encoded
             // form. Without this, getEncoded may return a different form from what was stored in
-            // the signature. This is becase some X509Certificate(Factory) implementations re-encode
-            // certificates.
+            // the signature. This is because some X509Certificate(Factory) implementations
+            // re-encode certificates.
             certificate = new GuaranteedEncodedFormX509Certificate(certificate, encodedCert);
             result.certs.add(certificate);
         }
@@ -367,26 +382,66 @@ public abstract class V2SchemeVerifier {
         }
     }
 
+    private static class NoSupportedSignaturesException extends Exception {
+        private static final long serialVersionUID = 1L;
+
+        public NoSupportedSignaturesException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * Returns the subset of signatures to be verified by the union of requested Android platform
+     * versions. Each Android platform version typically picks just one signature per signer to
+     * verify. However, because this method is dealing with more than one platform version, the
+     * result may be more than one signature.
+     *
+     * @throws NoSupportedSignaturesException if no supported sigatures were found for some Android
+     *         platform version in the specific range.
+     */
     private static List<SupportedSignature> getSignaturesToVerify(
-            List<SupportedSignature> signatures) {
-        // Pick the signature with the strongest algorithm, to mimic Android's behavior.
-        SignatureAlgorithm bestSigAlgorithm = null;
-        byte[] bestSigAlgorithmSignatureBytes = null;
+            List<SupportedSignature> signatures, int minSdkVersion, int maxSdkVersion)
+            throws NoSupportedSignaturesException {
+        // Pick the signature with the strongest algorithm at all required SDK versions, to mimic
+        // Android's behavior on those versions.
+        //
+        // Here we assume that, once introduced, a signature algorithm continues to be supported in
+        // all future Android versions. We also assume that the better-than relationship between
+        // algorithms is exactly the same on all Android platform versions (except that older
+        // platforms might support fewer algorithms). If these assumption are no longer true, the
+        // logic here will need to change accordingly.
+        Map<Integer, SupportedSignature> bestSigAlgorithmOnSdkVersion = new HashMap<>();
+        int minProvidedSignaturesVersion = Integer.MAX_VALUE;
         for (SupportedSignature sig : signatures) {
             SignatureAlgorithm sigAlgorithm = sig.algorithm;
-            if ((bestSigAlgorithm == null)
-                    || (compareSignatureAlgorithm(sigAlgorithm, bestSigAlgorithm) > 0)) {
-                bestSigAlgorithm = sigAlgorithm;
-                bestSigAlgorithmSignatureBytes = sig.signature;
+            int sigMinSdkVersion = sigAlgorithm.getMinSdkVersion();
+            if (sigMinSdkVersion > maxSdkVersion) {
+                continue;
+            }
+            if (sigMinSdkVersion < minProvidedSignaturesVersion) {
+                minProvidedSignaturesVersion = sigMinSdkVersion;
+            }
+
+            SupportedSignature candidate = bestSigAlgorithmOnSdkVersion.get(sigMinSdkVersion);
+            if ((candidate == null)
+                    || (compareSignatureAlgorithm(sigAlgorithm, candidate.algorithm) > 0)) {
+                bestSigAlgorithmOnSdkVersion.put(sigMinSdkVersion, sig);
             }
         }
 
-        if (bestSigAlgorithm == null) {
-            return Collections.emptyList();
-        } else {
-            return Collections.singletonList(
-                    new SupportedSignature(bestSigAlgorithm, bestSigAlgorithmSignatureBytes));
+        // Must have some supported signature algorithms for minSdkVersion.
+        if (minSdkVersion < minProvidedSignaturesVersion) {
+            throw new NoSupportedSignaturesException(
+                    "Minimum provided signature version " + minProvidedSignaturesVersion +
+                    " < minSdkVersion " + minSdkVersion);
         }
+        if (bestSigAlgorithmOnSdkVersion.isEmpty()) {
+            throw new NoSupportedSignaturesException("No supported signature");
+        }
+        return bestSigAlgorithmOnSdkVersion.values().stream()
+                .sorted((sig1, sig2) -> Integer.compare(
+                        sig1.algorithm.getId(), sig2.algorithm.getId()))
+                .collect(Collectors.toList());
     }
 
     private static class SupportedSignature {
@@ -796,24 +851,6 @@ public abstract class V2SchemeVerifier {
         byte[] result = new byte[len];
         buf.get(result);
         return result;
-    }
-
-    /**
-     * {@link X509Certificate} whose {@link #getEncoded()} returns the data provided at construction
-     * time.
-     */
-    private static class GuaranteedEncodedFormX509Certificate extends DelegatingX509Certificate {
-        private byte[] mEncodedForm;
-
-        public GuaranteedEncodedFormX509Certificate(X509Certificate wrapped, byte[] encodedForm) {
-            super(wrapped);
-            this.mEncodedForm = (encodedForm != null) ? encodedForm.clone() : null;
-        }
-
-        @Override
-        public byte[] getEncoded() throws CertificateEncodingException {
-            return (mEncodedForm != null) ? mEncodedForm.clone() : null;
-        }
     }
 
     private static final char[] HEX_DIGITS = "01234567890abcdef".toCharArray();

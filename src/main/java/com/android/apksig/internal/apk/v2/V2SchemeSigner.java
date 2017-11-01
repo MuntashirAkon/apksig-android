@@ -16,6 +16,7 @@
 
 package com.android.apksig.internal.apk.v2;
 
+import com.android.apksig.internal.util.ChainedDataSource;
 import com.android.apksig.internal.util.MessageDigestSink;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.ZipUtils;
@@ -77,6 +78,7 @@ public abstract class V2SchemeSigner {
      */
 
     private static final int CONTENT_DIGESTED_CHUNK_MAX_SIZE_BYTES = 1024 * 1024;
+    private static final int ANDROID_COMMON_PAGE_ALIGNMENT_BYTES = 4096;
 
     private static final byte[] APK_SIGNING_BLOCK_MAGIC =
           new byte[] {
@@ -84,6 +86,7 @@ public abstract class V2SchemeSigner {
               0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x20, 0x34, 0x32,
           };
     private static final int APK_SIGNATURE_SCHEME_V2_BLOCK_ID = 0x7109871a;
+    private static final int VERITY_PADDING_BLOCK_ID = 0x42726577;
 
     /**
      * Signer configuration.
@@ -156,7 +159,8 @@ public abstract class V2SchemeSigner {
 
     /**
      * Signs the provided APK using APK Signature Scheme v2 and returns the APK Signing Block
-     * containing the signature.
+     * containing the signature and the number of 0x00 bytes to pad the start of the APK Signing
+     * Block.
      *
      * @param signerConfigs signer configurations, one for each signer At least one signer config
      *        must be provided.
@@ -169,11 +173,12 @@ public abstract class V2SchemeSigner {
      * @throws SignatureException if an error occurs when computing digests of generating
      *         signatures
      */
-    public static byte[] generateApkSigningBlock(
+    public static Pair<byte[], Integer> generateApkSigningBlock(
             DataSource beforeCentralDir,
             DataSource centralDir,
             DataSource eocd,
-            List<SignerConfig> signerConfigs)
+            List<SignerConfig> signerConfigs,
+            boolean apkSigningBlockPaddingSupported)
                         throws IOException, NoSuchAlgorithmException, InvalidKeyException,
                                 SignatureException {
         if (signerConfigs.isEmpty()) {
@@ -187,6 +192,18 @@ public abstract class V2SchemeSigner {
             for (SignatureAlgorithm signatureAlgorithm : signerConfig.signatureAlgorithms) {
                 contentDigestAlgorithms.add(signatureAlgorithm.getContentDigestAlgorithm());
             }
+        }
+
+        // Ensure APK Signing Block starts from page boundary.
+        int padSizeBeforeSigningBlock = 0;
+        if (apkSigningBlockPaddingSupported &&
+                (beforeCentralDir.size() % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES != 0)) {
+            padSizeBeforeSigningBlock = (int) (ANDROID_COMMON_PAGE_ALIGNMENT_BYTES -
+                    beforeCentralDir.size() % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES);
+            beforeCentralDir = new ChainedDataSource(
+                    beforeCentralDir,
+                    DataSources.asDataSource(
+                            ByteBuffer.allocate(padSizeBeforeSigningBlock)));
         }
 
         // Ensure that, when digesting, ZIP End of Central Directory record's Central Directory
@@ -216,7 +233,8 @@ public abstract class V2SchemeSigner {
         }
 
         // Sign the digests and wrap the signatures and signer info into an APK Signing Block.
-        return generateApkSigningBlock(signerConfigs, contentDigests);
+        return Pair.of(generateApkSigningBlock(signerConfigs, contentDigests),
+                padSizeBeforeSigningBlock);
     }
 
     static Map<ContentDigestAlgorithm, byte[]> computeContentDigests(
@@ -349,6 +367,7 @@ public abstract class V2SchemeSigner {
         //     uint64:           size (excluding this field)
         //     uint32:           ID
         //     (size - 4) bytes: value
+        // (extra dummy ID-value for padding to make block size a multiple of 4096 bytes)
         // uint64:  size (same as the one above)
         // uint128: magic
 
@@ -358,6 +377,20 @@ public abstract class V2SchemeSigner {
                 + 8 // size
                 + 16 // magic
                 ;
+        ByteBuffer paddingPair = null;
+        if (resultSize % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES != 0) {
+            int padding = ANDROID_COMMON_PAGE_ALIGNMENT_BYTES -
+                    (resultSize % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES);
+            if (padding < 12) {  // minimum size of an ID-value pair
+                padding += ANDROID_COMMON_PAGE_ALIGNMENT_BYTES;
+            }
+            paddingPair = ByteBuffer.allocate(padding).order(ByteOrder.LITTLE_ENDIAN);
+            paddingPair.putLong(padding - 8);
+            paddingPair.putInt(VERITY_PADDING_BLOCK_ID);
+            paddingPair.rewind();
+            resultSize += padding;
+        }
+
         ByteBuffer result = ByteBuffer.allocate(resultSize);
         result.order(ByteOrder.LITTLE_ENDIAN);
         long blockSizeFieldValue = resultSize - 8;
@@ -367,6 +400,10 @@ public abstract class V2SchemeSigner {
         result.putLong(pairSizeFieldValue);
         result.putInt(APK_SIGNATURE_SCHEME_V2_BLOCK_ID);
         result.put(apkSignatureSchemeV2Block);
+
+        if (paddingPair != null) {
+            result.put(paddingPair);
+        }
 
         result.putLong(blockSizeFieldValue);
         result.put(APK_SIGNING_BLOCK_MAGIC);
