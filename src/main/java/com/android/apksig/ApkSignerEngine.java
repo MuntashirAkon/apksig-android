@@ -17,7 +17,6 @@
 package com.android.apksig;
 
 import com.android.apksig.apk.ApkFormatException;
-import com.android.apksig.internal.util.Pair;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
 import java.io.Closeable;
