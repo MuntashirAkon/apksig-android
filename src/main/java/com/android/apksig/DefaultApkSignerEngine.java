@@ -459,6 +459,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         return mAddV1SignatureRequest;
     }
 
+    @Deprecated
     @Override
     public OutputApkSigningBlockRequest outputZipSections(
             DataSource zipEntries,
@@ -639,6 +640,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private static class OutputApkSigningBlockRequestImpl
             implements OutputApkSigningBlockRequest, OutputApkSigningBlockRequest2 {
         private final byte[] mApkSigningBlock;
