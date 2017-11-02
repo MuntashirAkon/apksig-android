@@ -477,6 +477,7 @@ public abstract class V2SchemeVerifier {
                     case CHUNKED_SHA256:
                         return 0;
                     case CHUNKED_SHA512:
+                    case VERITY_CHUNKED_SHA256:
                         return -1;
                     default:
                         throw new IllegalArgumentException("Unknown alg2: " + alg2);
@@ -484,9 +485,21 @@ public abstract class V2SchemeVerifier {
             case CHUNKED_SHA512:
                 switch (alg2) {
                     case CHUNKED_SHA256:
+                    case VERITY_CHUNKED_SHA256:
                         return 1;
                     case CHUNKED_SHA512:
                         return 0;
+                    default:
+                        throw new IllegalArgumentException("Unknown alg2: " + alg2);
+                }
+            case VERITY_CHUNKED_SHA256:
+                switch (alg2) {
+                    case CHUNKED_SHA256:
+                        return 1;
+                    case VERITY_CHUNKED_SHA256:
+                        return 0;
+                    case CHUNKED_SHA512:
+                        return -1;
                     default:
                         throw new IllegalArgumentException("Unknown alg2: " + alg2);
                 }
@@ -525,11 +538,9 @@ public abstract class V2SchemeVerifier {
             actualContentDigests =
                     V2SchemeSigner.computeContentDigests(
                             contentDigestAlgorithms,
-                            new DataSource[] {
-                                    beforeApkSigningBlock,
-                                    centralDir,
-                                    new ByteBufferDataSource(modifiedEocd)
-                            });
+                            beforeApkSigningBlock,
+                            centralDir,
+                            new ByteBufferDataSource(modifiedEocd));
         } catch (DigestException e) {
             throw new RuntimeException("Failed to compute content digests", e);
         }
