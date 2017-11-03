@@ -16,7 +16,6 @@
 
 package com.android.apksig.internal.util;
 
-import com.android.apksig.internal.zip.EocdRecord;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
