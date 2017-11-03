@@ -473,9 +473,9 @@ public interface ApkSignerEngine extends Closeable {
      * <p>The APK Signing Block returned by {@link #getApkSigningBlock()} must be placed into the
      * output APK such that the block is immediately before the ZIP Central Directory. Immediately
      * before the APK Signing Block must be padding consists of the number of 0x00 bytes returned by
-     * {@link getPaddingSizeBeforeApkSigningBlock()}. The offset of ZIP Central Directory in the ZIP
-     * End of Central Directory record must be adjusted accordingly, and then {@link #done()} must
-     * be invoked.
+     * {@link #getPaddingSizeBeforeApkSigningBlock()}. The offset of ZIP Central Directory in the
+     * ZIP End of Central Directory record must be adjusted accordingly, and then {@link #done()}
+     * must be invoked.
      *
      * <p>If the output contains an APK Signing Block, that block must be replaced by the block
      * contained in this request.
