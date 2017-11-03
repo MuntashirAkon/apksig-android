@@ -41,6 +41,8 @@ import javax.security.auth.x500.X500Principal;
  * {@code X509Certificate}.
  */
 public class DelegatingX509Certificate extends X509Certificate {
+    private static final long serialVersionUID = 1L;
+
     private final X509Certificate mDelegate;
 
     public DelegatingX509Certificate(X509Certificate delegate) {
