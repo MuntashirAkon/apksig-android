@@ -442,16 +442,7 @@ public class ApkSigner {
             outputJarSignatureRequest.done();
         }
 
-        // Step 8. Generate padding to complete 4 KB page so that the APK Signing Block will be 4 KB
-        // aligned.
-        if (outputOffset % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES != 0) {
-            long apkSigningBlockPadSize = ANDROID_COMMON_PAGE_ALIGNMENT_BYTES -
-                    outputOffset % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES;
-            outputApkOut.consume(ByteBuffer.allocate((int) apkSigningBlockPadSize));
-            outputOffset += apkSigningBlockPadSize;
-        }
-
-        // Step 9. Construct output ZIP Central Directory in an in-memory buffer
+        // Step 8. Construct output ZIP Central Directory in an in-memory buffer
         long outputCentralDirSizeBytes = 0;
         for (CentralDirectoryRecord record : outputCdRecords) {
             outputCentralDirSizeBytes += record.getSize();
@@ -470,7 +461,7 @@ public class ApkSigner {
         long outputCentralDirStartOffset = outputOffset;
         int outputCentralDirRecordCount = outputCdRecords.size();
 
-        // Step 10. Construct output ZIP End of Central Directory record in an in-memory buffer
+        // Step 9. Construct output ZIP End of Central Directory record in an in-memory buffer
         ByteBuffer outputEocd =
                 EocdRecord.createWithModifiedCentralDirectoryInfo(
                         inputZipSections.getZipEndOfCentralDirectory(),
@@ -478,22 +469,25 @@ public class ApkSigner {
                         outputCentralDirDataSource.size(),
                         outputCentralDirStartOffset);
 
-        // Step 11. Generate and output APK Signature Scheme v2 signatures, if necessary. This may
+        // Step 10. Generate and output APK Signature Scheme v2 signatures, if necessary. This may
         // insert an APK Signing Block just before the output's ZIP Central Directory
-        ApkSignerEngine.OutputApkSigningBlockRequest outputApkSigingBlockRequest =
-                signerEngine.outputZipSections(
+        ApkSignerEngine.OutputApkSigningBlockRequest2 outputApkSigningBlockRequest =
+                signerEngine.outputZipSections2(
                         outputApkIn,
                         outputCentralDirDataSource,
                         DataSources.asDataSource(outputEocd));
-        if (outputApkSigingBlockRequest != null) {
-            byte[] outputApkSigningBlock = outputApkSigingBlockRequest.getApkSigningBlock();
+
+        if (outputApkSigningBlockRequest != null) {
+            int padding = outputApkSigningBlockRequest.getPaddingSizeBeforeApkSigningBlock();
+            outputApkOut.consume(ByteBuffer.allocate(padding));
+            byte[] outputApkSigningBlock = outputApkSigningBlockRequest.getApkSigningBlock();
             outputApkOut.consume(outputApkSigningBlock, 0, outputApkSigningBlock.length);
-            ZipUtils.setZipEocdCentralDirectoryOffset(
-                    outputEocd, outputCentralDirStartOffset + outputApkSigningBlock.length);
-            outputApkSigingBlockRequest.done();
+            ZipUtils.setZipEocdCentralDirectoryOffset(outputEocd,
+                    outputCentralDirStartOffset + padding + outputApkSigningBlock.length);
+            outputApkSigningBlockRequest.done();
         }
 
-        // Step 12. Output ZIP Central Directory and ZIP End of Central Directory
+        // Step 11. Output ZIP Central Directory and ZIP End of Central Directory
         outputCentralDirDataSource.feed(0, outputCentralDirDataSource.size(), outputApkOut);
         outputApkOut.consume(outputEocd);
         signerEngine.outputDone();

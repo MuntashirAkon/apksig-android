@@ -16,8 +16,10 @@
 
 package com.android.apksig.internal.apk.v2;
 
+import com.android.apksig.internal.util.ChainedDataSource;
 import com.android.apksig.internal.util.MessageDigestSink;
 import com.android.apksig.internal.util.Pair;
+import com.android.apksig.internal.util.VerityTreeBuilder;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
@@ -48,6 +50,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * APK Signature Scheme v2 signer.
@@ -120,7 +123,8 @@ public abstract class V2SchemeSigner {
      *         APK Signature Scheme v2
      */
     public static List<SignatureAlgorithm> getSuggestedSignatureAlgorithms(
-            PublicKey signingKey, int minSdkVersion) throws InvalidKeyException {
+            PublicKey signingKey, int minSdkVersion, boolean apkSigningBlockPaddingSupported)
+            throws InvalidKeyException {
         String keyAlgorithm = signingKey.getAlgorithm();
         if ("RSA".equalsIgnoreCase(keyAlgorithm)) {
             // Use RSASSA-PKCS1-v1_5 signature scheme instead of RSASSA-PSS to guarantee
@@ -131,7 +135,12 @@ public abstract class V2SchemeSigner {
             int modulusLengthBits = ((RSAKey) signingKey).getModulus().bitLength();
             if (modulusLengthBits <= 3072) {
                 // 3072-bit RSA is roughly 128-bit strong, meaning SHA-256 is a good fit.
-                return Collections.singletonList(SignatureAlgorithm.RSA_PKCS1_V1_5_WITH_SHA256);
+                List<SignatureAlgorithm> algorithms = new ArrayList<>();
+                algorithms.add(SignatureAlgorithm.RSA_PKCS1_V1_5_WITH_SHA256);
+                if (apkSigningBlockPaddingSupported) {
+                    algorithms.add(SignatureAlgorithm.VERITY_RSA_PKCS1_V1_5_WITH_SHA256);
+                }
+                return algorithms;
             } else {
                 // Keys longer than 3072 bit need to be paired with a stronger digest to avoid the
                 // digest being the weak link. SHA-512 is the next strongest supported digest.
@@ -139,13 +148,23 @@ public abstract class V2SchemeSigner {
             }
         } else if ("DSA".equalsIgnoreCase(keyAlgorithm)) {
             // DSA is supported only with SHA-256.
-            return Collections.singletonList(SignatureAlgorithm.DSA_WITH_SHA256);
+            List<SignatureAlgorithm> algorithms = new ArrayList<>();
+            algorithms.add(SignatureAlgorithm.DSA_WITH_SHA256);
+            if (apkSigningBlockPaddingSupported) {
+                algorithms.add(SignatureAlgorithm.VERITY_DSA_WITH_SHA256);
+            }
+            return algorithms;
         } else if ("EC".equalsIgnoreCase(keyAlgorithm)) {
             // Pick a digest which is no weaker than the key.
             int keySizeBits = ((ECKey) signingKey).getParams().getOrder().bitLength();
             if (keySizeBits <= 256) {
                 // 256-bit Elliptic Curve is roughly 128-bit strong, meaning SHA-256 is a good fit.
-                return Collections.singletonList(SignatureAlgorithm.ECDSA_WITH_SHA256);
+                List<SignatureAlgorithm> algorithms = new ArrayList<>();
+                algorithms.add(SignatureAlgorithm.ECDSA_WITH_SHA256);
+                if (apkSigningBlockPaddingSupported) {
+                    algorithms.add(SignatureAlgorithm.VERITY_ECDSA_WITH_SHA256);
+                }
+                return algorithms;
             } else {
                 // Keys longer than 256 bit need to be paired with a stronger digest to avoid the
                 // digest being the weak link. SHA-512 is the next strongest supported digest.
@@ -158,7 +177,8 @@ public abstract class V2SchemeSigner {
 
     /**
      * Signs the provided APK using APK Signature Scheme v2 and returns the APK Signing Block
-     * containing the signature.
+     * containing the signature and the number of 0x00 bytes to pad the start of the APK Signing
+     * Block.
      *
      * @param signerConfigs signer configurations, one for each signer At least one signer config
      *        must be provided.
@@ -171,11 +191,12 @@ public abstract class V2SchemeSigner {
      * @throws SignatureException if an error occurs when computing digests of generating
      *         signatures
      */
-    public static byte[] generateApkSigningBlock(
+    public static Pair<byte[], Integer> generateApkSigningBlock(
             DataSource beforeCentralDir,
             DataSource centralDir,
             DataSource eocd,
-            List<SignerConfig> signerConfigs)
+            List<SignerConfig> signerConfigs,
+            boolean apkSigningBlockPaddingSupported)
                         throws IOException, NoSuchAlgorithmException, InvalidKeyException,
                                 SignatureException {
         if (signerConfigs.isEmpty()) {
@@ -189,6 +210,18 @@ public abstract class V2SchemeSigner {
             for (SignatureAlgorithm signatureAlgorithm : signerConfig.signatureAlgorithms) {
                 contentDigestAlgorithms.add(signatureAlgorithm.getContentDigestAlgorithm());
             }
+        }
+
+        // Ensure APK Signing Block starts from page boundary.
+        int padSizeBeforeSigningBlock = 0;
+        if (apkSigningBlockPaddingSupported &&
+                (beforeCentralDir.size() % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES != 0)) {
+            padSizeBeforeSigningBlock = (int) (ANDROID_COMMON_PAGE_ALIGNMENT_BYTES -
+                    beforeCentralDir.size() % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES);
+            beforeCentralDir = new ChainedDataSource(
+                    beforeCentralDir,
+                    DataSources.asDataSource(
+                            ByteBuffer.allocate(padSizeBeforeSigningBlock)));
         }
 
         // Ensure that, when digesting, ZIP End of Central Directory record's Central Directory
@@ -207,10 +240,9 @@ public abstract class V2SchemeSigner {
             contentDigests =
                     computeContentDigests(
                             contentDigestAlgorithms,
-                            new DataSource[] {
-                                    beforeCentralDir,
-                                    centralDir,
-                                    DataSources.asDataSource(eocdBuf)});
+                            beforeCentralDir,
+                            centralDir,
+                            DataSources.asDataSource(eocdBuf));
         } catch (IOException e) {
             throw new IOException("Failed to read APK being signed", e);
         } catch (DigestException e) {
@@ -218,12 +250,35 @@ public abstract class V2SchemeSigner {
         }
 
         // Sign the digests and wrap the signatures and signer info into an APK Signing Block.
-        return generateApkSigningBlock(signerConfigs, contentDigests);
+        return Pair.of(generateApkSigningBlock(signerConfigs, contentDigests),
+                padSizeBeforeSigningBlock);
     }
 
     static Map<ContentDigestAlgorithm, byte[]> computeContentDigests(
             Set<ContentDigestAlgorithm> digestAlgorithms,
-            DataSource[] contents) throws IOException, NoSuchAlgorithmException, DigestException {
+            DataSource beforeCentralDir,
+            DataSource centralDir,
+            DataSource eocd) throws IOException, NoSuchAlgorithmException, DigestException {
+        Map<ContentDigestAlgorithm, byte[]> contentDigests = new HashMap<>();
+        Set<ContentDigestAlgorithm> oneMbChunkBasedAlgorithm = digestAlgorithms.stream()
+                .filter(a -> a == ContentDigestAlgorithm.CHUNKED_SHA256 ||
+                             a == ContentDigestAlgorithm.CHUNKED_SHA512)
+                .collect(Collectors.toSet());
+        computeOneMbChunkContentDigests(oneMbChunkBasedAlgorithm,
+                new DataSource[] { beforeCentralDir, centralDir, eocd },
+                contentDigests);
+
+        if (digestAlgorithms.contains(ContentDigestAlgorithm.VERITY_CHUNKED_SHA256)) {
+            computeApkVerityDigest(beforeCentralDir, centralDir, eocd, contentDigests);
+        }
+        return contentDigests;
+    }
+
+    private static void computeOneMbChunkContentDigests(
+            Set<ContentDigestAlgorithm> digestAlgorithms,
+            DataSource[] contents,
+            Map<ContentDigestAlgorithm, byte[]> outputContentDigests)
+            throws IOException, NoSuchAlgorithmException, DigestException {
         // For each digest algorithm the result is computed as follows:
         // 1. Each segment of contents is split into consecutive chunks of 1 MB in size.
         //    The final chunk will be shorter iff the length of segment is not a multiple of 1 MB.
@@ -313,15 +368,23 @@ public abstract class V2SchemeSigner {
             }
         }
 
-        Map<ContentDigestAlgorithm, byte[]> result = new HashMap<>(digestAlgorithmsArray.length);
         for (int i = 0; i < digestAlgorithmsArray.length; i++) {
             ContentDigestAlgorithm digestAlgorithm = digestAlgorithmsArray[i];
             byte[] concatenationOfChunkCountAndChunkDigests = digestsOfChunks[i];
             MessageDigest md = mds[i];
             byte[] digest = md.digest(concatenationOfChunkCountAndChunkDigests);
-            result.put(digestAlgorithm, digest);
+            outputContentDigests.put(digestAlgorithm, digest);
         }
-        return result;
+    }
+
+    private static void computeApkVerityDigest(DataSource beforeCentralDir, DataSource centralDir,
+            DataSource eocd, Map<ContentDigestAlgorithm, byte[]> outputContentDigests)
+            throws IOException, NoSuchAlgorithmException {
+        // Use 0s as salt for now.  This also needs to be consistent in the fsverify header for
+        // kernel to use.
+        VerityTreeBuilder builder = new VerityTreeBuilder(new byte[8]);
+        outputContentDigests.put(ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
+                builder.generateVerityTreeRootHash(beforeCentralDir, centralDir, eocd));
     }
 
     private static final long getChunkCount(long inputSize, int chunkSize) {

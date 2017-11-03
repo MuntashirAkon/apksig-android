@@ -41,4 +41,7 @@ public abstract class AndroidSdkVersion {
 
     /** Android O. */
     public static final int O = 26;
+
+    /** Android P. */
+    public static final int P = 28;
 }
