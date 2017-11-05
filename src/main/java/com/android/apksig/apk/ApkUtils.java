@@ -242,7 +242,7 @@ public abstract class ApkUtils {
          * sorted by the first letter. For codenames not in the list, the assumption is that the API
          * Level is incremented by one for every increase in the codename's first letter.
          */
-        @SuppressWarnings("unchecked")
+        @SuppressWarnings({"rawtypes", "unchecked"})
         private static final Pair<Character, Integer>[] SORTED_CODENAMES_FIRST_CHAR_TO_API_LEVEL =
                 new Pair[] {
             Pair.of('C', 2),

@@ -70,7 +70,6 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
     private List<V1SchemeSigner.SignerConfig> mV1SignerConfigs = Collections.emptyList();
     private DigestAlgorithm mV1ContentDigestAlgorithm;
-    private List<V2SchemeSigner.SignerConfig> mV2SignerConfigs;
 
     private boolean mClosed;
 
@@ -190,11 +189,9 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 V1SchemeSigner.getOutputEntryNames(mV1SignerConfigs);
     }
 
-    private List<V2SchemeSigner.SignerConfig> getV2SignerConfigs() throws InvalidKeyException {
-        if (mV2SignerConfigs != null) {
-            return mV2SignerConfigs;
-        }
-        mV2SignerConfigs = new ArrayList<>(mSignerConfigs.size());
+    private List<V2SchemeSigner.SignerConfig> createV2SignerConfigs(
+            boolean apkSigningBlockPaddingSupported) throws InvalidKeyException {
+        List<V2SchemeSigner.SignerConfig> v2SignerConfigs = new ArrayList<>(mSignerConfigs.size());
         for (int i = 0; i < mSignerConfigs.size(); i++) {
             SignerConfig signerConfig = mSignerConfigs.get(i);
             List<X509Certificate> certificates = signerConfig.getCertificates();
@@ -204,10 +201,11 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             v2SignerConfig.privateKey = signerConfig.getPrivateKey();
             v2SignerConfig.certificates = certificates;
             v2SignerConfig.signatureAlgorithms =
-                    V2SchemeSigner.getSuggestedSignatureAlgorithms(publicKey, mMinSdkVersion);
-            mV2SignerConfigs.add(v2SignerConfig);
+                    V2SchemeSigner.getSuggestedSignatureAlgorithms(publicKey, mMinSdkVersion,
+                            apkSigningBlockPaddingSupported);
+            v2SignerConfigs.add(v2SignerConfig);
         }
-        return mV2SignerConfigs;
+        return v2SignerConfigs;
     }
 
     @Override
@@ -459,6 +457,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         return mAddV1SignatureRequest;
     }
 
+    @Deprecated
     @Override
     public OutputApkSigningBlockRequest outputZipSections(
             DataSource zipEntries,
@@ -492,7 +491,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return null;
         }
         invalidateV2Signature();
-        List<V2SchemeSigner.SignerConfig> v2SignerConfigs = getV2SignerConfigs();
+        List<V2SchemeSigner.SignerConfig> v2SignerConfigs = createV2SignerConfigs(
+                apkSigningBlockPaddingSupported);
         Pair<byte[], Integer> result =
                 V2SchemeSigner.generateApkSigningBlock(
                         zipEntries, zipCentralDirectory, zipEocd, v2SignerConfigs,
@@ -639,6 +639,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private static class OutputApkSigningBlockRequestImpl
             implements OutputApkSigningBlockRequest, OutputApkSigningBlockRequest2 {
         private final byte[] mApkSigningBlock;

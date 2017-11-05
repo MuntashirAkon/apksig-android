@@ -91,7 +91,40 @@ public enum SignatureAlgorithm {
             ContentDigestAlgorithm.CHUNKED_SHA256,
             "DSA",
             Pair.of("SHA256withDSA", null),
-            AndroidSdkVersion.N);
+            AndroidSdkVersion.N),
+
+    /**
+     * RSASSA-PKCS1-v1_5 with SHA2-256 digest, content digested using SHA2-256 in 4 KB chunks, in
+     * the same way fsverity operates.
+     */
+    VERITY_RSA_PKCS1_V1_5_WITH_SHA256(
+            0x9901,  // experimental
+            ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
+            "RSA",
+            Pair.of("SHA256withRSA", null),
+            AndroidSdkVersion.P),
+
+    /**
+     * ECDSA with SHA2-256 digest, content digested using SHA2-256 in 4 KB chunks, in the same way
+     * fsverity operates.
+     */
+    VERITY_ECDSA_WITH_SHA256(
+            0x9903,  // experimental
+            ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
+            "EC",
+            Pair.of("SHA256withECDSA", null),
+            AndroidSdkVersion.P),
+
+    /**
+     * DSA with SHA2-256 digest, content digested using SHA2-256 in 4 KB chunks, in the same way
+     * fsverity operates.
+     */
+    VERITY_DSA_WITH_SHA256(
+            0x9905,  // experimental
+            ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
+            "DSA",
+            Pair.of("SHA256withDSA", null),
+            AndroidSdkVersion.P);
 
     private final int mId;
     private final String mJcaKeyAlgorithm;

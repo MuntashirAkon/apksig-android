@@ -76,8 +76,8 @@ public final class Asn1BerParser {
      * that this method does not care whether the tag number of this data structure is
      * {@code SET OF} and whether the tag class is {@code UNIVERSAL}.
      *
-     * <p>Note: The returned type is {@link List} rather than {@link Set} because ASN.1 SET may
-     * contain duplicate elements.
+     * <p>Note: The returned type is {@link List} rather than {@link java.util.Set} because ASN.1
+     * SET may contain duplicate elements.
      *
      * @param encoded encoded input. If the decoding operation succeeds, the position of this buffer
      *        is advanced to the first position following the end of the consumed structure.
