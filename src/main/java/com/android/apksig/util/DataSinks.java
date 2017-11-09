@@ -17,10 +17,12 @@
 package com.android.apksig.util;
 
 import com.android.apksig.internal.util.ByteArrayDataSink;
+import com.android.apksig.internal.util.MessageDigestSink;
 import com.android.apksig.internal.util.OutputStreamDataSink;
 import com.android.apksig.internal.util.RandomAccessFileDataSink;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.security.MessageDigest;
 
 /**
  * Utility methods for working with {@link DataSink} abstraction.
@@ -42,6 +44,15 @@ public abstract class DataSinks {
      */
     public static DataSink asDataSink(RandomAccessFile file) {
         return new RandomAccessFileDataSink(file);
+    }
+
+    /**
+     * Returns a {@link DataSink} which forwards data into the provided {@link MessageDigest}
+     * instances via their {@code update} method. Each {@code MessageDigest} instance receives the
+     * same data.
+     */
+    public static DataSink asDataSink(MessageDigest... digests) {
+        return new MessageDigestSink(digests);
     }
 
     /**

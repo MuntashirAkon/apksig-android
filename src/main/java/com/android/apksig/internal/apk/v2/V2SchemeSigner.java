@@ -17,10 +17,11 @@
 package com.android.apksig.internal.apk.v2;
 
 import com.android.apksig.internal.util.ChainedDataSource;
-import com.android.apksig.internal.util.MessageDigestSink;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.util.VerityTreeBuilder;
 import com.android.apksig.internal.zip.ZipUtils;
+import com.android.apksig.util.DataSink;
+import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 import java.io.IOException;
@@ -318,7 +319,7 @@ public abstract class V2SchemeSigner {
             mds[i] = MessageDigest.getInstance(jcaAlgorithm);
         }
 
-        MessageDigestSink mdSink = new MessageDigestSink(mds);
+        DataSink mdSink = DataSinks.asDataSink(mds);
         byte[] chunkContentPrefix = new byte[5];
         chunkContentPrefix[0] = (byte) 0xa5;
         int chunkIndex = 0;
