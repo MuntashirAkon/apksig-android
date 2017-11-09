@@ -20,7 +20,6 @@ import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.ApkVerifier.IssueWithParams;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
-import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.util.Pair;
@@ -46,8 +45,6 @@ import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -122,7 +119,7 @@ public abstract class V2SchemeVerifier {
             int minSdkVersion,
             int maxSdkVersion,
             Result result)
-            throws IOException, NoSuchAlgorithmException, SignatureNotFoundException {
+            throws IOException, NoSuchAlgorithmException {
         Set<ContentDigestAlgorithm> contentDigestsToVerify = new HashSet<>(1);
         parseSigners(apkSignatureSchemeV2Block, contentDigestsToVerify, minSdkVersion,
                 maxSdkVersion, result);
@@ -148,7 +145,7 @@ public abstract class V2SchemeVerifier {
             Set<ContentDigestAlgorithm> contentDigestsToVerify,
             int minSdkVersion,
             int maxSdkVersion,
-            Result result) throws NoSuchAlgorithmException, SignatureNotFoundException {
+            Result result) throws NoSuchAlgorithmException {
         ByteBuffer signers;
         try {
             signers = getLengthPrefixedSlice(apkSignatureSchemeV2Block);
