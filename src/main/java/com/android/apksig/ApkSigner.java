@@ -17,11 +17,10 @@
 package com.android.apksig;
 
 import com.android.apksig.apk.ApkFormatException;
+import com.android.apksig.apk.ApkSigningBlockNotFoundException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.apk.MinSdkVersionException;
-import com.android.apksig.internal.apk.v2.V2SchemeVerifier;
 import com.android.apksig.internal.util.ByteBufferDataSource;
-import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.internal.zip.EocdRecord;
 import com.android.apksig.internal.zip.LocalFileRecord;
@@ -209,11 +208,11 @@ public class ApkSigner {
         long inputApkSigningBlockOffset = -1;
         DataSource inputApkSigningBlock = null;
         try {
-            Pair<DataSource, Long> apkSigningBlockAndOffset =
-                    V2SchemeVerifier.findApkSigningBlock(inputApk, inputZipSections);
-            inputApkSigningBlock = apkSigningBlockAndOffset.getFirst();
-            inputApkSigningBlockOffset = apkSigningBlockAndOffset.getSecond();
-        } catch (V2SchemeVerifier.SignatureNotFoundException e) {
+            ApkUtils.ApkSigningBlock apkSigningBlockInfo =
+                    ApkUtils.findApkSigningBlock(inputApk, inputZipSections);
+            inputApkSigningBlockOffset = apkSigningBlockInfo.getStartOffset();
+            inputApkSigningBlock = apkSigningBlockInfo.getContents();
+        } catch (ApkSigningBlockNotFoundException e) {
             // Input APK does not contain an APK Signing Block. That's OK. APKs are not required to
             // contain this block. It's only needed if the APK is signed using APK Signature Scheme
             // v2.
