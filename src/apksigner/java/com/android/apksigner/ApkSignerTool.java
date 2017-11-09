@@ -119,6 +119,7 @@ public class ApkSignerTool {
         boolean verbose = false;
         boolean v1SigningEnabled = true;
         boolean v2SigningEnabled = true;
+        boolean debuggableApkPermitted = true;
         int minSdkVersion = 1;
         boolean minSdkVersionSpecified = false;
         int maxSdkVersion = Integer.MAX_VALUE;
@@ -147,6 +148,8 @@ public class ApkSignerTool {
                 v1SigningEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("v2-signing-enabled".equals(optionName)) {
                 v2SigningEnabled = optionsParser.getOptionalBooleanValue(true);
+            } else if ("debuggable-apk-permitted".equals(optionName)) {
+                debuggableApkPermitted = optionsParser.getOptionalBooleanValue(true);
             } else if ("next-signer".equals(optionName)) {
                 if (!signerParams.isEmpty()) {
                     signers.add(signerParams);
@@ -317,7 +320,8 @@ public class ApkSignerTool {
                         .setOutputApk(tmpOutputApk)
                         .setOtherSignersSignaturesPreserved(false)
                         .setV1SigningEnabled(v1SigningEnabled)
-                        .setV2SigningEnabled(v2SigningEnabled);
+                        .setV2SigningEnabled(v2SigningEnabled)
+                        .setDebuggableApkPermitted(debuggableApkPermitted);
         if (minSdkVersionSpecified) {
             apkSignerBuilder.setMinSdkVersion(minSdkVersion);
         }

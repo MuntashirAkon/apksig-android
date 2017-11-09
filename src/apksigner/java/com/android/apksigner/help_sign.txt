@@ -38,6 +38,17 @@ certificate.
 --max-sdk-version     Highest API Level on which this APK's signatures will be
                       verified. By default, the highest possible value is used.
 
+--debuggable-apk-permitted  Whether to permit signing android:debuggable="true"
+                      APKs. Android disables some of its security protections
+                      for such apps. For example, anybody with ADB shell access
+                      can execute arbitrary code in the context of a debuggable
+                      app and can read/write persistently stored data of the
+                      app. It is a good security practice to not sign
+                      debuggable APKs with production signing keys, because
+                      such APKs puts users at risk once leaked.
+                      By default, signing debuggable APKs is permitted, for
+                      backward compatibility with older apksigner versions.
+
 -h, --help            Show help about this command and exit
 
 
