@@ -21,7 +21,6 @@ import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.v1.DigestAlgorithm;
 import com.android.apksig.internal.apk.v1.V1SchemeSigner;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
-import com.android.apksig.internal.util.MessageDigestSink;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.util.TeeDataSink;
 import com.android.apksig.util.DataSink;
@@ -860,7 +859,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             synchronized (mLock) {
                 checkNotDone();
                 if (mDataSink == null) {
-                    mDataSink = new MessageDigestSink(new MessageDigest[] {getMessageDigest()});
+                    mDataSink = DataSinks.asDataSink(getMessageDigest());
                 }
                 return mDataSink;
             }
