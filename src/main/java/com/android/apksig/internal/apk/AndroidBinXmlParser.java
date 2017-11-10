@@ -181,8 +181,9 @@ public class AndroidBinXmlParser {
                 return VALUE_TYPE_STRING;
             case Attribute.TYPE_INT_DEC:
             case Attribute.TYPE_INT_HEX:
-            case Attribute.TYPE_REFERENCE:
                 return VALUE_TYPE_INT;
+            case Attribute.TYPE_REFERENCE:
+                return VALUE_TYPE_REFERENCE;
             case Attribute.TYPE_INT_BOOLEAN:
                 return VALUE_TYPE_BOOLEAN;
             default:
