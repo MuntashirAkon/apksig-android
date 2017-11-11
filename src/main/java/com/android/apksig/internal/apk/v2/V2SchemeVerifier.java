@@ -19,11 +19,10 @@ package com.android.apksig.internal.apk.v2;
 import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.ApkVerifier.IssueWithParams;
 import com.android.apksig.apk.ApkFormatException;
+import com.android.apksig.apk.ApkSigningBlockNotFoundException;
 import com.android.apksig.apk.ApkUtils;
-import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
-import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;
 import java.io.ByteArrayInputStream;
@@ -46,8 +45,6 @@ import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -65,10 +62,6 @@ import java.util.stream.Collectors;
  * @see <a href="https://source.android.com/security/apksigning/v2.html">APK Signature Scheme v2</a>
  */
 public abstract class V2SchemeVerifier {
-
-    private static final long APK_SIG_BLOCK_MAGIC_HI = 0x3234206b636f6c42L;
-    private static final long APK_SIG_BLOCK_MAGIC_LO = 0x20676953204b5041L;
-    private static final int APK_SIG_BLOCK_MIN_SIZE = 32;
 
     private static final int APK_SIGNATURE_SCHEME_V2_BLOCK_ID = 0x7109871a;
 
@@ -122,7 +115,7 @@ public abstract class V2SchemeVerifier {
             int minSdkVersion,
             int maxSdkVersion,
             Result result)
-            throws IOException, NoSuchAlgorithmException, SignatureNotFoundException {
+            throws IOException, NoSuchAlgorithmException {
         Set<ContentDigestAlgorithm> contentDigestsToVerify = new HashSet<>(1);
         parseSigners(apkSignatureSchemeV2Block, contentDigestsToVerify, minSdkVersion,
                 maxSdkVersion, result);
@@ -148,7 +141,7 @@ public abstract class V2SchemeVerifier {
             Set<ContentDigestAlgorithm> contentDigestsToVerify,
             int minSdkVersion,
             int maxSdkVersion,
-            Result result) throws NoSuchAlgorithmException, SignatureNotFoundException {
+            Result result) throws NoSuchAlgorithmException {
         ByteBuffer signers;
         try {
             signers = getLengthPrefixedSlice(apkSignatureSchemeV2Block);
@@ -477,6 +470,7 @@ public abstract class V2SchemeVerifier {
                     case CHUNKED_SHA256:
                         return 0;
                     case CHUNKED_SHA512:
+                    case VERITY_CHUNKED_SHA256:
                         return -1;
                     default:
                         throw new IllegalArgumentException("Unknown alg2: " + alg2);
@@ -484,9 +478,21 @@ public abstract class V2SchemeVerifier {
             case CHUNKED_SHA512:
                 switch (alg2) {
                     case CHUNKED_SHA256:
+                    case VERITY_CHUNKED_SHA256:
                         return 1;
                     case CHUNKED_SHA512:
                         return 0;
+                    default:
+                        throw new IllegalArgumentException("Unknown alg2: " + alg2);
+                }
+            case VERITY_CHUNKED_SHA256:
+                switch (alg2) {
+                    case CHUNKED_SHA256:
+                        return 1;
+                    case VERITY_CHUNKED_SHA256:
+                        return 0;
+                    case CHUNKED_SHA512:
+                        return -1;
                     default:
                         throw new IllegalArgumentException("Unknown alg2: " + alg2);
                 }
@@ -525,11 +531,9 @@ public abstract class V2SchemeVerifier {
             actualContentDigests =
                     V2SchemeSigner.computeContentDigests(
                             contentDigestAlgorithms,
-                            new DataSource[] {
-                                    beforeApkSigningBlock,
-                                    centralDir,
-                                    new ByteBufferDataSource(modifiedEocd)
-                            });
+                            beforeApkSigningBlock,
+                            centralDir,
+                            new ByteBufferDataSource(modifiedEocd));
         } catch (DigestException e) {
             throw new RuntimeException("Failed to compute content digests", e);
         }
@@ -610,11 +614,17 @@ public abstract class V2SchemeVerifier {
     private static SignatureInfo findSignature(
             DataSource apk, ApkUtils.ZipSections zipSections, Result result)
                     throws IOException, SignatureNotFoundException {
-        // Find the APK Signing Block. The block immediately precedes the Central Directory.
-        ByteBuffer eocd = zipSections.getZipEndOfCentralDirectory();
-        Pair<DataSource, Long> apkSigningBlockAndOffset = findApkSigningBlock(apk, zipSections);
-        DataSource apkSigningBlock = apkSigningBlockAndOffset.getFirst();
-        long apkSigningBlockOffset = apkSigningBlockAndOffset.getSecond();
+        // Find the APK Signing Block.
+        DataSource apkSigningBlock;
+        long apkSigningBlockOffset;
+        try {
+            ApkUtils.ApkSigningBlock apkSigningBlockInfo =
+                    ApkUtils.findApkSigningBlock(apk, zipSections);
+            apkSigningBlockOffset = apkSigningBlockInfo.getStartOffset();
+            apkSigningBlock = apkSigningBlockInfo.getContents();
+        } catch (ApkSigningBlockNotFoundException e) {
+            throw new SignatureNotFoundException(e.getMessage(), e);
+        }
         ByteBuffer apkSigningBlockBuf =
                 apkSigningBlock.getByteBuffer(0, (int) apkSigningBlock.size());
         apkSigningBlockBuf.order(ByteOrder.LITTLE_ENDIAN);
@@ -622,78 +632,12 @@ public abstract class V2SchemeVerifier {
         // Find the APK Signature Scheme v2 Block inside the APK Signing Block.
         ByteBuffer apkSignatureSchemeV2Block =
                 findApkSignatureSchemeV2Block(apkSigningBlockBuf, result);
-
         return new SignatureInfo(
                 apkSignatureSchemeV2Block,
                 apkSigningBlockOffset,
                 zipSections.getZipCentralDirectoryOffset(),
                 zipSections.getZipEndOfCentralDirectoryOffset(),
-                eocd);
-    }
-
-    /**
-     * Returns the APK Signing Block and its offset in the provided APK.
-     *
-     * @throws SignatureNotFoundException if the APK does not contain an APK Signing Block
-     */
-    public static Pair<DataSource, Long> findApkSigningBlock(
-            DataSource apk, ApkUtils.ZipSections zipSections)
-                    throws IOException, SignatureNotFoundException {
-        // FORMAT:
-        // OFFSET       DATA TYPE  DESCRIPTION
-        // * @+0  bytes uint64:    size in bytes (excluding this field)
-        // * @+8  bytes payload
-        // * @-24 bytes uint64:    size in bytes (same as the one above)
-        // * @-16 bytes uint128:   magic
-
-        long centralDirStartOffset = zipSections.getZipCentralDirectoryOffset();
-        long centralDirEndOffset =
-                centralDirStartOffset + zipSections.getZipCentralDirectorySizeBytes();
-        long eocdStartOffset = zipSections.getZipEndOfCentralDirectoryOffset();
-        if (centralDirEndOffset != eocdStartOffset) {
-            throw new SignatureNotFoundException(
-                    "ZIP Central Directory is not immediately followed by End of Central Directory"
-                            + ". CD end: " + centralDirEndOffset
-                            + ", EoCD start: " + eocdStartOffset);
-        }
-
-        if (centralDirStartOffset < APK_SIG_BLOCK_MIN_SIZE) {
-            throw new SignatureNotFoundException(
-                    "APK too small for APK Signing Block. ZIP Central Directory offset: "
-                            + centralDirStartOffset);
-        }
-        // Read the magic and offset in file from the footer section of the block:
-        // * uint64:   size of block
-        // * 16 bytes: magic
-        ByteBuffer footer = apk.getByteBuffer(centralDirStartOffset - 24, 24);
-        footer.order(ByteOrder.LITTLE_ENDIAN);
-        if ((footer.getLong(8) != APK_SIG_BLOCK_MAGIC_LO)
-                || (footer.getLong(16) != APK_SIG_BLOCK_MAGIC_HI)) {
-            throw new SignatureNotFoundException(
-                    "No APK Signing Block before ZIP Central Directory");
-        }
-        // Read and compare size fields
-        long apkSigBlockSizeInFooter = footer.getLong(0);
-        if ((apkSigBlockSizeInFooter < footer.capacity())
-                || (apkSigBlockSizeInFooter > Integer.MAX_VALUE - 8)) {
-            throw new SignatureNotFoundException(
-                    "APK Signing Block size out of range: " + apkSigBlockSizeInFooter);
-        }
-        int totalSize = (int) (apkSigBlockSizeInFooter + 8);
-        long apkSigBlockOffset = centralDirStartOffset - totalSize;
-        if (apkSigBlockOffset < 0) {
-            throw new SignatureNotFoundException(
-                    "APK Signing Block offset out of range: " + apkSigBlockOffset);
-        }
-        ByteBuffer apkSigBlock = apk.getByteBuffer(apkSigBlockOffset, 8);
-        apkSigBlock.order(ByteOrder.LITTLE_ENDIAN);
-        long apkSigBlockSizeInHeader = apkSigBlock.getLong(0);
-        if (apkSigBlockSizeInHeader != apkSigBlockSizeInFooter) {
-            throw new SignatureNotFoundException(
-                    "APK Signing Block sizes in header and footer do not match: "
-                            + apkSigBlockSizeInHeader + " vs " + apkSigBlockSizeInFooter);
-        }
-        return Pair.of(apk.slice(apkSigBlockOffset, totalSize), apkSigBlockOffset);
+                zipSections.getZipEndOfCentralDirectory());
     }
 
     private static ByteBuffer findApkSignatureSchemeV2Block(

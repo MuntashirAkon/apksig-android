@@ -17,16 +17,18 @@
 package com.android.apksig;
 
 import com.android.apksig.apk.ApkFormatException;
+import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.v1.DigestAlgorithm;
 import com.android.apksig.internal.apk.v1.V1SchemeSigner;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
-import com.android.apksig.internal.util.MessageDigestSink;
 import com.android.apksig.internal.util.Pair;
+import com.android.apksig.internal.util.TeeDataSink;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -63,11 +65,14 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
     private final boolean mV1SigningEnabled;
     private final boolean mV2SigningEnabled;
+    private final boolean mDebuggableApkPermitted;
     private final boolean mOtherSignersSignaturesPreserved;
     private final String mCreatedBy;
-    private final List<V1SchemeSigner.SignerConfig> mV1SignerConfigs;
-    private final DigestAlgorithm mV1ContentDigestAlgorithm;
-    private final List<V2SchemeSigner.SignerConfig> mV2SignerConfigs;
+    private final List<SignerConfig> mSignerConfigs;
+    private final int mMinSdkVersion;
+
+    private List<V1SchemeSigner.SignerConfig> mV1SignerConfigs = Collections.emptyList();
+    private DigestAlgorithm mV1ContentDigestAlgorithm;
 
     private boolean mClosed;
 
@@ -76,7 +81,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     /**
      * Names of JAR entries which this engine is expected to output as part of v1 signing.
      */
-    private final Set<String> mSignatureExpectedOutputJarEntryNames;
+    private Set<String> mSignatureExpectedOutputJarEntryNames = Collections.emptySet();
 
     /** Requests for digests of output JAR entries. */
     private final Map<String, GetJarEntryDataDigestRequest> mOutputJarEntryDigestRequests =
@@ -97,6 +102,18 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     private GetJarEntryDataRequest mInputJarManifestEntryDataRequest;
 
     /**
+     * Request to obtain the data of AndroidManifest.xml or {@code null} if the request hasn't been
+     * issued.
+     */
+    private GetJarEntryDataRequest mOutputAndroidManifestEntryDataRequest;
+
+    /**
+     * Whether the package being signed is marked as {@code android:debuggable} or {@code null}
+     * if this is not yet known.
+     */
+    private Boolean mDebuggable;
+
+    /**
      * Request to output the emitted v1 signature or {@code null} if the request hasn't been issued.
      */
     private OutputJarSignatureRequestImpl mAddV1SignatureRequest;
@@ -113,6 +130,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             int minSdkVersion,
             boolean v1SigningEnabled,
             boolean v2SigningEnabled,
+            boolean debuggableApkPermitted,
             boolean otherSignersSignaturesPreserved,
             String createdBy) throws InvalidKeyException {
         if (signerConfigs.isEmpty()) {
@@ -127,74 +145,84 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         mV2SigningEnabled = v2SigningEnabled;
         mV1SignaturePending = v1SigningEnabled;
         mV2SignaturePending = v2SigningEnabled;
+        mDebuggableApkPermitted = debuggableApkPermitted;
         mOtherSignersSignaturesPreserved = otherSignersSignaturesPreserved;
         mCreatedBy = createdBy;
-        mV1SignerConfigs =
-                (v1SigningEnabled)
-                        ? new ArrayList<>(signerConfigs.size()) : Collections.emptyList();
-        mV2SignerConfigs =
-                (v2SigningEnabled)
-                        ? new ArrayList<>(signerConfigs.size()) : Collections.emptyList();
+        mSignerConfigs = signerConfigs;
+        mMinSdkVersion = minSdkVersion;
 
-        Map<String, Integer> v1SignerNameToSignerIndex =
-                (v1SigningEnabled) ? new HashMap<>(signerConfigs.size()) : Collections.emptyMap();
+        if (v1SigningEnabled) {
+            createV1SignerConfigs(signerConfigs, minSdkVersion);
+        }
+    }
+
+    private void createV1SignerConfigs(List<SignerConfig> signerConfigs, int minSdkVersion)
+            throws InvalidKeyException {
+        mV1SignerConfigs = new ArrayList<>(signerConfigs.size());
+        Map<String, Integer> v1SignerNameToSignerIndex = new HashMap<>(signerConfigs.size());
         DigestAlgorithm v1ContentDigestAlgorithm = null;
         for (int i = 0; i < signerConfigs.size(); i++) {
             SignerConfig signerConfig = signerConfigs.get(i);
             List<X509Certificate> certificates = signerConfig.getCertificates();
             PublicKey publicKey = certificates.get(0).getPublicKey();
 
-            if (v1SigningEnabled) {
-                String v1SignerName = V1SchemeSigner.getSafeSignerName(signerConfig.getName());
-                // Check whether the signer's name is unique among all v1 signers
-                Integer indexOfOtherSignerWithSameName =
-                        v1SignerNameToSignerIndex.put(v1SignerName, i);
-                if (indexOfOtherSignerWithSameName != null) {
-                    throw new IllegalArgumentException(
-                            "Signers #" + (indexOfOtherSignerWithSameName + 1)
-                            + " and #" + (i + 1)
-                            + " have the same name: " + v1SignerName
-                            + ". v1 signer names must be unique");
-                }
+            String v1SignerName = V1SchemeSigner.getSafeSignerName(signerConfig.getName());
+            // Check whether the signer's name is unique among all v1 signers
+            Integer indexOfOtherSignerWithSameName =
+                    v1SignerNameToSignerIndex.put(v1SignerName, i);
+            if (indexOfOtherSignerWithSameName != null) {
+                throw new IllegalArgumentException(
+                        "Signers #" + (indexOfOtherSignerWithSameName + 1)
+                        + " and #" + (i + 1)
+                        + " have the same name: " + v1SignerName
+                        + ". v1 signer names must be unique");
+            }
 
-                DigestAlgorithm v1SignatureDigestAlgorithm =
-                        V1SchemeSigner.getSuggestedSignatureDigestAlgorithm(
-                                publicKey, minSdkVersion);
-                V1SchemeSigner.SignerConfig v1SignerConfig = new V1SchemeSigner.SignerConfig();
-                v1SignerConfig.name = v1SignerName;
-                v1SignerConfig.privateKey = signerConfig.getPrivateKey();
-                v1SignerConfig.certificates = certificates;
-                v1SignerConfig.signatureDigestAlgorithm = v1SignatureDigestAlgorithm;
-                // For digesting contents of APK entries and of MANIFEST.MF, pick the algorithm
-                // of comparable strength to the digest algorithm used for computing the signature.
-                // When there are multiple signers, pick the strongest digest algorithm out of their
-                // signature digest algorithms. This avoids reducing the digest strength used by any
-                // of the signers to protect APK contents.
-                if (v1ContentDigestAlgorithm == null) {
+            DigestAlgorithm v1SignatureDigestAlgorithm =
+                    V1SchemeSigner.getSuggestedSignatureDigestAlgorithm(
+                            publicKey, minSdkVersion);
+            V1SchemeSigner.SignerConfig v1SignerConfig = new V1SchemeSigner.SignerConfig();
+            v1SignerConfig.name = v1SignerName;
+            v1SignerConfig.privateKey = signerConfig.getPrivateKey();
+            v1SignerConfig.certificates = certificates;
+            v1SignerConfig.signatureDigestAlgorithm = v1SignatureDigestAlgorithm;
+            // For digesting contents of APK entries and of MANIFEST.MF, pick the algorithm
+            // of comparable strength to the digest algorithm used for computing the signature.
+            // When there are multiple signers, pick the strongest digest algorithm out of their
+            // signature digest algorithms. This avoids reducing the digest strength used by any
+            // of the signers to protect APK contents.
+            if (v1ContentDigestAlgorithm == null) {
+                v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
+            } else {
+                if (DigestAlgorithm.BY_STRENGTH_COMPARATOR.compare(
+                        v1SignatureDigestAlgorithm, v1ContentDigestAlgorithm) > 0) {
                     v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
-                } else {
-                    if (DigestAlgorithm.BY_STRENGTH_COMPARATOR.compare(
-                            v1SignatureDigestAlgorithm, v1ContentDigestAlgorithm) > 0) {
-                        v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
-                    }
                 }
-                mV1SignerConfigs.add(v1SignerConfig);
             }
-
-            if (v2SigningEnabled) {
-                V2SchemeSigner.SignerConfig v2SignerConfig = new V2SchemeSigner.SignerConfig();
-                v2SignerConfig.privateKey = signerConfig.getPrivateKey();
-                v2SignerConfig.certificates = certificates;
-                v2SignerConfig.signatureAlgorithms =
-                        V2SchemeSigner.getSuggestedSignatureAlgorithms(publicKey, minSdkVersion);
-                mV2SignerConfigs.add(v2SignerConfig);
-            }
+            mV1SignerConfigs.add(v1SignerConfig);
         }
         mV1ContentDigestAlgorithm = v1ContentDigestAlgorithm;
         mSignatureExpectedOutputJarEntryNames =
-                (v1SigningEnabled)
-                        ? V1SchemeSigner.getOutputEntryNames(mV1SignerConfigs)
-                        : Collections.emptySet();
+                V1SchemeSigner.getOutputEntryNames(mV1SignerConfigs);
+    }
+
+    private List<V2SchemeSigner.SignerConfig> createV2SignerConfigs(
+            boolean apkSigningBlockPaddingSupported) throws InvalidKeyException {
+        List<V2SchemeSigner.SignerConfig> v2SignerConfigs = new ArrayList<>(mSignerConfigs.size());
+        for (int i = 0; i < mSignerConfigs.size(); i++) {
+            SignerConfig signerConfig = mSignerConfigs.get(i);
+            List<X509Certificate> certificates = signerConfig.getCertificates();
+            PublicKey publicKey = certificates.get(0).getPublicKey();
+
+            V2SchemeSigner.SignerConfig v2SignerConfig = new V2SchemeSigner.SignerConfig();
+            v2SignerConfig.privateKey = signerConfig.getPrivateKey();
+            v2SignerConfig.certificates = certificates;
+            v2SignerConfig.signatureAlgorithms =
+                    V2SchemeSigner.getSuggestedSignatureAlgorithms(publicKey, mMinSdkVersion,
+                            apkSigningBlockPaddingSupported);
+            v2SignerConfigs.add(v2SignerConfig);
+        }
+        return v2SignerConfigs;
     }
 
     @Override
@@ -244,8 +272,21 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     public InspectJarEntryRequest outputJarEntry(String entryName) {
         checkNotClosed();
         invalidateV2Signature();
+
+        if ((!mDebuggableApkPermitted)
+                && (ApkUtils.ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(entryName))) {
+            forgetOutputApkDebuggableStatus();
+        }
+
         if (!mV1SigningEnabled) {
             // No need to inspect JAR entries when v1 signing is not enabled.
+            if ((!mDebuggableApkPermitted)
+                    && (ApkUtils.ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(entryName))) {
+                // To reject debuggable APKs we need to inspect the APK's AndroidManifest.xml to
+                // check whether it declares that the APK is debuggable
+                mOutputAndroidManifestEntryDataRequest = new GetJarEntryDataRequest(entryName);
+                return mOutputAndroidManifestEntryDataRequest;
+            }
             return null;
         }
         // v1 signing is enabled
@@ -264,6 +305,16 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                             V1SchemeSigner.getJcaMessageDigestAlgorithm(mV1ContentDigestAlgorithm));
             mOutputJarEntryDigestRequests.put(entryName, dataDigestRequest);
             mOutputJarEntryDigests.remove(entryName);
+
+            if ((!mDebuggableApkPermitted)
+                    && (ApkUtils.ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(entryName))) {
+                // To reject debuggable APKs we need to inspect the APK's AndroidManifest.xml to
+                // check whether it declares that the APK is debuggable
+                mOutputAndroidManifestEntryDataRequest = new GetJarEntryDataRequest(entryName);
+                return new CompoundInspectJarEntryRequest(
+                        entryName, mOutputAndroidManifestEntryDataRequest, dataDigestRequest);
+            }
+
             return dataDigestRequest;
         }
 
@@ -365,6 +416,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     ? mInputJarManifestEntryDataRequest.getData() : null;
 
         // Check whether the most recently used signature (if present) is still fine.
+        checkOutputApkNotDebuggableIfDebuggableMustBeRejected();
         List<Pair<String, byte[]>> signatureZipEntries;
         if ((mAddV1SignatureRequest == null) || (!mAddV1SignatureRequest.isDone())) {
             try {
@@ -446,6 +498,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         return mAddV1SignatureRequest;
     }
 
+    @Deprecated
     @Override
     public OutputApkSigningBlockRequest outputZipSections(
             DataSource zipEntries,
@@ -479,10 +532,12 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return null;
         }
         invalidateV2Signature();
-
+        List<V2SchemeSigner.SignerConfig> v2SignerConfigs = createV2SignerConfigs(
+                apkSigningBlockPaddingSupported);
+        checkOutputApkNotDebuggableIfDebuggableMustBeRejected();
         Pair<byte[], Integer> result =
                 V2SchemeSigner.generateApkSigningBlock(
-                        zipEntries, zipCentralDirectory, zipEocd, mV2SignerConfigs,
+                        zipEntries, zipCentralDirectory, zipEocd, v2SignerConfigs,
                         apkSigningBlockPaddingSupported);
         byte[] apkSigningBlock = result.getFirst();
         int padSizeBeforeApkSigningBlock  = result.getSecond();
@@ -505,6 +560,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
         mAddV1SignatureRequest = null;
         mInputJarManifestEntryDataRequest = null;
+        mOutputAndroidManifestEntryDataRequest = null;
+        mDebuggable = null;
         mOutputJarEntryDigestRequests.clear();
         mOutputJarEntryDigests.clear();
         mEmittedSignatureJarEntryData.clear();
@@ -588,6 +645,54 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         mV2SignaturePending = false;
     }
 
+    private void checkOutputApkNotDebuggableIfDebuggableMustBeRejected()
+            throws SignatureException {
+        if (mDebuggableApkPermitted) {
+            return;
+        }
+
+        try {
+            if (isOutputApkDebuggable()) {
+                throw new SignatureException(
+                        "APK is debuggable (see android:debuggable attribute) and this engine is"
+                                + " configured to refuse to sign debuggable APKs");
+            }
+        } catch (ApkFormatException e) {
+            throw new SignatureException("Failed to determine whether the APK is debuggable", e);
+        }
+    }
+
+    /**
+     * Returns whether the output APK is debuggable according to its
+     * {@code android:debuggable} declaration.
+     */
+    private boolean isOutputApkDebuggable() throws ApkFormatException {
+        if (mDebuggable != null) {
+            return mDebuggable;
+        }
+
+        if (mOutputAndroidManifestEntryDataRequest == null) {
+            throw new IllegalStateException(
+                    "Cannot determine debuggable status of output APK because "
+                            + ApkUtils.ANDROID_MANIFEST_ZIP_ENTRY_NAME
+                            + " entry contents have not yet been requested");
+        }
+
+        if (!mOutputAndroidManifestEntryDataRequest.isDone()) {
+            throw new IllegalStateException(
+                    "Still waiting to inspect output APK's "
+                            + mOutputAndroidManifestEntryDataRequest.getEntryName());
+        }
+        mDebuggable =
+                ApkUtils.getDebuggableFromBinaryAndroidManifest(
+                        ByteBuffer.wrap(mOutputAndroidManifestEntryDataRequest.getData()));
+        return mDebuggable;
+    }
+
+    private void forgetOutputApkDebuggableStatus() {
+        mDebuggable = null;
+    }
+
     /**
      * Returns the output policy for the provided input JAR entry.
      */
@@ -626,6 +731,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private static class OutputApkSigningBlockRequestImpl
             implements OutputApkSigningBlockRequest, OutputApkSigningBlockRequest2 {
         private final byte[] mApkSigningBlock;
@@ -753,7 +859,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             synchronized (mLock) {
                 checkNotDone();
                 if (mDataSink == null) {
-                    mDataSink = new MessageDigestSink(new MessageDigest[] {getMessageDigest()});
+                    mDataSink = DataSinks.asDataSink(getMessageDigest());
                 }
                 return mDataSink;
             }
@@ -806,6 +912,49 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     throw new IllegalStateException("Not yet done");
                 }
                 return mDigest.clone();
+            }
+        }
+    }
+
+    /**
+     * JAR entry inspection request which transparently satisfies multiple such requests.
+     */
+    private static class CompoundInspectJarEntryRequest implements InspectJarEntryRequest {
+        private final String mEntryName;
+        private final InspectJarEntryRequest[] mRequests;
+        private final Object mLock = new Object();
+
+        private DataSink mSink;
+
+        private CompoundInspectJarEntryRequest(
+                String entryName, InspectJarEntryRequest... requests) {
+            mEntryName = entryName;
+            mRequests = requests;
+        }
+
+        @Override
+        public String getEntryName() {
+            return mEntryName;
+        }
+
+        @Override
+        public DataSink getDataSink() {
+            synchronized (mLock) {
+                if (mSink == null) {
+                    DataSink[] sinks = new DataSink[mRequests.length];
+                    for (int i = 0; i < sinks.length; i++) {
+                        sinks[i] = mRequests[i].getDataSink();
+                    }
+                    mSink = new TeeDataSink(sinks);
+                }
+                return mSink;
+            }
+        }
+
+        @Override
+        public void done() {
+            for (InspectJarEntryRequest request : mRequests) {
+                request.done();
             }
         }
     }
@@ -902,6 +1051,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
         private boolean mV1SigningEnabled = true;
         private boolean mV2SigningEnabled = true;
+        private boolean mDebuggableApkPermitted = true;
         private boolean mOtherSignersSignaturesPreserved;
         private String mCreatedBy = "1.0 (Android)";
 
@@ -935,6 +1085,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     mMinSdkVersion,
                     mV1SigningEnabled,
                     mV2SigningEnabled,
+                    mDebuggableApkPermitted,
                     mOtherSignersSignaturesPreserved,
                     mCreatedBy);
         }
@@ -957,6 +1108,20 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
          */
         public Builder setV2SigningEnabled(boolean enabled) {
             mV2SigningEnabled = enabled;
+            return this;
+        }
+
+        /**
+         * Sets whether the APK should be signed even if it is marked as debuggable
+         * ({@code android:debuggable="true"} in its {@code AndroidManifest.xml}). For backward
+         * compatibility reasons, the default value of this setting is {@code true}.
+         *
+         * <p>It is dangerous to sign debuggable APKs with production/release keys because Android
+         * platform loosens security checks for such APKs. For example, arbitrary unauthorized code
+         * may be executed in the context of such an app by anybody with ADB shell access.
+         */
+        public Builder setDebuggableApkPermitted(boolean permitted) {
+            mDebuggableApkPermitted = permitted;
             return this;
         }
 

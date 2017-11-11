@@ -33,6 +33,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.SignatureException;
 import java.security.cert.X509Certificate;
 import java.util.Collections;
 import java.util.List;
@@ -357,6 +358,37 @@ public class ApkSignerTest {
         List<ApkSigner.SignerConfig> signers =
                 Collections.singletonList(getDefaultSignerConfigFromResources("rsa-2048"));
         sign("mismatched-compression-method.apk", new ApkSigner.Builder(signers));
+    }
+
+    @Test
+    public void testDebuggableApk() throws Exception {
+        // APK which uses a boolean value "true" in its android:debuggable
+        String apk = "debuggable-boolean.apk";
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(getDefaultSignerConfigFromResources("rsa-2048"));
+        // Signing debuggable APKs is permitted by default
+        sign(apk, new ApkSigner.Builder(signers));
+        // Signing debuggable APK succeeds when explicitly requested
+        sign(apk, new ApkSigner.Builder(signers).setDebuggableApkPermitted(true));
+        // Signing debuggable APK fails when requested
+        try {
+            sign(apk, new ApkSigner.Builder(signers).setDebuggableApkPermitted(false));
+            fail();
+        } catch (SignatureException expected) {}
+
+        // APK which uses a reference value, pointing to boolean "false", in its android:debuggable
+        apk = "debuggable-resource.apk";
+        // When we permit signing regardless of whether the APK is debuggable, the value of
+        // android:debuggable should be ignored.
+        sign(apk, new ApkSigner.Builder(signers).setDebuggableApkPermitted(true));
+
+        // When we disallow signing debuggable APKs, APKs with android:debuggable being a resource
+        // reference must be rejected, because there's no easy way to establish whether the resolved
+        // boolean value is the same for all resource configurations.
+        try {
+            sign(apk, new ApkSigner.Builder(signers).setDebuggableApkPermitted(false));
+            fail();
+        } catch (SignatureException expected) {}
     }
 
     /**
