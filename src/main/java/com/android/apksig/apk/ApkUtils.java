@@ -32,6 +32,11 @@ import java.util.Comparator;
  */
 public abstract class ApkUtils {
 
+    /**
+     * Name of the Android manifest ZIP entry in APKs.
+     */
+    public static final String ANDROID_MANIFEST_ZIP_ENTRY_NAME = "AndroidManifest.xml";
+
     private ApkUtils() {}
 
     /**
@@ -155,15 +160,122 @@ public abstract class ApkUtils {
         ZipUtils.setZipEocdCentralDirectoryOffset(eocd, offset);
     }
 
+    // See https://source.android.com/security/apksigning/v2.html
+    private static final long APK_SIG_BLOCK_MAGIC_HI = 0x3234206b636f6c42L;
+    private static final long APK_SIG_BLOCK_MAGIC_LO = 0x20676953204b5041L;
+    private static final int APK_SIG_BLOCK_MIN_SIZE = 32;
+
     /**
-     * Name of the Android manifest ZIP entry in APKs.
+     * Returns the APK Signing Block of the provided APK.
+     *
+     * @throws IOException if an I/O error occurs
+     * @throws ApkSigningBlockNotFoundException if there is no APK Signing Block in the APK
+     *
+     * @see <a href="https://source.android.com/security/apksigning/v2.html">APK Signature Scheme v2</a>
      */
-    private static final String ANDROID_MANIFEST_ZIP_ENTRY_NAME = "AndroidManifest.xml";
+    public static ApkSigningBlock findApkSigningBlock(DataSource apk, ZipSections zipSections)
+            throws IOException, ApkSigningBlockNotFoundException {
+        // FORMAT (see https://source.android.com/security/apksigning/v2.html):
+        // OFFSET       DATA TYPE  DESCRIPTION
+        // * @+0  bytes uint64:    size in bytes (excluding this field)
+        // * @+8  bytes payload
+        // * @-24 bytes uint64:    size in bytes (same as the one above)
+        // * @-16 bytes uint128:   magic
+
+        long centralDirStartOffset = zipSections.getZipCentralDirectoryOffset();
+        long centralDirEndOffset =
+                centralDirStartOffset + zipSections.getZipCentralDirectorySizeBytes();
+        long eocdStartOffset = zipSections.getZipEndOfCentralDirectoryOffset();
+        if (centralDirEndOffset != eocdStartOffset) {
+            throw new ApkSigningBlockNotFoundException(
+                    "ZIP Central Directory is not immediately followed by End of Central Directory"
+                            + ". CD end: " + centralDirEndOffset
+                            + ", EoCD start: " + eocdStartOffset);
+        }
+
+        if (centralDirStartOffset < APK_SIG_BLOCK_MIN_SIZE) {
+            throw new ApkSigningBlockNotFoundException(
+                    "APK too small for APK Signing Block. ZIP Central Directory offset: "
+                            + centralDirStartOffset);
+        }
+        // Read the magic and offset in file from the footer section of the block:
+        // * uint64:   size of block
+        // * 16 bytes: magic
+        ByteBuffer footer = apk.getByteBuffer(centralDirStartOffset - 24, 24);
+        footer.order(ByteOrder.LITTLE_ENDIAN);
+        if ((footer.getLong(8) != APK_SIG_BLOCK_MAGIC_LO)
+                || (footer.getLong(16) != APK_SIG_BLOCK_MAGIC_HI)) {
+            throw new ApkSigningBlockNotFoundException(
+                    "No APK Signing Block before ZIP Central Directory");
+        }
+        // Read and compare size fields
+        long apkSigBlockSizeInFooter = footer.getLong(0);
+        if ((apkSigBlockSizeInFooter < footer.capacity())
+                || (apkSigBlockSizeInFooter > Integer.MAX_VALUE - 8)) {
+            throw new ApkSigningBlockNotFoundException(
+                    "APK Signing Block size out of range: " + apkSigBlockSizeInFooter);
+        }
+        int totalSize = (int) (apkSigBlockSizeInFooter + 8);
+        long apkSigBlockOffset = centralDirStartOffset - totalSize;
+        if (apkSigBlockOffset < 0) {
+            throw new ApkSigningBlockNotFoundException(
+                    "APK Signing Block offset out of range: " + apkSigBlockOffset);
+        }
+        ByteBuffer apkSigBlock = apk.getByteBuffer(apkSigBlockOffset, 8);
+        apkSigBlock.order(ByteOrder.LITTLE_ENDIAN);
+        long apkSigBlockSizeInHeader = apkSigBlock.getLong(0);
+        if (apkSigBlockSizeInHeader != apkSigBlockSizeInFooter) {
+            throw new ApkSigningBlockNotFoundException(
+                    "APK Signing Block sizes in header and footer do not match: "
+                            + apkSigBlockSizeInHeader + " vs " + apkSigBlockSizeInFooter);
+        }
+        return new ApkSigningBlock(apkSigBlockOffset, apk.slice(apkSigBlockOffset, totalSize));
+    }
+
+    /**
+     * Information about the location of the APK Signing Block inside an APK.
+     */
+    public static class ApkSigningBlock {
+        private final long mStartOffsetInApk;
+        private final DataSource mContents;
+
+        /**
+         * Constructs a new {@code ApkSigningBlock}.
+         *
+         * @param startOffsetInApk start offset (in bytes, relative to start of file) of the APK
+         *        Signing Block inside the APK file
+         * @param contents contents of the APK Signing Block
+         */
+        public ApkSigningBlock(long startOffsetInApk, DataSource contents) {
+            mStartOffsetInApk = startOffsetInApk;
+            mContents = contents;
+        }
+
+        /**
+         * Returns the start offset (in bytes, relative to start of file) of the APK Signing Block.
+         */
+        public long getStartOffset() {
+            return mStartOffsetInApk;
+        }
+
+        /**
+         * Returns the data source which provides the full contents of the APK Signing Block,
+         * including its footer.
+         */
+        public DataSource getContents() {
+            return mContents;
+        }
+    }
 
     /**
      * Android resource ID of the {@code android:minSdkVersion} attribute in AndroidManifest.xml.
      */
     private static final int MIN_SDK_VERSION_ATTR_ID = 0x0101020c;
+
+    /**
+     * Android resource ID of the {@code android:debuggable} attribute in AndroidManifest.xml.
+     */
+    private static final int DEBUGGABLE_ATTR_ID = 0x0101000f;
 
     /**
      * Returns the lowest Android platform version (API Level) supported by an APK with the
@@ -325,5 +437,81 @@ public abstract class ApkUtils {
                         + " : Unsupported codename in " + ANDROID_MANIFEST_ZIP_ENTRY_NAME
                         + "'s minSdkVersion: \"" + codename + "\"",
                 codename);
+    }
+
+    /**
+     * Returns {@code true} if the APK is debuggable according to its {@code AndroidManifest.xml}.
+     * See the {@code android:debuggable} attribute of the {@code application} element.
+     *
+     * @param androidManifestContents contents of {@code AndroidManifest.xml} in binary Android
+     *        resource format
+     *
+     * @throws ApkFormatException if the manifest is malformed
+     */
+    public static boolean getDebuggableFromBinaryAndroidManifest(
+            ByteBuffer androidManifestContents) throws ApkFormatException {
+        // IMPLEMENTATION NOTE: Whether the package is debuggable is declared using the first
+        // "application" element which is a child of the top-level manifest element. The debuggable
+        // attribute of this application element is coerced to a boolean value. If there is no
+        // application element or if it doesn't declare the debuggable attribute, the package is
+        // considered not debuggable.
+
+        try {
+            AndroidBinXmlParser parser = new AndroidBinXmlParser(androidManifestContents);
+            int eventType = parser.getEventType();
+            while (eventType != AndroidBinXmlParser.EVENT_END_DOCUMENT) {
+                if ((eventType == AndroidBinXmlParser.EVENT_START_ELEMENT)
+                        && (parser.getDepth() == 2)
+                        && ("application".equals(parser.getName()))
+                        && (parser.getNamespace().isEmpty())) {
+                    for (int i = 0; i < parser.getAttributeCount(); i++) {
+                        if (parser.getAttributeNameResourceId(i) == DEBUGGABLE_ATTR_ID) {
+                            int valueType = parser.getAttributeValueType(i);
+                            switch (valueType) {
+                                case AndroidBinXmlParser.VALUE_TYPE_BOOLEAN:
+                                case AndroidBinXmlParser.VALUE_TYPE_STRING:
+                                case AndroidBinXmlParser.VALUE_TYPE_INT:
+                                    String value = parser.getAttributeStringValue(i);
+                                    return ("true".equals(value))
+                                            || ("TRUE".equals(value))
+                                            || ("1".equals(value));
+                                case AndroidBinXmlParser.VALUE_TYPE_REFERENCE:
+                                    // References to resources are not supported on purpose. The
+                                    // reason is that the resolved value depends on the resource
+                                    // configuration (e.g, MNC/MCC, locale, screen density) used
+                                    // at resolution time. As a result, the same APK may appear as
+                                    // debuggable in one situation and as non-debuggable in another
+                                    // situation. Such APKs may put users at risk.
+                                    throw new ApkFormatException(
+                                            "Unable to determine whether APK is debuggable"
+                                                    + ": " + ANDROID_MANIFEST_ZIP_ENTRY_NAME + "'s"
+                                                    + " android:debuggable attribute references a"
+                                                    + " resource. References are not supported for"
+                                                    + " security reasons. Only constant boolean,"
+                                                    + " string and int values are supported.");
+                                default:
+                                    throw new ApkFormatException(
+                                            "Unable to determine whether APK is debuggable"
+                                                    + ": " + ANDROID_MANIFEST_ZIP_ENTRY_NAME + "'s"
+                                                    + " android:debuggable attribute uses"
+                                                    + " unsupported value type. Only boolean,"
+                                                    + " string and int values are supported.");
+                            }
+                        }
+                    }
+                    // This application element does not declare the debuggable attribute
+                    return false;
+                }
+                eventType = parser.next();
+            }
+
+            // No application element found
+            return false;
+        } catch (AndroidBinXmlParser.XmlParserException e) {
+            throw new ApkFormatException(
+                    "Unable to determine whether APK is debuggable: malformed binary resource: "
+                            + ANDROID_MANIFEST_ZIP_ENTRY_NAME,
+                    e);
+        }
     }
 }
