@@ -555,4 +555,50 @@ public abstract class ApkUtils {
                     e);
         }
     }
+
+    /**
+     * Returns the package name of the APK according to its {@code AndroidManifest.xml} or
+     * {@code null} if package name is not declared. See the {@code package} attribute of the
+     * {@code manifest} element.
+     *
+     * @param androidManifestContents contents of {@code AndroidManifest.xml} in binary Android
+     *        resource format
+     *
+     * @throws ApkFormatException if the manifest is malformed
+     */
+    public static String getPackageNameFromBinaryAndroidManifest(
+            ByteBuffer androidManifestContents) throws ApkFormatException {
+        // IMPLEMENTATION NOTE: Package name is declared as the "package" attribute of the top-level
+        // manifest element. Interestingly, as opposed to most other attributes, Android Package
+        // Manager looks up this attribute by its name rather than by its resource ID.
+
+        try {
+            AndroidBinXmlParser parser = new AndroidBinXmlParser(androidManifestContents);
+            int eventType = parser.getEventType();
+            while (eventType != AndroidBinXmlParser.EVENT_END_DOCUMENT) {
+                if ((eventType == AndroidBinXmlParser.EVENT_START_ELEMENT)
+                        && (parser.getDepth() == 1)
+                        && ("manifest".equals(parser.getName()))
+                        && (parser.getNamespace().isEmpty())) {
+                    for (int i = 0; i < parser.getAttributeCount(); i++) {
+                        if ("package".equals(parser.getAttributeName(i))
+                                && (parser.getNamespace().isEmpty())) {
+                            return parser.getAttributeStringValue(i);
+                        }
+                    }
+                    // No "package" attribute found
+                    return null;
+                }
+                eventType = parser.next();
+            }
+
+            // No manifest element found
+            return null;
+        } catch (AndroidBinXmlParser.XmlParserException e) {
+            throw new ApkFormatException(
+                    "Unable to determine APK package name: malformed binary resource: "
+                            + ANDROID_MANIFEST_ZIP_ENTRY_NAME,
+                    e);
+        }
+    }
 }
