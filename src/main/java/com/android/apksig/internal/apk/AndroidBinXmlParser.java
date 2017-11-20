@@ -167,6 +167,29 @@ public class AndroidBinXmlParser {
     }
 
     /**
+     * Returns the name of the specified attribute of the current element.
+     *
+     * @throws IndexOutOfBoundsException if the index is out of range or the current event is not a
+     *         {@code start element} event
+     * @throws XmlParserException if a parsing error is occurred
+     */
+    public String getAttributeName(int index) throws XmlParserException {
+        return getAttribute(index).getName();
+    }
+
+    /**
+     * Returns the name of the specified attribute of the current element or an empty string if
+     * the attribute is not associated with a namespace.
+     *
+     * @throws IndexOutOfBoundsException if the index is out of range or the current event is not a
+     *         {@code start element} event
+     * @throws XmlParserException if a parsing error is occurred
+     */
+    public String getAttributeNamespace(int index) throws XmlParserException {
+        return getAttribute(index).getNamespace();
+    }
+
+    /**
      * Returns the value type of the specified attribute of the current element. See
      * {@code VALUE_TYPE_...} constants.
      *
@@ -357,7 +380,6 @@ public class AndroidBinXmlParser {
                             mCurrentElementAttributesContents,
                             startPosition,
                             startPosition + mCurrentElementAttrSizeBytes);
-            @SuppressWarnings("unused")
             long nsId = getUnsignedInt32(attr);
             long nameId = getUnsignedInt32(attr);
             attr.position(attr.position() + 7); // skip ignored fields
@@ -365,6 +387,7 @@ public class AndroidBinXmlParser {
             long valueData = getUnsignedInt32(attr);
             mCurrentElementAttributes.add(
                     new Attribute(
+                            nsId,
                             nameId,
                             valueType,
                             (int) valueData,
@@ -380,6 +403,7 @@ public class AndroidBinXmlParser {
         private static final int TYPE_INT_HEX = 0x11;
         private static final int TYPE_INT_BOOLEAN = 0x12;
 
+        private final long mNsId;
         private final long mNameId;
         private final int mValueType;
         private final int mValueData;
@@ -387,11 +411,13 @@ public class AndroidBinXmlParser {
         private final ResourceMap mResourceMap;
 
         private Attribute(
+                long nsId,
                 long nameId,
                 int valueType,
                 int valueData,
                 StringPool stringPool,
                 ResourceMap resourceMap) {
+            mNsId = nsId;
             mNameId = nameId;
             mValueType = valueType;
             mValueData = valueData;
@@ -401,6 +427,14 @@ public class AndroidBinXmlParser {
 
         public int getNameResourceId() {
             return (mResourceMap != null) ? mResourceMap.getResourceId(mNameId) : 0;
+        }
+
+        public String getName() throws XmlParserException {
+            return mStringPool.getString(mNameId);
+        }
+
+        public String getNamespace() throws XmlParserException {
+            return (mNsId != NO_NAMESPACE) ? mStringPool.getString(mNsId) : "";
         }
 
         public int getValueType() {
