@@ -17,7 +17,10 @@
 package com.android.apksig.apk;
 
 import com.android.apksig.internal.apk.AndroidBinXmlParser;
+import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.util.Pair;
+import com.android.apksig.internal.zip.CentralDirectoryRecord;
+import com.android.apksig.internal.zip.LocalFileRecord;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.zip.ZipFormatException;
@@ -26,6 +29,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 
 /**
  * APK utilities.
@@ -264,6 +268,43 @@ public abstract class ApkUtils {
          */
         public DataSource getContents() {
             return mContents;
+        }
+    }
+
+    /**
+     * Returns the contents of the APK's {@code AndroidManifest.xml}.
+     *
+     * @throws IOException if an I/O error occurs while reading the APK
+     * @throws ApkFormatException if the APK is malformed
+     */
+    public static ByteBuffer getAndroidManifest(DataSource apk)
+            throws IOException, ApkFormatException {
+        ZipSections zipSections;
+        try {
+            zipSections = findZipSections(apk);
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Not a valid ZIP archive", e);
+        }
+        List<CentralDirectoryRecord> cdRecords =
+                V1SchemeVerifier.parseZipCentralDirectory(apk, zipSections);
+        CentralDirectoryRecord androidManifestCdRecord = null;
+        for (CentralDirectoryRecord cdRecord : cdRecords) {
+            if (ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(cdRecord.getName())) {
+                androidManifestCdRecord = cdRecord;
+                break;
+            }
+        }
+        if (androidManifestCdRecord == null) {
+            throw new ApkFormatException("Missing " + ANDROID_MANIFEST_ZIP_ENTRY_NAME);
+        }
+        DataSource lfhSection = apk.slice(0, zipSections.getZipCentralDirectoryOffset());
+
+        try {
+            return ByteBuffer.wrap(
+                    LocalFileRecord.getUncompressedData(
+                            lfhSection, androidManifestCdRecord, lfhSection.size()));
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Failed to read " + ANDROID_MANIFEST_ZIP_ENTRY_NAME, e);
         }
     }
 
