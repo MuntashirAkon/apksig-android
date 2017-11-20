@@ -2,12 +2,23 @@
 
 licenses(["notice"])  # Apache License 2.0
 
+# Public API of the apksig library. Clients (other than this package and its
+# subpackages) depend on this via the publicly visible //third_party/java/apksig
 java_library(
     name = "apksig",
-    srcs = glob([
-        "src/main/java/**/*.java",
-    ]),
+    srcs = glob(
+        ["src/main/java/com/android/apksig/**/*.java"],
+        exclude = ["src/main/java/com/android/apksig/internal/**/*.java"],
+    ),
     visibility = ["//visibility:public"],
+    deps = [":apksig-all"],
+)
+
+# All of apksig library, including private API which clients are not supposed
+# to depend on
+java_library(
+    name = "apksig-all",
+    srcs = glob(["src/main/java/**/*.java"]),
 )
 
 java_binary(
@@ -32,5 +43,5 @@ java_test(
         "src/test/resources/**/*",
     ]),
     test_class = "com.android.apksig.AllTests",
-    deps = [":apksig"],
+    deps = [":apksig-all"],
 )
