@@ -82,6 +82,14 @@ public class ApkUtilsTest {
     }
 
     @Test
+    public void testGetPackageNameFromBinaryAndroidManifest() throws Exception {
+        ByteBuffer manifest = getAndroidManifest("original.apk");
+        assertEquals(
+                "android.appsecurity.cts.tinyapp",
+                ApkUtils.getPackageNameFromBinaryAndroidManifest(manifest));
+    }
+
+    @Test
     public void testGetAndroidManifest() throws Exception {
         ByteBuffer manifest = getAndroidManifest("original.apk");
         MessageDigest md = MessageDigest.getInstance("SHA-256");
