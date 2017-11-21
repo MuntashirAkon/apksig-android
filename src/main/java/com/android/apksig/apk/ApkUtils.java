@@ -17,7 +17,10 @@
 package com.android.apksig.apk;
 
 import com.android.apksig.internal.apk.AndroidBinXmlParser;
+import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.util.Pair;
+import com.android.apksig.internal.zip.CentralDirectoryRecord;
+import com.android.apksig.internal.zip.LocalFileRecord;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.zip.ZipFormatException;
@@ -26,6 +29,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 
 /**
  * APK utilities.
@@ -264,6 +268,43 @@ public abstract class ApkUtils {
          */
         public DataSource getContents() {
             return mContents;
+        }
+    }
+
+    /**
+     * Returns the contents of the APK's {@code AndroidManifest.xml}.
+     *
+     * @throws IOException if an I/O error occurs while reading the APK
+     * @throws ApkFormatException if the APK is malformed
+     */
+    public static ByteBuffer getAndroidManifest(DataSource apk)
+            throws IOException, ApkFormatException {
+        ZipSections zipSections;
+        try {
+            zipSections = findZipSections(apk);
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Not a valid ZIP archive", e);
+        }
+        List<CentralDirectoryRecord> cdRecords =
+                V1SchemeVerifier.parseZipCentralDirectory(apk, zipSections);
+        CentralDirectoryRecord androidManifestCdRecord = null;
+        for (CentralDirectoryRecord cdRecord : cdRecords) {
+            if (ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(cdRecord.getName())) {
+                androidManifestCdRecord = cdRecord;
+                break;
+            }
+        }
+        if (androidManifestCdRecord == null) {
+            throw new ApkFormatException("Missing " + ANDROID_MANIFEST_ZIP_ENTRY_NAME);
+        }
+        DataSource lfhSection = apk.slice(0, zipSections.getZipCentralDirectoryOffset());
+
+        try {
+            return ByteBuffer.wrap(
+                    LocalFileRecord.getUncompressedData(
+                            lfhSection, androidManifestCdRecord, lfhSection.size()));
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Failed to read " + ANDROID_MANIFEST_ZIP_ENTRY_NAME, e);
         }
     }
 
@@ -510,6 +551,52 @@ public abstract class ApkUtils {
         } catch (AndroidBinXmlParser.XmlParserException e) {
             throw new ApkFormatException(
                     "Unable to determine whether APK is debuggable: malformed binary resource: "
+                            + ANDROID_MANIFEST_ZIP_ENTRY_NAME,
+                    e);
+        }
+    }
+
+    /**
+     * Returns the package name of the APK according to its {@code AndroidManifest.xml} or
+     * {@code null} if package name is not declared. See the {@code package} attribute of the
+     * {@code manifest} element.
+     *
+     * @param androidManifestContents contents of {@code AndroidManifest.xml} in binary Android
+     *        resource format
+     *
+     * @throws ApkFormatException if the manifest is malformed
+     */
+    public static String getPackageNameFromBinaryAndroidManifest(
+            ByteBuffer androidManifestContents) throws ApkFormatException {
+        // IMPLEMENTATION NOTE: Package name is declared as the "package" attribute of the top-level
+        // manifest element. Interestingly, as opposed to most other attributes, Android Package
+        // Manager looks up this attribute by its name rather than by its resource ID.
+
+        try {
+            AndroidBinXmlParser parser = new AndroidBinXmlParser(androidManifestContents);
+            int eventType = parser.getEventType();
+            while (eventType != AndroidBinXmlParser.EVENT_END_DOCUMENT) {
+                if ((eventType == AndroidBinXmlParser.EVENT_START_ELEMENT)
+                        && (parser.getDepth() == 1)
+                        && ("manifest".equals(parser.getName()))
+                        && (parser.getNamespace().isEmpty())) {
+                    for (int i = 0; i < parser.getAttributeCount(); i++) {
+                        if ("package".equals(parser.getAttributeName(i))
+                                && (parser.getNamespace().isEmpty())) {
+                            return parser.getAttributeStringValue(i);
+                        }
+                    }
+                    // No "package" attribute found
+                    return null;
+                }
+                eventType = parser.next();
+            }
+
+            // No manifest element found
+            return null;
+        } catch (AndroidBinXmlParser.XmlParserException e) {
+            throw new ApkFormatException(
+                    "Unable to determine APK package name: malformed binary resource: "
                             + ANDROID_MANIFEST_ZIP_ENTRY_NAME,
                     e);
         }
