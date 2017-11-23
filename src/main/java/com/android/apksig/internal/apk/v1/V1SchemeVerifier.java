@@ -39,9 +39,9 @@ import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.ByteBufferUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.util.InclusiveIntRange;
-import com.android.apksig.internal.util.MessageDigestSink;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.internal.zip.LocalFileRecord;
+import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.zip.ZipFormatException;
 import java.io.ByteArrayInputStream;
@@ -1859,7 +1859,7 @@ public abstract class V1SchemeVerifier {
                         apk,
                         cdRecord,
                         cdOffsetInApk,
-                        new MessageDigestSink(mds));
+                        DataSinks.asDataSink(mds));
             } catch (ZipFormatException e) {
                 throw new ApkFormatException("Malformed ZIP entry: " + entryName, e);
             } catch (IOException e) {

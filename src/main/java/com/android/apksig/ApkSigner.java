@@ -17,11 +17,10 @@
 package com.android.apksig;
 
 import com.android.apksig.apk.ApkFormatException;
+import com.android.apksig.apk.ApkSigningBlockNotFoundException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.apk.MinSdkVersionException;
-import com.android.apksig.internal.apk.v2.V2SchemeVerifier;
 import com.android.apksig.internal.util.ByteBufferDataSource;
-import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.internal.zip.EocdRecord;
 import com.android.apksig.internal.zip.LocalFileRecord;
@@ -88,6 +87,7 @@ public class ApkSigner {
     private final Integer mMinSdkVersion;
     private final boolean mV1SigningEnabled;
     private final boolean mV2SigningEnabled;
+    private final boolean mDebuggableApkPermitted;
     private final boolean mOtherSignersSignaturesPreserved;
     private final String mCreatedBy;
 
@@ -105,6 +105,7 @@ public class ApkSigner {
             Integer minSdkVersion,
             boolean v1SigningEnabled,
             boolean v2SigningEnabled,
+            boolean debuggableApkPermitted,
             boolean otherSignersSignaturesPreserved,
             String createdBy,
             ApkSignerEngine signerEngine,
@@ -118,6 +119,7 @@ public class ApkSigner {
         mMinSdkVersion = minSdkVersion;
         mV1SigningEnabled = v1SigningEnabled;
         mV2SigningEnabled = v2SigningEnabled;
+        mDebuggableApkPermitted = debuggableApkPermitted;
         mOtherSignersSignaturesPreserved = otherSignersSignaturesPreserved;
         mCreatedBy = createdBy;
 
@@ -206,11 +208,11 @@ public class ApkSigner {
         long inputApkSigningBlockOffset = -1;
         DataSource inputApkSigningBlock = null;
         try {
-            Pair<DataSource, Long> apkSigningBlockAndOffset =
-                    V2SchemeVerifier.findApkSigningBlock(inputApk, inputZipSections);
-            inputApkSigningBlock = apkSigningBlockAndOffset.getFirst();
-            inputApkSigningBlockOffset = apkSigningBlockAndOffset.getSecond();
-        } catch (V2SchemeVerifier.SignatureNotFoundException e) {
+            ApkUtils.ApkSigningBlock apkSigningBlockInfo =
+                    ApkUtils.findApkSigningBlock(inputApk, inputZipSections);
+            inputApkSigningBlockOffset = apkSigningBlockInfo.getStartOffset();
+            inputApkSigningBlock = apkSigningBlockInfo.getContents();
+        } catch (ApkSigningBlockNotFoundException e) {
             // Input APK does not contain an APK Signing Block. That's OK. APKs are not required to
             // contain this block. It's only needed if the APK is signed using APK Signature Scheme
             // v2.
@@ -256,6 +258,7 @@ public class ApkSigner {
                     new DefaultApkSignerEngine.Builder(engineSignerConfigs, minSdkVersion)
                             .setV1SigningEnabled(mV1SigningEnabled)
                             .setV2SigningEnabled(mV2SigningEnabled)
+                            .setDebuggableApkPermitted(mDebuggableApkPermitted)
                             .setOtherSignersSignaturesPreserved(mOtherSignersSignaturesPreserved);
             if (mCreatedBy != null) {
                 signerEngineBuilder.setCreatedBy(mCreatedBy);
@@ -833,6 +836,7 @@ public class ApkSigner {
         private final List<SignerConfig> mSignerConfigs;
         private boolean mV1SigningEnabled = true;
         private boolean mV2SigningEnabled = true;
+        private boolean mDebuggableApkPermitted = true;
         private boolean mOtherSignersSignaturesPreserved;
         private String mCreatedBy;
         private Integer mMinSdkVersion;
@@ -1038,6 +1042,24 @@ public class ApkSigner {
         }
 
         /**
+         * Sets whether the APK should be signed even if it is marked as debuggable
+         * ({@code android:debuggable="true"} in its {@code AndroidManifest.xml}). For backward
+         * compatibility reasons, the default value of this setting is {@code true}.
+         *
+         * <p>It is dangerous to sign debuggable APKs with production/release keys because Android
+         * platform loosens security checks for such APKs. For example, arbitrary unauthorized code
+         * may be executed in the context of such an app by anybody with ADB shell access.
+         *
+         * <p><em>Note:</em> This method may only be invoked when this builder is not initialized
+         * with an {@link ApkSignerEngine}.
+         */
+        public Builder setDebuggableApkPermitted(boolean permitted) {
+            checkInitializedWithoutEngine();
+            mDebuggableApkPermitted = permitted;
+            return this;
+        }
+
+        /**
          * Sets whether signatures produced by signers other than the ones configured in this engine
          * should be copied from the input APK to the output APK.
          *
@@ -1090,6 +1112,7 @@ public class ApkSigner {
                     mMinSdkVersion,
                     mV1SigningEnabled,
                     mV2SigningEnabled,
+                    mDebuggableApkPermitted,
                     mOtherSignersSignaturesPreserved,
                     mCreatedBy,
                     mSignerEngine,
