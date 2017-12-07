@@ -10,6 +10,14 @@ java_library(
     visibility = ["//visibility:public"],
 )
 
+# All of apksig library, including private API which clients are not supposed
+# to directly depend on
+java_library(
+    name = "apksig-all",
+    srcs = glob(["src/main/java/**/*.java"]),
+    visibility = ["//visibility:public"],
+)
+
 java_binary(
     name = "apksigner",
     srcs = glob([
