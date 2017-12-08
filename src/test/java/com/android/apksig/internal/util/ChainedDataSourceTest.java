@@ -16,6 +16,10 @@
 
 package com.android.apksig.internal.util;
 
+import static java.nio.charset.StandardCharsets.US_ASCII;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
 import com.android.apksig.util.DataSources;
 import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.ReadableDataSink;
@@ -27,8 +31,6 @@ import org.junit.runners.JUnit4;
 
 import java.nio.ByteBuffer;
 
-import static org.junit.Assert.*;
-
 /** Unit tests for {@link ChainedDataSource}. */
 @RunWith(JUnit4.class)
 public final class ChainedDataSourceTest {
@@ -37,11 +39,11 @@ public final class ChainedDataSourceTest {
 
     @Before public void setUp() {
         mChain = new ChainedDataSource(
-                DataSources.asDataSource(ByteBuffer.wrap("12".getBytes())),
-                DataSources.asDataSource(ByteBuffer.wrap("34567".getBytes())),
-                DataSources.asDataSource(ByteBuffer.wrap("".getBytes())),
-                DataSources.asDataSource(ByteBuffer.wrap("890".getBytes())),
-                DataSources.asDataSource(ByteBuffer.wrap("".getBytes())));
+                DataSources.asDataSource(ByteBuffer.wrap("12".getBytes(US_ASCII))),
+                DataSources.asDataSource(ByteBuffer.wrap("34567".getBytes(US_ASCII))),
+                DataSources.asDataSource(ByteBuffer.wrap("".getBytes(US_ASCII))),
+                DataSources.asDataSource(ByteBuffer.wrap("890".getBytes(US_ASCII))),
+                DataSources.asDataSource(ByteBuffer.wrap("".getBytes(US_ASCII))));
         assertEquals(10, mChain.size());
     }
 
@@ -52,7 +54,7 @@ public final class ChainedDataSourceTest {
                 ReadableDataSink sink = DataSinks.newInMemoryDataSink(size);
                 mChain.feed(begin, size, sink);
                 assertByteBufferEquals(
-                        ByteBuffer.wrap("1234567890".substring(begin, end).getBytes()),
+                        ByteBuffer.wrap("1234567890".substring(begin, end).getBytes(US_ASCII)),
                         sink.getByteBuffer(0, size));
             }
         }
@@ -69,7 +71,7 @@ public final class ChainedDataSourceTest {
                 int size = end - begin;
                 ByteBuffer buffer = mChain.getByteBuffer(begin, size);
                 assertByteBufferEquals(
-                        ByteBuffer.wrap("1234567890".substring(begin, end).getBytes()),
+                        ByteBuffer.wrap("1234567890".substring(begin, end).getBytes(US_ASCII)),
                         buffer);
             }
         }
@@ -91,7 +93,7 @@ public final class ChainedDataSourceTest {
 
                 buffer.rewind();
                 assertByteBufferEquals(
-                        ByteBuffer.wrap("1234567890".substring(begin, end).getBytes()),
+                        ByteBuffer.wrap("1234567890".substring(begin, end).getBytes(US_ASCII)),
                         buffer);
             }
         }
@@ -105,7 +107,7 @@ public final class ChainedDataSourceTest {
                 ByteBuffer buffer = mChain.slice(begin, size).getByteBuffer(0, size);
 
                 assertByteBufferEquals(
-                        ByteBuffer.wrap("1234567890".substring(begin, end).getBytes()),
+                        ByteBuffer.wrap("1234567890".substring(begin, end).getBytes(US_ASCII)),
                         buffer);
             }
         }
