@@ -16,6 +16,11 @@
 
 package com.android.apksig.internal.util;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static junit.framework.TestCase.assertEquals;
+import static junit.framework.TestCase.assertNotNull;
+import static junit.framework.TestCase.fail;
+
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 
@@ -26,10 +31,6 @@ import org.junit.runners.JUnit4;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
-
-import static junit.framework.TestCase.assertEquals;
-import static junit.framework.TestCase.assertNotNull;
-import static junit.framework.TestCase.fail;
 
 
 /** Unit tests for {@link VerityTreeBuilder}. */
@@ -76,7 +77,7 @@ public final class VerityTreeBuilderTest {
     }
 
     private DataSource makeStringDataSource(String data) {
-        return DataSources.asDataSource(ByteBuffer.wrap(data.getBytes()));
+        return DataSources.asDataSource(ByteBuffer.wrap(data.getBytes(UTF_8)));
     }
 
     @Test public void generateVerityTreeRootHashFromDummyDataSource() throws Exception {

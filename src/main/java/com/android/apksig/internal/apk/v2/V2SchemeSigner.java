@@ -441,10 +441,10 @@ public abstract class V2SchemeSigner {
 
         ByteBuffer result = ByteBuffer.allocate(resultSize);
         result.order(ByteOrder.LITTLE_ENDIAN);
-        long blockSizeFieldValue = resultSize - 8;
+        long blockSizeFieldValue = resultSize - 8L;
         result.putLong(blockSizeFieldValue);
 
-        long pairSizeFieldValue = 4 + apkSignatureSchemeV2Block.length;
+        long pairSizeFieldValue = 4L + apkSignatureSchemeV2Block.length;
         result.putLong(pairSizeFieldValue);
         result.putInt(APK_SIGNATURE_SCHEME_V2_BLOCK_ID);
         result.put(apkSignatureSchemeV2Block);

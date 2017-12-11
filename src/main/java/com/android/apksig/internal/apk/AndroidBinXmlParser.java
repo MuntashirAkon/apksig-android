@@ -361,6 +361,9 @@ public class AndroidBinXmlParser {
                     }
                     mResourceMap = new ResourceMap(chunk);
                     break;
+                default:
+                    // Unknown chunk type -- ignore
+                    break;
             }
         }
 
