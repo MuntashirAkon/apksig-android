@@ -90,6 +90,12 @@ public abstract class V1SchemeVerifier {
      * considered verified only if {@link Result#verified} is {@code true}. If verification fails,
      * the result will contain errors -- see {@link Result#getErrors()}.
      *
+     * <p>Verification succeeds iff the APK's JAR signatures are expected to verify on all Android
+     * platform versions in the {@code [minSdkVersion, maxSdkVersion]} range. If the APK's signature
+     * is expected to not verify on any of the specified platform versions, this method returns a
+     * result with one or more errors and whose {@code Result.verified == false}, or this method
+     * throws an exception.
+     *
      * @throws ApkFormatException if the APK is malformed
      * @throws IOException if an I/O error occurs when reading the APK
      * @throws NoSuchAlgorithmException if the APK's JAR signatures cannot be verified because a

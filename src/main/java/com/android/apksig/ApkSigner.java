@@ -828,7 +828,8 @@ public class ApkSigner {
      * <ul>
      * <li>Signer configs or {@link ApkSignerEngine} -- provided in the constructor,</li>
      * <li>APK to be signed -- see {@link #setInputApk(File) setInputApk} variants,</li>
-     * <li>where to store the signed APK -- see {@link #setOutputApk(File) setOutputApk} variants.
+     * <li>where to store the output signed APK -- see {@link #setOutputApk(File) setOutputApk}
+     *     variants.
      * </li>
      * </ul>
      */
