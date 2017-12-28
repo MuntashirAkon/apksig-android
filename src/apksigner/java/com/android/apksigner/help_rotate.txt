@@ -1,92 +1,36 @@
-USAGE: apksigner sign [options] apk
+USAGE: apksigner rotate [options]
 
-This signs the provided APK, stripping out any pre-existing signatures. Signing
-is performed using one or more signers, each represented by an asymmetric key
-pair and a corresponding certificate. Typically, an APK is signed by just one
-signer. For each signer, you need to provide the signer's private key and
-certificate.
+This takes the provided keys and creates a SigningCertificateLineage entry linking the old to the
+new, for use in a key rotation scenario using APK Signature Scheme v3.
 
 
         GENERAL OPTIONS
 
---in                  Input APK file to sign. This is an alternative to
-                      specifying the APK as the very last parameter, after all
-                      options. Unless --out is specified, this file will be
-                      overwritten with the resulting signed APK.
+--in                  Input SigningCertificateLineage. This file contains a binary representation of
+                      a SigningCertificateLineage object, which contains the proof-of-rotation for
+                      different signing certificates.  This can be used with APK Signature Scheme v3
+                      to rotate the signing certificate for an APK.
 
---out                 File into which to output the signed APK. By default, the
-                      APK is signed in-place, overwriting the input file.
+
+--out                 File into which to put the binary representation of a
+                      SigningCertificateLineage object.
 
 -v, --verbose         Verbose output mode
 
---v1-signing-enabled  Whether to enable signing using JAR signing scheme (aka v1
-                      signing scheme) used in Android since day one. By default,
-                      signing using this scheme is enabled based on min and max
-                      SDK version (see --min-sdk-version and --max-sdk-version).
-
---v2-signing-enabled  Whether to enable signing using APK Signature Scheme v2
-                      (aka v2 signing scheme) introduced in Android Nougat,
-                      API Level 24. By default, signing using this scheme is
-                      enabled based on min and max SDK version (see
-                      --min-sdk-version and --max-sdk-version).
-
---v3-signing-enabled  Whether to enable signing using APK Signature Scheme v3
-                      (aka v3 signing scheme) introduced in Android P,
-                      API Level 28. By default, signing using this scheme is
-                      enabled based on min and max SDK version (see
-                      --min-sdk-version and --max-sdk-version).  Multiple
-                      signers are not supported when using v3 signing, but
-                      multiple signers may be provided in conjunction with the
-                      "lineage" option to make sure that the app is signed by
-                      an appropriate signer on all supported platform versions.
-
---min-sdk-version     Lowest API Level on which this APK's signatures will be
-                      verified. By default, the value from AndroidManifest.xml
-                      is used. The higher the value, the stronger security
-                      parameters are used when signing.
-
---max-sdk-version     Highest API Level on which this APK's signatures will be
-                      verified. By default, the highest possible value is used.
-
---debuggable-apk-permitted  Whether to permit signing android:debuggable="true"
-                      APKs. Android disables some of its security protections
-                      for such apps. For example, anybody with ADB shell access
-                      can execute arbitrary code in the context of a debuggable
-                      app and can read/write persistently stored data of the
-                      app. It is a good security practice to not sign
-                      debuggable APKs with production signing keys, because
-                      such APKs puts users at risk once leaked.
-                      By default, signing debuggable APKs is permitted, for
-                      backward compatibility with older apksigner versions.
-
---lineage             Signing certificate history to use in the event that
-                      signing certificates changed for an APK using APK
-                      Signature Scheme v3 supported signing certificate
-                      rotation.  This object may be created by the apksigner
-                      "rotate" command.  If used, all signers used to sign the
-                      APK must be present in the signing lineage,
-                      and if v1 or v2 signing is enabled, the first (oldest)
-                      entry in the lineage must have a signer provided, so that
-                      it can be used for those v1 and/or v2 signing. Multiple
-                      signers are not supported when using APK Signature Scheme
-                      v3, so multiple signers input will correspond to different
-                      points in the lineage and will be used on older platform
-                      versions when the newest signer in the lineage is
-                      unsupported.
-
 -h, --help            Show help about this command and exit
 
-
         PER-SIGNER OPTIONS
-These options specify the configuration of a particular signer. To delimit
-options of different signers, use --next-signer.
+These options specify the configuration of a particular signer. To rotate keys, two signers must be
+specified, an old and a new.
 
---next-signer         Delimits options of two different signers. There is no
-                      need to use this option when only one signer is used.
+--old-signer          The signing information for the signer from which to be rotated.  This will
+                      be used to sign a new entry in the SigningCertificateLineage allowing the
+                      addition of the new-signer.  If an input SigningCertificateLineage object was
+                      provided, this signer must match the leaf descendant so that the existing
+                      signing certificate history may be extended.
 
---v1-signer-name      Basename for files comprising the JAR signature scheme
-                      (aka v1 scheme) signature of this signer. By default,
-                      KeyStore key alias or basename of key file is used.
+--new-signer          The signing information for the signer to which you want to rotate.  This will
+                      be the last key in the SigningCertificate object, signed by the old-signer.
 
         PER-SIGNER SIGNING KEY & CERTIFICATE OPTIONS
 There are two ways to provide the signer's private key and certificate: (1) Java
@@ -117,7 +61,7 @@ file in X.509 format (see --key and --cert).
                       When the same file (including standard input) is used for
                       providing multiple passwords, the passwords are read from
                       the file one line at a time. Passwords are read in the
-                      order in which signers are specified and, within each
+                      order of old-signer then new-signer and, within each
                       signer, KeyStore password is read before the key password
                       is read.
 
@@ -140,7 +84,7 @@ file in X.509 format (see --key and --cert).
                       When the same file (including standard input) is used for
                       providing multiple passwords, the passwords are read from
                       the file one line at a time. Passwords are read in the
-                      order in which signers are specified and, within each
+                      order of old-signer then new-signer and, within each
                       signer, KeyStore password is read before the key password
                       is read.
 
@@ -203,35 +147,12 @@ on the command-line.
                       installed as the lowest priority provider.
                       See java.security.Security.insertProviderAt.
 
-
         EXAMPLES
 
-1. Sign an APK, in-place, using the one and only key in keystore release.jks:
-$ apksigner sign --ks release.jks app.apk
+1. Create a new SigningCertificateLineage to enable rotation:
+$ apksigner rotate --out /path/to/new/file --old-signer --ks release.jks \
+    --new-signer --ks release2.jks
 
-1. Sign an APK, without overwriting, using the one and only key in keystore
-   release.jks:
-$ apksigner sign --ks release.jks --in app.apk --out app-signed.apk
-
-3. Sign an APK using a private key and certificate stored as individual files:
-$ apksigner sign --key release.pk8 --cert release.x509.pem app.apk
-
-4. Sign an APK using two keys:
-$ apksigner sign --ks release.jks --next-signer --ks magic.jks app.apk
-
-5. Sign an APK using PKCS #11 JCA Provider:
-$ apksigner sign --provider-class sun.security.pkcs11.SunPKCS11 \
-    --provider-arg token.cfg --ks NONE --ks-type PKCS11 app.apk
-
-6. Sign an APK using a non-ASCII password KeyStore created on English Windows.
-   The --pass-encoding parameter is not needed if apksigner is being run on
-   English Windows with Java 8 or older.
-$ apksigner sign --ks release.jks --pass-encoding ibm437 app.apk
-
-7. Sign an APK on Windows using a non-ASCII password KeyStore created on a
-   modern OSX or Linux machine:
-$ apksigner sign --ks release.jks --pass-encoding utf-8 app.apk
-
-8. Sign an APK with rotated signing certificate:
-$ apksigner sign --ks release.jks --next-signer --ks release2.jks app.apk \
-    --lineage /path/to/signing/history/lineage
+2. Extend an existing SigningCertificateLineage to rotate again after previous rotation:
+$ apksigner rotate --in /path/to/existing/lineage --out /path/to/new/file \
+    --old-signer --ks release2.jks --new-signer --ks release3.jks
