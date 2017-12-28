@@ -75,7 +75,7 @@ import java.util.List;
  *     that additional JAR entries are output. These entries comprise the output APK's JAR
  *     signature.</li>
  * <li>Locate the ZIP Central Directory and ZIP End of Central Directory sections in the output and
- *     invoke {@link #outputZipSections(DataSource, DataSource, DataSource)} which may request that
+ *     invoke {@link #outputZipSections2(DataSource, DataSource, DataSource)} which may request that
  *     an APK Signature Block is inserted before the ZIP Central Directory. The block contains the
  *     output APK's APK Signature Scheme v2 signature.</li>
  * <li>Invoke {@link #outputDone()} to signal that the APK was output in full. The engine will
@@ -185,7 +185,7 @@ public interface ApkSignerEngine extends Closeable {
      * @return request to add JAR signature to the output or {@code null} if there is no need to add
      *         a JAR signature. The request will contain additional JAR entries to be output. The
      *         request must be fulfilled before
-     *         {@link #outputZipSections(DataSource, DataSource, DataSource)} is invoked.
+     *         {@link #outputZipSections2(DataSource, DataSource, DataSource)} is invoked.
      *
      * @throws ApkFormatException if the APK is malformed in a way which is preventing this engine
      *         from producing a valid signature. For example, if the engine uses the provided
