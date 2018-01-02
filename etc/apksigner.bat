@@ -84,5 +84,5 @@ set "a=%~1"
 :endArgs
 
 set javaOpts=%javaOpts% %defaultXmx% %defaultXss%
-call "%java_exe%" %javaOpts% -Djava.ext.dirs="%frameworkdir%" -jar "%jarpath%" %params%
+call "%java_exe%" %javaOpts% -jar "%jarpath%" %params%
 
