@@ -22,6 +22,7 @@ import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkSigningBlockNotFoundException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.util.ByteBufferDataSource;
+import com.android.apksig.internal.util.ByteBufferUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;
@@ -383,7 +384,7 @@ public abstract class V2SchemeVerifier {
             try {
                 ByteBuffer attribute = getLengthPrefixedSlice(additionalAttributes);
                 int id = attribute.getInt();
-                byte[] value = readLengthPrefixedByteArray(attribute);
+                byte[] value = ByteBufferUtils.toByteArray(attribute);
                 result.additionalAttributes.add(
                         new Result.SignerInfo.AdditionalAttribute(id, value));
                 result.addWarning(Issue.V2_SIG_UNKNOWN_ADDITIONAL_ATTRIBUTE, id);
