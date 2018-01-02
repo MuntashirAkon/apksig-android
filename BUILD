@@ -2,20 +2,35 @@
 
 licenses(["notice"])  # Apache License 2.0
 
+# Public API of the apksig library
 java_library(
     name = "apksig",
-    srcs = glob([
-        "src/main/java/**/*.java",
-    ]),
+    srcs = glob(
+        ["src/main/java/**/*.java"],
+        exclude = ["src/main/java/com/android/apksig/internal/**/*.java"],
+    ),
     visibility = ["//visibility:public"],
+    deps = [":apksig-all"],
 )
 
-# All of apksig library, including private API which clients are not supposed
-# to directly depend on
+# All of apksig library, including private API which clients must not directly depend on. Private
+# API may change without regard to its clients outside of the apksig project.
 java_library(
     name = "apksig-all",
     srcs = glob(["src/main/java/**/*.java"]),
-    visibility = ["//visibility:public"],
+    visibility = [":apksig-private-api-clients"],
+)
+
+# Packages which are permitted to depend on apksig-all target which offers private API in addition
+# to the public API offered by the apksig target. The private API may change any time without
+# regard to its clients outside of the apksig project.
+package_group(
+    name = "apksig-private-api-clients",
+    packages = [
+        # build-system:tools.apksig exports apksig as a self-contained JAR, containing public API
+        # and all implementation details. It thus needs access to apksig-all.
+        "//tools/base/build-system",
+    ],
 )
 
 java_binary(
@@ -40,5 +55,5 @@ java_test(
         "src/test/resources/**/*",
     ]),
     test_class = "com.android.apksig.AllTests",
-    deps = [":apksig"],
+    deps = [":apksig-all"],
 )
