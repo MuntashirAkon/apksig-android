@@ -402,6 +402,15 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void testV2UnknownAdditionalAttributeIgnored() throws Exception {
+        // APK's v2 signature contains an unknown additional attribute, but is otherwise fine.
+        // Obtained by modifying APK signer to output an additional attribute with ID 0x01020304
+        // and value 0x05060708.
+        assertVerified(
+                verifyForMinSdkVersion("v2-only-unknown-additional-attr.apk", AndroidSdkVersion.N));
+    }
+
+    @Test
     public void testV2MismatchBetweenSignaturesAndDigestsBlockRejected() throws Exception {
         // APK is signed with a single signature algorithm, but the digests block claims that it is
         // signed with two different signature algorithms. Obtained by modifying APK Signer to
