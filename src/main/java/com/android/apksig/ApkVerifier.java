@@ -48,7 +48,8 @@ import java.util.Set;
  * APK signature verifier which mimics the behavior of the Android platform.
  *
  * <p>The verifier is designed to closely mimic the behavior of Android platforms. This is to enable
- * the verifier to be used for checking whether an APK's signatures will verify on Android.
+ * the verifier to be used for checking whether an APK's signatures are expected to verify on
+ * Android.
  *
  * <p>Use {@link Builder} to obtain instances of this verifier.
  *
@@ -80,7 +81,14 @@ public class ApkVerifier {
     /**
      * Verifies the APK's signatures and returns the result of verification. The APK can be
      * considered verified iff the result's {@link Result#isVerified()} returns {@code true}.
-     * The verification result also includes errors, warnings, and information about signers.
+     * The verification result also includes errors, warnings, and information about signers such
+     * as their signing certificates.
+     *
+     * <p>Verification succeeds iff the APK's signature is expected to verify on all Android
+     * platform versions specified via the {@link Builder}. If the APK's signature is expected to
+     * not verify on any of the specified platform versions, this method returns a result with one
+     * or more errors and whose {@link Result#isVerified()} returns {@code false}, or this method
+     * throws an exception.
      *
      * @throws IOException if an I/O error is encountered while reading the APK
      * @throws ApkFormatException if the APK is malformed
