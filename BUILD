@@ -42,6 +42,7 @@ java_test(
     resources = glob([
         "src/test/resources/**/*",
     ]),
+    size = "small",
     test_class = "com.android.apksig.AllTests",
     deps = [":apksig-all"],
 )
