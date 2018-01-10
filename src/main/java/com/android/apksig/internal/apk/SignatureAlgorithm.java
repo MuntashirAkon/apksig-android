@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.apk.v2;
+package com.android.apksig.internal.apk;
 
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.Pair;
@@ -132,7 +132,7 @@ public enum SignatureAlgorithm {
     private final Pair<String, ? extends AlgorithmParameterSpec> mJcaSignatureAlgAndParams;
     private final int mMinSdkVersion;
 
-    private SignatureAlgorithm(int id,
+    SignatureAlgorithm(int id,
             ContentDigestAlgorithm contentDigestAlgorithm,
             String jcaKeyAlgorithm,
             Pair<String, ? extends AlgorithmParameterSpec> jcaSignatureAlgAndParams,
@@ -147,21 +147,21 @@ public enum SignatureAlgorithm {
     /**
      * Returns the ID of this signature algorithm as used in APK Signature Scheme v2 wire format.
      */
-    int getId() {
+    public int getId() {
         return mId;
     }
 
     /**
      * Returns the content digest algorithm associated with this signature algorithm.
      */
-    ContentDigestAlgorithm getContentDigestAlgorithm() {
+    public ContentDigestAlgorithm getContentDigestAlgorithm() {
         return mContentDigestAlgorithm;
     }
 
     /**
      * Returns the JCA {@link java.security.Key} algorithm used by this signature scheme.
      */
-    String getJcaKeyAlgorithm() {
+    public String getJcaKeyAlgorithm() {
         return mJcaKeyAlgorithm;
     }
 
@@ -169,15 +169,15 @@ public enum SignatureAlgorithm {
      * Returns the {@link java.security.Signature} algorithm and the {@link AlgorithmParameterSpec}
      * (or null if not needed) to parameterize the {@code Signature}.
      */
-    Pair<String, ? extends AlgorithmParameterSpec> getJcaSignatureAlgorithmAndParams() {
+    public Pair<String, ? extends AlgorithmParameterSpec> getJcaSignatureAlgorithmAndParams() {
         return mJcaSignatureAlgAndParams;
     }
 
-    int getMinSdkVersion() {
+    public int getMinSdkVersion() {
         return mMinSdkVersion;
     }
 
-    static SignatureAlgorithm findById(int id) {
+    public static SignatureAlgorithm findById(int id) {
         for (SignatureAlgorithm alg : SignatureAlgorithm.values()) {
             if (alg.getId() == id) {
                 return alg;
