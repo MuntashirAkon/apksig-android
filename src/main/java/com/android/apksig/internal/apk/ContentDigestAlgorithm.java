@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.apk.v2;
+package com.android.apksig.internal.apk;
 
 /**
  * APK Signature Scheme v2 content digest algorithm.
