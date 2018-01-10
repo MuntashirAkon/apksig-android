@@ -19,9 +19,10 @@ package com.android.apksig;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.AndroidBinXmlParser;
+import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
-import com.android.apksig.internal.apk.v2.ContentDigestAlgorithm;
-import com.android.apksig.internal.apk.v2.SignatureAlgorithm;
+import com.android.apksig.internal.apk.ContentDigestAlgorithm;
+import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.v2.V2SchemeVerifier;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
@@ -182,11 +183,12 @@ public class ApkVerifier {
         if (maxSdkVersion >= AndroidSdkVersion.N) {
             foundApkSigSchemeIds = new HashSet<>(1);
             try {
-                V2SchemeVerifier.Result v2Result = V2SchemeVerifier.verify(apk, zipSections,
-                        Math.max(minSdkVersion, AndroidSdkVersion.N), maxSdkVersion);
+                ApkSigningBlockUtils.Result v2Result =
+                        V2SchemeVerifier.verify(apk, zipSections,
+                                Math.max(minSdkVersion, AndroidSdkVersion.N), maxSdkVersion);
                 foundApkSigSchemeIds.add(APK_SIGNATURE_SCHEME_V2_ID);
                 result.mergeFrom(v2Result);
-            } catch (V2SchemeVerifier.SignatureNotFoundException ignored) {}
+            } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {}
             if (result.containsErrors()) {
                 return result;
             }
@@ -485,11 +487,11 @@ public class ApkVerifier {
             }
         }
 
-        private void mergeFrom(V2SchemeVerifier.Result source) {
+        private void mergeFrom(ApkSigningBlockUtils.Result source) {
             mVerifiedUsingV2Scheme = source.verified;
             mErrors.addAll(source.getErrors());
             mWarnings.addAll(source.getWarnings());
-            for (V2SchemeVerifier.Result.SignerInfo signer : source.signers) {
+            for (ApkSigningBlockUtils.Result.SignerInfo signer : source.signers) {
                 mV2SchemeSigners.add(new V2SchemeSignerInfo(signer));
             }
         }
@@ -622,7 +624,7 @@ public class ApkVerifier {
             private final List<IssueWithParams> mErrors;
             private final List<IssueWithParams> mWarnings;
 
-            private V2SchemeSignerInfo(V2SchemeVerifier.Result.SignerInfo result) {
+            private V2SchemeSignerInfo(ApkSigningBlockUtils.Result.SignerInfo result) {
                 mIndex = result.index;
                 mCerts = result.certs;
                 mErrors = result.getErrors();
