@@ -18,6 +18,7 @@ package com.android.apksig;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
+import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.v1.DigestAlgorithm;
 import com.android.apksig.internal.apk.v1.V1SchemeSigner;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
@@ -26,6 +27,7 @@ import com.android.apksig.internal.util.TeeDataSink;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -206,15 +208,16 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 V1SchemeSigner.getOutputEntryNames(mV1SignerConfigs);
     }
 
-    private List<V2SchemeSigner.SignerConfig> createV2SignerConfigs(
+    private List<ApkSigningBlockUtils.SignerConfig> createV2SignerConfigs(
             boolean apkSigningBlockPaddingSupported) throws InvalidKeyException {
-        List<V2SchemeSigner.SignerConfig> v2SignerConfigs = new ArrayList<>(mSignerConfigs.size());
+        List<ApkSigningBlockUtils.SignerConfig> v2SignerConfigs = new ArrayList<>(mSignerConfigs.size());
         for (int i = 0; i < mSignerConfigs.size(); i++) {
             SignerConfig signerConfig = mSignerConfigs.get(i);
             List<X509Certificate> certificates = signerConfig.getCertificates();
             PublicKey publicKey = certificates.get(0).getPublicKey();
 
-            V2SchemeSigner.SignerConfig v2SignerConfig = new V2SchemeSigner.SignerConfig();
+            ApkSigningBlockUtils.SignerConfig v2SignerConfig =
+                    new ApkSigningBlockUtils.SignerConfig();
             v2SignerConfig.privateKey = signerConfig.getPrivateKey();
             v2SignerConfig.certificates = certificates;
             v2SignerConfig.signatureAlgorithms =
@@ -532,15 +535,27 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return null;
         }
         invalidateV2Signature();
-        List<V2SchemeSigner.SignerConfig> v2SignerConfigs = createV2SignerConfigs(
-                apkSigningBlockPaddingSupported);
         checkOutputApkNotDebuggableIfDebuggableMustBeRejected();
-        Pair<byte[], Integer> result =
-                V2SchemeSigner.generateApkSigningBlock(
-                        zipEntries, zipCentralDirectory, zipEocd, v2SignerConfigs,
+
+        // adjust to proper padding
+        Pair<DataSource, Integer> paddingPair =
+                ApkSigningBlockUtils.generateApkSigningBlockPadding(zipEntries,
                         apkSigningBlockPaddingSupported);
-        byte[] apkSigningBlock = result.getFirst();
-        int padSizeBeforeApkSigningBlock  = result.getSecond();
+        DataSource beforeCentralDir = paddingPair.getFirst();
+        int padSizeBeforeApkSigningBlock  = paddingPair.getSecond();
+        DataSource eocd =
+                ApkSigningBlockUtils.copyWithModifiedCDOffset(beforeCentralDir, zipEocd);
+
+        // create APK Signature Scheme V2 Signature
+        List<ApkSigningBlockUtils.SignerConfig> v2SignerConfigs =
+                createV2SignerConfigs(apkSigningBlockPaddingSupported);
+        Pair<byte[], Integer> apkSignatureSchemeV2Block =
+                V2SchemeSigner.generateApkSignatureSchemeV2Block(beforeCentralDir,
+                        zipCentralDirectory, eocd, v2SignerConfigs);
+
+        // create APK Signing Block with v2
+        byte[] apkSigningBlock =
+                ApkSigningBlockUtils.generateApkSigningBlock(apkSignatureSchemeV2Block);
 
         mAddV2SignatureRequest = new OutputApkSigningBlockRequestImpl(apkSigningBlock,
                 padSizeBeforeApkSigningBlock);
