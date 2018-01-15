@@ -23,9 +23,10 @@ import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;
 
 /**
- * APK Signature Scheme v2 signature algorithm.
+ * APK Signing Block signature algorithm.
  */
 public enum SignatureAlgorithm {
+    // TODO reserve the 0x0000 ID to mean null
     /**
      * RSASSA-PSS with SHA2-256 digest, SHA2-256 MGF1, 32 bytes of salt, trailer: 0xbc, content
      * digested using SHA2-256 in 1 MB chunks.
