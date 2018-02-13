@@ -18,6 +18,8 @@ java_library(
 java_library(
     name = "apksig-all",
     srcs = glob(["src/main/java/**/*.java"]),
+    resource_strip_prefix = "tools/apksig",
+    resources = ["LICENSE"],
     visibility = [":apksig-private-api-clients"],
 )
 
