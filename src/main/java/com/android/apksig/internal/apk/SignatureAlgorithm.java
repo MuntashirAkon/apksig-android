@@ -98,7 +98,7 @@ public enum SignatureAlgorithm {
      * the same way fsverity operates.
      */
     VERITY_RSA_PKCS1_V1_5_WITH_SHA256(
-            0x0401,
+            0x0411,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "RSA",
             Pair.of("SHA256withRSA", null),
@@ -109,7 +109,7 @@ public enum SignatureAlgorithm {
      * fsverity operates.
      */
     VERITY_ECDSA_WITH_SHA256(
-            0x0403,
+            0x0413,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "EC",
             Pair.of("SHA256withECDSA", null),
@@ -120,7 +120,7 @@ public enum SignatureAlgorithm {
      * fsverity operates.
      */
     VERITY_DSA_WITH_SHA256(
-            0x0405,
+            0x0415,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "DSA",
             Pair.of("SHA256withDSA", null),

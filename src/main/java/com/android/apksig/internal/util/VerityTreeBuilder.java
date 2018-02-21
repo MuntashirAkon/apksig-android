@@ -110,11 +110,11 @@ public class VerityTreeBuilder {
             DataSource src;
             if (i == levelOffset.length - 2) {
                 src = fileSource;
-                digestDataByChunks(src, middleBufferSink, false);
+                digestDataByChunks(src, middleBufferSink);
             } else {
                 src = DataSources.asDataSource(slice(verityBuffer.asReadOnlyBuffer(),
                             levelOffset[i + 1], levelOffset[i + 2]));
-                digestDataByChunks(src, middleBufferSink, true);
+                digestDataByChunks(src, middleBufferSink);
             }
 
             // If the output is not full chunk, pad with 0s.
@@ -166,8 +166,7 @@ public class VerityTreeBuilder {
      * less than the chunk size and padding is desired, feed with extra padding 0 to fill up the
      * chunk before digesting.
      */
-    private void digestDataByChunks(DataSource dataSource, DataSink dataSink, boolean padLastChunk)
-            throws IOException {
+    private void digestDataByChunks(DataSource dataSource, DataSink dataSink) throws IOException {
         long size = dataSource.size();
         long offset = 0;
         for (; offset + CHUNK_SIZE <= size; offset += CHUNK_SIZE) {
@@ -182,13 +181,10 @@ public class VerityTreeBuilder {
         int remaining = (int) (size % CHUNK_SIZE);
         if (remaining > 0) {
             ByteBuffer buffer;
-            if (padLastChunk) {
-                buffer = ByteBuffer.allocate(CHUNK_SIZE);  // initialized to 0.
-                dataSource.copyTo(offset, remaining, buffer);
-                buffer.rewind();
-            } else {
-                buffer = dataSource.getByteBuffer(offset, remaining);
-            }
+            buffer = ByteBuffer.allocate(CHUNK_SIZE);  // initialized to 0.
+            dataSource.copyTo(offset, remaining, buffer);
+            buffer.rewind();
+
             byte[] hash = saltedDigest(buffer);
             dataSink.consume(hash, 0, hash.length);
         }
