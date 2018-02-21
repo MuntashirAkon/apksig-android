@@ -49,13 +49,13 @@ public final class VerityTreeBuilderTest {
 
         // 524289 requires additional tree level.
         expectRootHash("random-data-524287-bytes", new byte[] { 0x20 },
-                "34499b447161546ba412b3a520655b7435718a3fc6ddf7177547885e0ea29892");
+                "39534c3a0bd27efcafb408e630248082156c80ab41789814749b33e325a93c62");
         expectRootHash("random-data-524288-bytes", new byte[] { 0x21 },
                 "34f8b9c33cd49b753b9341b2d8a4b83e59c5ae458ec6a85fbfebd49314c24d4e");
         expectRootHash("random-data-524289-bytes", new byte[] { 0x22 },
-                "2c6b225ddba163fc943b671ba8012a6ba041b9ea76e12b31f484ccebee5506b1");
+                "1934793602f5e0b8c7aa7ed7e7acb42dca579ed11d8ac5ff9bb6d346f4222bd5");
         expectRootHash("random-data-525000-bytes", new byte[] { 0x23 },
-                "b916b0666d749259f0ac5fbb2df54818fc64a2f3a7615e68ade854d0c7ac94f7");
+                "f63b718c01f569386d7de2e813d7b1e452322c638fb240af3ef01c2e6d317ee8");
     }
 
     private static void expectRootHash(String inputResource, byte[] salt, String expectedRootHash)
@@ -86,12 +86,32 @@ public final class VerityTreeBuilderTest {
             0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x06, 0x00, 0x79, 0x01,
             0x00, 0x00, 0x30, 0x16, 0x00, 0x00, 0x00, 0x00
         };
-        VerityTreeBuilder builder = new VerityTreeBuilder(null);
-        byte[] rootHash = builder.generateVerityTreeRootHash(
-                DataSources.asDataSource(ByteBuffer.allocate(4096)),  // before APK Signing Block
-                makeStringDataSource("this is central directory (fake data)"),
-                DataSources.asDataSource(ByteBuffer.wrap(sampleEoCDFromDisk)));
-        assertEquals("7ddb07e6a24ed786ec6edd19cb4f823fb1d657a81ba531e93fe70fdf5b9988ba",
-                HexEncoding.encode(rootHash));
+        String expectedRootHash =
+                "7694e72c242107a5b4ce6091faf867e2f13c033b6b64faddcb13b3d698a8495a";
+        {
+            VerityTreeBuilder builder = new VerityTreeBuilder(null);
+            byte[] rootHash = builder.generateVerityTreeRootHash(
+                    DataSources.asDataSource(ByteBuffer.allocate(4096)),  // before Signing Block
+                    makeStringDataSource("this is central directory (fake data)"),
+                    DataSources.asDataSource(ByteBuffer.wrap(sampleEoCDFromDisk)));
+            assertEquals(expectedRootHash, HexEncoding.encode(rootHash));
+        }
+
+        // File ending with different length of zeros get the same hash.  This is to match the
+        // behavior of fs-verity, where it expects the client to add salt for the same level of
+        // protection.
+        {
+            ByteBuffer fileTailWithDifferentLengthOfZeros = ByteBuffer.allocate(
+                    sampleEoCDFromDisk.length + 1);
+            fileTailWithDifferentLengthOfZeros.put(sampleEoCDFromDisk);
+            fileTailWithDifferentLengthOfZeros.rewind();
+
+            VerityTreeBuilder builder = new VerityTreeBuilder(null);
+            byte[] rootHash = builder.generateVerityTreeRootHash(
+                    DataSources.asDataSource(ByteBuffer.allocate(4096)),  // before Signing Block
+                    makeStringDataSource("this is central directory (fake data)"),
+                    DataSources.asDataSource(fileTailWithDifferentLengthOfZeros));
+            assertEquals(expectedRootHash, HexEncoding.encode(rootHash));
+        }
     }
 }
