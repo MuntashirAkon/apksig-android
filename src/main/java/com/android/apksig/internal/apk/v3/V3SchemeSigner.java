@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,19 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.apk.v2;
+package com.android.apksig.internal.apk.v3;
 
+import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeAsLengthPrefixedElement;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeAsSequenceOfLengthPrefixedElements;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeCertificates;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodePublicKey;
 
+import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils.SignerConfig;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
-import com.android.apksig.internal.apk.v3.V3SchemeSigner;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.util.DataSource;
 
@@ -48,46 +49,33 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * APK Signature Scheme v2 signer.
+ * APK Signature Scheme v3 signer.
  *
- * <p>APK Signature Scheme v2 is a whole-file signature scheme which aims to protect every single
- * bit of the APK, as opposed to the JAR Signature Scheme which protects only the names and
- * uncompressed contents of ZIP entries.
+ * <p>APK Signature Scheme v3 builds upon APK Signature Scheme v3, and maintains all of the APK
+ * Signature Scheme v2 goals.
  *
  * @see <a href="https://source.android.com/security/apksigning/v2.html">APK Signature Scheme v2</a>
+ *
+ * <p> The main contribution of APK Signature Scheme v3 is the introduction of the
+ * {@link SigningCertificateLineage}, which enables an APK to change its signing
+ * certificate as long as it can prove the new siging certificate was signed by the old.
  */
-public abstract class V2SchemeSigner {
-    /*
-     * The two main goals of APK Signature Scheme v2 are:
-     * 1. Detect any unauthorized modifications to the APK. This is achieved by making the signature
-     *    cover every byte of the APK being signed.
-     * 2. Enable much faster signature and integrity verification. This is achieved by requiring
-     *    only a minimal amount of APK parsing before the signature is verified, thus completely
-     *    bypassing ZIP entry decompression and by making integrity verification parallelizable by
-     *    employing a hash tree.
-     *
-     * The generated signature block is wrapped into an APK Signing Block and inserted into the
-     * original APK immediately before the start of ZIP Central Directory. This is to ensure that
-     * JAR and ZIP parsers continue to work on the signed APK. The APK Signing Block is designed for
-     * extensibility. For example, a future signature scheme could insert its signatures there as
-     * well. The contract of the APK Signing Block is that all contents outside of the block must be
-     * protected by signatures inside the block.
-     */
+public abstract class V3SchemeSigner {
 
-    private static final int APK_SIGNATURE_SCHEME_V2_BLOCK_ID = 0x7109871a;
+    private static final int APK_SIGNATURE_SCHEME_V3_BLOCK_ID = 0xf05368c0;
 
     /** Hidden constructor to prevent instantiation. */
-    private V2SchemeSigner() {}
+    private V3SchemeSigner() {}
 
     /**
-     * Gets the APK Signature Scheme v2 signature algorithms to be used for signing an APK using the
+     * Gets the APK Signature Scheme v3 signature algorithms to be used for signing an APK using the
      * provided key.
      *
      * @param minSdkVersion minimum API Level of the platform on which the APK may be installed (see
      *        AndroidManifest.xml minSdkVersion attribute).
      *
      * @throws InvalidKeyException if the provided key is not suitable for signing APKs using
-     *         APK Signature Scheme v2
+     *         APK Signature Scheme v3
      */
     public static List<SignatureAlgorithm> getSuggestedSignatureAlgorithms(
             PublicKey signingKey, int minSdkVersion, boolean apkSigningBlockPaddingSupported)
@@ -142,26 +130,23 @@ public abstract class V2SchemeSigner {
         }
     }
 
-    public static Pair<byte[], Integer> generateApkSignatureSchemeV2Block(
+    public static Pair<byte[], Integer> generateApkSignatureSchemeV3Block(
             DataSource beforeCentralDir,
             DataSource centralDir,
             DataSource eocd,
-            List<SignerConfig> signerConfigs,
-            boolean v3SigningEnabled)
+            List<SignerConfig> signerConfigs)
                     throws IOException, InvalidKeyException, NoSuchAlgorithmException,
                             SignatureException {
         Pair<List<SignerConfig>,
                 Map<ContentDigestAlgorithm, byte[]>> digestInfo =
                 ApkSigningBlockUtils.computeContentDigests(beforeCentralDir, centralDir, eocd,
                         signerConfigs);
-        return generateApkSignatureSchemeV2Block(
-                digestInfo.getFirst(), digestInfo.getSecond(),v3SigningEnabled);
+        return generateApkSignatureSchemeV3Block(digestInfo.getFirst(), digestInfo.getSecond());
     }
 
-    private static Pair<byte[], Integer> generateApkSignatureSchemeV2Block(
+    private static Pair<byte[], Integer> generateApkSignatureSchemeV3Block(
             List<SignerConfig> signerConfigs,
-            Map<ContentDigestAlgorithm, byte[]> contentDigests,
-            boolean v3SigningEnabled)
+            Map<ContentDigestAlgorithm, byte[]> contentDigests)
                     throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
         // FORMAT:
         // * length-prefixed sequence of length-prefixed signer blocks.
@@ -172,7 +157,7 @@ public abstract class V2SchemeSigner {
             signerNumber++;
             byte[] signerBlock;
             try {
-                signerBlock = generateSignerBlock(signerConfig, contentDigests, v3SigningEnabled);
+                signerBlock = generateSignerBlock(signerConfig, contentDigests);
             } catch (InvalidKeyException e) {
                 throw new InvalidKeyException("Signer #" + signerNumber + " failed", e);
             } catch (SignatureException e) {
@@ -184,13 +169,12 @@ public abstract class V2SchemeSigner {
         return Pair.of(encodeAsSequenceOfLengthPrefixedElements(
                 new byte[][] {
                     encodeAsSequenceOfLengthPrefixedElements(signerBlocks),
-                }), APK_SIGNATURE_SCHEME_V2_BLOCK_ID);
+                }), APK_SIGNATURE_SCHEME_V3_BLOCK_ID);
     }
 
     private static byte[] generateSignerBlock(
             SignerConfig signerConfig,
-            Map<ContentDigestAlgorithm, byte[]> contentDigests,
-            boolean v3SigningEnabled)
+            Map<ContentDigestAlgorithm, byte[]> contentDigests)
                     throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
         if (signerConfig.certificates.isEmpty()) {
             throw new SignatureException("No certificates configured for signer");
@@ -199,7 +183,7 @@ public abstract class V2SchemeSigner {
 
         byte[] encodedPublicKey = encodePublicKey(publicKey);
 
-        V2SignatureSchemeBlock.SignedData signedData = new V2SignatureSchemeBlock.SignedData();
+        V3SignatureSchemeBlock.SignedData signedData = new V3SignatureSchemeBlock.SignedData();
         try {
             signedData.certificates = encodeCertificates(signerConfig.certificates);
         } catch (CertificateEncodingException e) {
@@ -220,25 +204,16 @@ public abstract class V2SchemeSigner {
             digests.add(Pair.of(signatureAlgorithm.getId(), contentDigest));
         }
         signedData.digests = digests;
-        signedData.additionalAttributes = generateAdditionalAttributes(v3SigningEnabled);
+        signedData.minSdkVersion = signerConfig.minSdkVersion;
+        signedData.maxSdkVersion = signerConfig.maxSdkVersion;
+        signedData.additionalAttributes = generateAdditionalAttributes(signerConfig);
 
-        V2SignatureSchemeBlock.Signer signer = new V2SignatureSchemeBlock.Signer();
-        // FORMAT:
-        // * length-prefixed sequence of length-prefixed digests:
-        //   * uint32: signature algorithm ID
-        //   * length-prefixed bytes: digest of contents
-        // * length-prefixed sequence of certificates:
-        //   * length-prefixed bytes: X.509 certificate (ASN.1 DER encoded).
-        // * length-prefixed sequence of length-prefixed additional attributes:
-        //   * uint32: ID
-        //   * (length - 4) bytes: value
+        V3SignatureSchemeBlock.Signer signer = new V3SignatureSchemeBlock.Signer();
 
-        signer.signedData = encodeAsSequenceOfLengthPrefixedElements(new byte[][] {
-            encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(signedData.digests),
-            encodeAsSequenceOfLengthPrefixedElements(signedData.certificates),
-            // additional attributes
-            new byte[0],
-        });
+        signer.signedData = encodeSignedData(signedData);
+
+        signer.minSdkVersion = signerConfig.minSdkVersion;
+        signer.maxSdkVersion = signerConfig.maxSdkVersion;
         signer.publicKey = encodedPublicKey;
         signer.signatures = new ArrayList<>(signerConfig.signatureAlgorithms.size());
         for (SignatureAlgorithm signatureAlgorithm : signerConfig.signatureAlgorithms) {
@@ -284,45 +259,99 @@ public abstract class V2SchemeSigner {
             signer.signatures.add(Pair.of(signatureAlgorithm.getId(), signatureBytes));
         }
 
+
+        return encodeSigner(signer);
+    }
+
+    private static byte[] encodeSigner(V3SignatureSchemeBlock.Signer signer) {
+        byte[] signedData = encodeAsLengthPrefixedElement(signer.signedData);
+        byte[] signatures =
+                encodeAsLengthPrefixedElement(
+                        encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(
+                                signer.signatures));
+        byte[] publicKey = encodeAsLengthPrefixedElement(signer.publicKey);
+
         // FORMAT:
         // * length-prefixed signed data
+        // * uint32: minSdkVersion
+        // * uint32: maxSdkVersion
         // * length-prefixed sequence of length-prefixed signatures:
         //   * uint32: signature algorithm ID
         //   * length-prefixed bytes: signature of signed data
         // * length-prefixed bytes: public key (X.509 SubjectPublicKeyInfo, ASN.1 DER encoded)
-        return encodeAsSequenceOfLengthPrefixedElements(
-                new byte[][] {
-                    signer.signedData,
-                    encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(
-                            signer.signatures),
-                    signer.publicKey,
-                });
+        int payloadSize =
+                signedData.length
+                + 4
+                + 4
+                + signatures.length
+                + publicKey.length;
+
+        ByteBuffer result = ByteBuffer.allocate(payloadSize);
+        result.order(ByteOrder.LITTLE_ENDIAN);
+        result.put(signedData);
+        result.putInt(signer.minSdkVersion);
+        result.putInt(signer.maxSdkVersion);
+        result.put(signatures);
+        result.put(publicKey);
+
+        return result.array();
     }
 
-    // Attribute to check whether a newer APK Signature Scheme signature was stripped
-    private static final int STRIPPING_PROTECTION_ATTR_ID = 0xbeeff00d;
+    private static byte[] encodeSignedData(V3SignatureSchemeBlock.SignedData signedData) {
+        byte[] digests =
+                encodeAsLengthPrefixedElement(
+                        encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(
+                                signedData.digests));
+        byte[] certs =
+                encodeAsLengthPrefixedElement(
+                        encodeAsSequenceOfLengthPrefixedElements(signedData.certificates));
+        byte[] attributes = encodeAsLengthPrefixedElement(signedData.additionalAttributes);
 
-    private static byte[] generateAdditionalAttributes(boolean v3SigningEnabled) {
-        if (v3SigningEnabled) {
-            // FORMAT (little endian):
-            // * length-prefixed bytes: attribute pair
-            //   * uint32: ID - STRIPPING_PROTECTION_ATTR_ID in this case
-            //   * uint32: value - 3 (v3 signature scheme id) in this case
-            int payloadSize = 4 + 4 + 4;
-            ByteBuffer result = ByteBuffer.allocate(payloadSize);
-            result.order(ByteOrder.LITTLE_ENDIAN);
-            result.putInt(payloadSize);
-            result.putInt(STRIPPING_PROTECTION_ATTR_ID);
-            result.putInt(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
-            return result.array();
-        } else {
+        // FORMAT:
+        // * length-prefixed sequence of length-prefixed digests:
+        //   * uint32: signature algorithm ID
+        //   * length-prefixed bytes: digest of contents
+        // * length-prefixed sequence of certificates:
+        //   * length-prefixed bytes: X.509 certificate (ASN.1 DER encoded).
+        // * uint-32: minSdkVersion
+        // * uint-32: maxSdkVersion
+        // * length-prefixed sequence of length-prefixed additional attributes:
+        //   * uint32: ID
+        //   * (length - 4) bytes: value
+        //   * uint32: Proof-of-rotation ID: 0x3ba06f8c
+        //   * length-prefixed roof-of-rotation structure
+        int payloadSize =
+                digests.length
+                        + certs.length
+                        + 4
+                        + 4
+                        + attributes.length;
+
+        ByteBuffer result = ByteBuffer.allocate(payloadSize);
+        result.order(ByteOrder.LITTLE_ENDIAN);
+        result.put(digests);
+        result.put(certs);
+        result.putInt(signedData.minSdkVersion);
+        result.putInt(signedData.maxSdkVersion);
+        result.put(attributes);
+
+        return result.array();
+    }
+
+    private static byte[] generateAdditionalAttributes(SignerConfig signerConfig) {
+        if (signerConfig.mSigningCertificateLineage == null) {
             return new byte[0];
         }
+        // TODO add processing to generate Proof-of-rotation record from signer and lineage, and
+        // wrap with an attribute.
+        throw new UnsupportedOperationException();
     }
 
-    private static final class V2SignatureSchemeBlock {
+    private static final class V3SignatureSchemeBlock {
         private static final class Signer {
             public byte[] signedData;
+            public int minSdkVersion;
+            public int maxSdkVersion;
             public List<Pair<Integer, byte[]>> signatures;
             public byte[] publicKey;
         }
@@ -330,6 +359,8 @@ public abstract class V2SchemeSigner {
         private static final class SignedData {
             public List<Pair<Integer, byte[]>> digests;
             public List<byte[]> certificates;
+            public int minSdkVersion;
+            public int maxSdkVersion;
             public byte[] additionalAttributes;
         }
     }
