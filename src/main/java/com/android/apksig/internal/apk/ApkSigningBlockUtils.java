@@ -16,6 +16,7 @@
 
 package com.android.apksig.internal.apk;
 
+import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.ApkVerifier;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkSigningBlockNotFoundException;
@@ -66,6 +67,11 @@ public class ApkSigningBlockUtils {
               0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x20, 0x34, 0x32,
           };
     private static final int VERITY_PADDING_BLOCK_ID = 0x42726577;
+
+    public static final int VERSION_JAR_SIGNATURE_SCHEME = 1;
+    public static final int VERSION_APK_SIGNATURE_SCHEME_V2 = 2;
+    public static final int VERSION_APK_SIGNATURE_SCHEME_V3 = 3;
+
 
     /**
      * Returns positive number if {@code alg1} is preferred over {@code alg2}, {@code -1} if
@@ -538,6 +544,12 @@ public class ApkSigningBlockUtils {
         return result;
     }
 
+    public static byte[] encodeAsLengthPrefixedElement(byte[] bytes) {
+        byte[][] adapterBytes = new byte[1][];
+        adapterBytes[0] = bytes;
+        return encodeAsSequenceOfLengthPrefixedElements(adapterBytes);
+    }
+
     public static byte[] encodeAsSequenceOfLengthPrefixedElements(List<byte[]> sequence) {
         return encodeAsSequenceOfLengthPrefixedElements(
                 sequence.toArray(new byte[sequence.size()][]));
@@ -658,7 +670,8 @@ public class ApkSigningBlockUtils {
         return DataSources.asDataSource(eocdBuf);
     }
 
-    public static byte[] generateApkSigningBlock(Pair<byte[], Integer> apkSignatureSchemeV2Pair) {
+    public static byte[] generateApkSigningBlock(
+            List<Pair<byte[], Integer>> apkSignatureSchemeBlockPairs) {
         // FORMAT:
         // uint64:  size (excluding this field)
         // repeated ID-value pairs:
@@ -669,12 +682,14 @@ public class ApkSigningBlockUtils {
         // uint64:  size (same as the one above)
         // uint128: magic
 
-        byte[] apkSignatureSchemeV2Block = apkSignatureSchemeV2Pair.getFirst();
-        int apkSignatureSchemev2Id = apkSignatureSchemeV2Pair.getSecond();
+        int blocksSize = 0;
+        for (Pair<byte[], Integer> schemeBlockPair : apkSignatureSchemeBlockPairs) {
+            blocksSize += 8 + 4 + schemeBlockPair.getFirst().length; // size + id + value
+        }
 
         int resultSize =
                 8 // size
-                + 8 + 4 + apkSignatureSchemeV2Block.length // v2Block as ID-value pair
+                + blocksSize
                 + 8 // size
                 + 16 // magic
                 ;
@@ -697,10 +712,15 @@ public class ApkSigningBlockUtils {
         long blockSizeFieldValue = resultSize - 8L;
         result.putLong(blockSizeFieldValue);
 
-        long pairSizeFieldValue = 4L + apkSignatureSchemeV2Block.length;
-        result.putLong(pairSizeFieldValue);
-        result.putInt(apkSignatureSchemev2Id);
-        result.put(apkSignatureSchemeV2Block);
+
+        for (Pair<byte[], Integer> schemeBlockPair : apkSignatureSchemeBlockPairs) {
+            byte[] apkSignatureSchemeBlock = schemeBlockPair.getFirst();
+            int apkSignatureSchemeId = schemeBlockPair.getSecond();
+            long pairSizeFieldValue = 4L + apkSignatureSchemeBlock.length;
+            result.putLong(pairSizeFieldValue);
+            result.putInt(apkSignatureSchemeId);
+            result.put(apkSignatureSchemeBlock);
+        }
 
         if (paddingPair != null) {
             result.put(paddingPair);
@@ -801,6 +821,10 @@ public class ApkSigningBlockUtils {
          * List of signature algorithms with which to sign.
          */
         public List<SignatureAlgorithm> signatureAlgorithms;
+
+        public int minSdkVersion;
+        public int maxSdkVersion;
+        public SigningCertificateLineage mSigningCertificateLineage;
     }
 
     public static class Result {
