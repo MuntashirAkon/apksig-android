@@ -33,16 +33,13 @@ import com.android.apksig.util.DataSource;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
-import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
 import java.security.interfaces.ECKey;
 import java.security.interfaces.RSAKey;
-import java.security.spec.AlgorithmParameterSpec;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -215,49 +212,8 @@ public abstract class V3SchemeSigner {
         signer.minSdkVersion = signerConfig.minSdkVersion;
         signer.maxSdkVersion = signerConfig.maxSdkVersion;
         signer.publicKey = encodedPublicKey;
-        signer.signatures = new ArrayList<>(signerConfig.signatureAlgorithms.size());
-        for (SignatureAlgorithm signatureAlgorithm : signerConfig.signatureAlgorithms) {
-            Pair<String, ? extends AlgorithmParameterSpec> sigAlgAndParams =
-                    signatureAlgorithm.getJcaSignatureAlgorithmAndParams();
-            String jcaSignatureAlgorithm = sigAlgAndParams.getFirst();
-            AlgorithmParameterSpec jcaSignatureAlgorithmParams = sigAlgAndParams.getSecond();
-            byte[] signatureBytes;
-            try {
-                Signature signature = Signature.getInstance(jcaSignatureAlgorithm);
-                signature.initSign(signerConfig.privateKey);
-                if (jcaSignatureAlgorithmParams != null) {
-                    signature.setParameter(jcaSignatureAlgorithmParams);
-                }
-                signature.update(signer.signedData);
-                signatureBytes = signature.sign();
-            } catch (InvalidKeyException e) {
-                throw new InvalidKeyException("Failed to sign using " + jcaSignatureAlgorithm, e);
-            } catch (InvalidAlgorithmParameterException | SignatureException e) {
-                throw new SignatureException("Failed to sign using " + jcaSignatureAlgorithm, e);
-            }
-
-            try {
-                Signature signature = Signature.getInstance(jcaSignatureAlgorithm);
-                signature.initVerify(publicKey);
-                if (jcaSignatureAlgorithmParams != null) {
-                    signature.setParameter(jcaSignatureAlgorithmParams);
-                }
-                signature.update(signer.signedData);
-                if (!signature.verify(signatureBytes)) {
-                    throw new SignatureException("Signature did not verify");
-                }
-            } catch (InvalidKeyException e) {
-                throw new InvalidKeyException(
-                        "Failed to verify generated " + jcaSignatureAlgorithm + " signature using"
-                                + " public key from certificate", e);
-            } catch (InvalidAlgorithmParameterException | SignatureException e) {
-                throw new SignatureException(
-                        "Failed to verify generated " + jcaSignatureAlgorithm + " signature using"
-                                + " public key from certificate", e);
-            }
-
-            signer.signatures.add(Pair.of(signatureAlgorithm.getId(), signatureBytes));
-        }
+        signer.signatures =
+                ApkSigningBlockUtils.generateSignaturesOverData(signerConfig, signer.signedData);
 
 
         return encodeSigner(signer);
@@ -338,13 +294,13 @@ public abstract class V3SchemeSigner {
         return result.array();
     }
 
+    public static final int PROOF_OF_ROTATION_ATTR_ID = 0x3ba06f8c;
+
     private static byte[] generateAdditionalAttributes(SignerConfig signerConfig) {
         if (signerConfig.mSigningCertificateLineage == null) {
             return new byte[0];
         }
-        // TODO add processing to generate Proof-of-rotation record from signer and lineage, and
-        // wrap with an attribute.
-        throw new UnsupportedOperationException();
+        return signerConfig.mSigningCertificateLineage.generateV3SignerAttribute();
     }
 
     private static final class V3SignatureSchemeBlock {
