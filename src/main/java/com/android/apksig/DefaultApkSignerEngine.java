@@ -272,6 +272,10 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             }
             config.maxSdkVersion = currentMinSdk - 1; // assuming we never have sdk value of INT_MAX
             config.minSdkVersion = getMinSdkFromV3SignatureAlgorithms(config.signatureAlgorithms);
+            if (mSigningCertificateLineage != null) {
+                config.mSigningCertificateLineage =
+                        mSigningCertificateLineage.getSubLineage(config.certificates.get(0));
+            }
             // we know that this config will be used, so add it to our result, order doesn't matter
             // at this point (and likely only one will be needed
             processedConfigs.add(config);
@@ -690,14 +694,14 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
         if (mV3SigningEnabled) {
             invalidateV3Signature();
-            List<ApkSigningBlockUtils.SignerConfig> v3SignerConfig =
+            List<ApkSigningBlockUtils.SignerConfig> v3SignerConfigs =
                     createV3SignerConfigs(apkSigningBlockPaddingSupported);
             signingSchemeBlocks.add(
                     V3SchemeSigner.generateApkSignatureSchemeV3Block(beforeCentralDir,
-                            zipCentralDirectory, eocd, v3SignerConfig));
+                            zipCentralDirectory, eocd, v3SignerConfigs));
         }
 
-        // create APK Signing Block
+        // create APK Signing Block with v2 and/or v3 blocks
         byte[] apkSigningBlock =
                 ApkSigningBlockUtils.generateApkSigningBlock(signingSchemeBlocks);
 
@@ -1196,16 +1200,6 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             }
 
             /**
-             * Sets the {@link SigningCertificateLineage} to use with the v3 signature scheme.  This
-             * structure provides proof of signing certificate rotation linking the current {@link
-             * SignerConfig} to previous ones.
-             */
-            public SignerConfig.Builder setSigningCertificateLineage(SigningCertificateLineage signingCertificateLineage) {
-                // TODO support v3 key rotation.
-                throw new UnsupportedOperationException();
-            }
-
-            /**
              * Returns a new {@code SignerConfig} instance configured based on the configuration of
              * this builder.
              */
@@ -1399,9 +1393,11 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
          */
         public Builder setSigningCertificateLineage(
                 SigningCertificateLineage signingCertificateLineage) {
-            mV3SigningEnabled = true;
-            // TODO support v3 key rotation.
-            throw new UnsupportedOperationException();
+            if (signingCertificateLineage != null) {
+                mV3SigningEnabled = true;
+                mSigningCertificateLineage = signingCertificateLineage;
+            }
+            return this;
         }
     }
 }
