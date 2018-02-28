@@ -268,7 +268,8 @@ public class ApkSigner {
                             .setV2SigningEnabled(mV2SigningEnabled)
                             .setV3SigningEnabled(mV3SigningEnabled)
                             .setDebuggableApkPermitted(mDebuggableApkPermitted)
-                            .setOtherSignersSignaturesPreserved(mOtherSignersSignaturesPreserved);
+                            .setOtherSignersSignaturesPreserved(mOtherSignersSignaturesPreserved)
+                            .setSigningCertificateLineage(mSigningCertificateLineage);
             if (mCreatedBy != null) {
                 signerEngineBuilder.setCreatedBy(mCreatedBy);
             }
@@ -1168,9 +1169,11 @@ public class ApkSigner {
          */
         public Builder setSigningCertificateLineage(
                 SigningCertificateLineage signingCertificateLineage) {
-            mV3SigningEnabled = true;
-            // TODO support v3 key rotation.
-            throw new UnsupportedOperationException();
+            if (signingCertificateLineage != null) {
+                mV3SigningEnabled = true;
+                mSigningCertificateLineage = signingCertificateLineage;
+            }
+            return this;
         }
 
         /**
