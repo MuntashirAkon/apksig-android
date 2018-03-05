@@ -18,7 +18,9 @@ package com.android.apksigner;
 
 import com.android.apksig.ApkSigner;
 import com.android.apksig.ApkVerifier;
+import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.apk.MinSdkVersionException;
+
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -58,6 +60,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.List;
+
 import javax.crypto.EncryptedPrivateKeyInfo;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
@@ -69,10 +72,11 @@ import javax.crypto.spec.PBEKeySpec;
  */
 public class ApkSignerTool {
 
-    private static final String VERSION = "0.8";
+    private static final String VERSION = "0.9";
     private static final String HELP_PAGE_GENERAL = "help.txt";
     private static final String HELP_PAGE_SIGN = "help_sign.txt";
     private static final String HELP_PAGE_VERIFY = "help_verify.txt";
+    private static final String HELP_PAGE_ROTATE = "help_rotate.txt";
 
     public static void main(String[] params) throws Exception {
         if ((params.length == 0) || ("--help".equals(params[0])) || ("-h".equals(params[0]))) {
@@ -90,6 +94,9 @@ public class ApkSignerTool {
                 return;
             } else if ("verify".equals(cmd)) {
                 verify(Arrays.copyOfRange(params, 1, params.length));
+                return;
+            } else if ("rotate".equals(cmd)) {
+                rotate(Arrays.copyOfRange(params, 1, params.length));
                 return;
             } else if ("help".equals(cmd)) {
                 printUsage(HELP_PAGE_GENERAL);
@@ -125,6 +132,7 @@ public class ApkSignerTool {
         int maxSdkVersion = Integer.MAX_VALUE;
         List<SignerParams> signers = new ArrayList<>(1);
         SignerParams signerParams = new SignerParams();
+        SigningCertificateLineage lineage = null;
         List<ProviderInstallSpec> providers = new ArrayList<>();
         ProviderInstallSpec providerParams = new ProviderInstallSpec();
         OptionsParser optionsParser = new OptionsParser(params);
@@ -194,6 +202,9 @@ public class ApkSignerTool {
                 signerParams.keyFile = optionsParser.getRequiredValue("Private key file");
             } else if ("cert".equals(optionName)) {
                 signerParams.certFile = optionsParser.getRequiredValue("Certificate file");
+            } else if ("lineage".equals(optionName)) {
+                File lineageFile = new File(optionsParser.getRequiredValue("Lineage File"));
+                lineage = SigningCertificateLineage.readFromFile(lineageFile);
             } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
                 verbose = optionsParser.getOptionalBooleanValue(true);
             } else if ("next-provider".equals(optionName)) {
@@ -321,7 +332,8 @@ public class ApkSignerTool {
                         .setOtherSignersSignaturesPreserved(false)
                         .setV1SigningEnabled(v1SigningEnabled)
                         .setV2SigningEnabled(v2SigningEnabled)
-                        .setDebuggableApkPermitted(debuggableApkPermitted);
+                        .setDebuggableApkPermitted(debuggableApkPermitted)
+                        .setSigningCertificateLineage(lineage);
         if (minSdkVersionSpecified) {
             apkSignerBuilder.setMinSdkVersion(minSdkVersion);
         }
@@ -557,6 +569,233 @@ public class ApkSignerTool {
         }
     }
 
+    private static void rotate(String[] params) throws Exception {
+        if (params.length == 0) {
+            printUsage(HELP_PAGE_ROTATE);
+            return;
+        }
+
+        File outputKeyLineage = null;
+        File inputKeyLineage = null;
+        boolean verbose = false;
+        SignerParams oldSignerParams = null;
+        SignerParams newSignerParams = null;
+        int minSdkVersion = 0;
+        List<ProviderInstallSpec> providers = new ArrayList<>();
+        ProviderInstallSpec providerParams = new ProviderInstallSpec();
+        OptionsParser optionsParser = new OptionsParser(params);
+        String optionName;
+        String optionOriginalForm = null;
+        while ((optionName = optionsParser.nextOption()) != null) {
+            optionOriginalForm = optionsParser.getOptionOriginalForm();
+            if (("help".equals(optionName)) || ("h".equals(optionName))) {
+                printUsage(HELP_PAGE_ROTATE);
+                return;
+            } else if ("out".equals(optionName)) {
+                outputKeyLineage = new File(optionsParser.getRequiredValue("Output file name"));
+            } else if ("in".equals(optionName)) {
+                inputKeyLineage = new File(optionsParser.getRequiredValue("Input file name"));
+            } else if ("old-signer".equals(optionName)) {
+                oldSignerParams = processSignerParams(optionsParser);
+            } else if ("new-signer".equals(optionName)) {
+                newSignerParams = processSignerParams(optionsParser);
+            } else if ("min-sdk-version".equals(optionName)) {
+                minSdkVersion = optionsParser.getRequiredIntValue("Mininimum API Level");
+            } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
+                verbose = optionsParser.getOptionalBooleanValue(true);
+            } else if ("next-provider".equals(optionName)) {
+                if (!providerParams.isEmpty()) {
+                    providers.add(providerParams);
+                    providerParams = new ProviderInstallSpec();
+                }
+            } else if ("provider-class".equals(optionName)) {
+                providerParams.className =
+                        optionsParser.getRequiredValue("JCA Provider class name");
+            } else if ("provider-arg".equals(optionName)) {
+                providerParams.constructorParam =
+                        optionsParser.getRequiredValue("JCA Provider constructor argument");
+            } else if ("provider-pos".equals(optionName)) {
+                providerParams.position =
+                        optionsParser.getRequiredIntValue("JCA Provider position");
+            } else {
+                throw new ParameterException(
+                        "Unsupported option: " + optionOriginalForm + ". See --help for supported"
+                                + " options.");
+            }
+        }
+        if (!providerParams.isEmpty()) {
+            providers.add(providerParams);
+        }
+        providerParams = null;
+
+        if (oldSignerParams.isEmpty()) {
+            throw new ParameterException("Signer parameters for old signer not present");
+        }
+
+        if (newSignerParams.isEmpty()) {
+            throw new ParameterException("Signer parameters for new signer not present");
+        }
+
+        params = optionsParser.getRemainingParams();
+        if (params.length > 0) {
+            throw new ParameterException(
+                    "Unexpected parameter(s) after " + optionOriginalForm + ": " + params[0]);
+        }
+
+
+        // Install additional JCA Providers
+        for (ProviderInstallSpec providerInstallSpec : providers) {
+            providerInstallSpec.installProvider();
+        }
+
+        try (PasswordRetriever passwordRetriever = new PasswordRetriever()) {
+            // populate SignerConfig for old signer
+            try {
+                oldSignerParams.loadPrivateKeyAndCerts(passwordRetriever);
+                if (oldSignerParams.keystoreKeyAlias != null) {
+                    oldSignerParams.name = oldSignerParams.keystoreKeyAlias;
+                } else if (oldSignerParams.keyFile != null) {
+                    String keyFileName = new File(oldSignerParams.keyFile).getName();
+                    int delimiterIndex = keyFileName.indexOf('.');
+                    if (delimiterIndex == -1) {
+                        oldSignerParams.name = keyFileName;
+                    } else {
+                        oldSignerParams.name = keyFileName.substring(0, delimiterIndex);
+                    }
+                } else {
+                    throw new RuntimeException(
+                            "Neither KeyStore key alias nor private key file available for old "
+                            + "signer!");
+                }
+            } catch (ParameterException e) {
+                System.err.println(
+                        "Failed to load signer \"" + oldSignerParams.name + "\": "
+                                + e.getMessage());
+                System.exit(2);
+                return;
+            } catch (Exception e) {
+                System.err.println("Failed to load signer \"" + oldSignerParams.name + "\"");
+                e.printStackTrace();
+                System.exit(2);
+                return;
+            }
+
+            SigningCertificateLineage.SignerConfig oldSignerConfig =
+                    new SigningCertificateLineage.SignerConfig.Builder(
+                            oldSignerParams.privateKey, oldSignerParams.certs.get(0)).build();
+            try {
+                // TOOD: don't require private key
+                newSignerParams.loadPrivateKeyAndCerts(passwordRetriever);
+                // populate SignerConfig for new signer
+                if (newSignerParams.keystoreKeyAlias != null) {
+                    newSignerParams.name = newSignerParams.keystoreKeyAlias;
+                } else if (newSignerParams.keyFile != null) {
+                    String keyFileName = new File(newSignerParams.keyFile).getName();
+                    int delimiterIndex = keyFileName.indexOf('.');
+                    if (delimiterIndex == -1) {
+                        newSignerParams.name = keyFileName;
+                    } else {
+                        newSignerParams.name = keyFileName.substring(0, delimiterIndex);
+                    }
+                } else {
+                    throw new RuntimeException(
+                            "Neither KeyStore key alias nor private key file available for new "
+                            + "signer!");
+                }
+            } catch (ParameterException e) {
+                System.err.println(
+                        "Failed to load signer \"" + newSignerParams.name + "\": "
+                                + e.getMessage());
+                System.exit(2);
+                return;
+            } catch (Exception e) {
+                System.err.println("Failed to load signer \"" + newSignerParams.name + "\"");
+                e.printStackTrace();
+                System.exit(2);
+                return;
+            }
+
+            SigningCertificateLineage.SignerConfig newSignerConfig =
+                    new SigningCertificateLineage.SignerConfig.Builder(
+                            newSignerParams.privateKey, newSignerParams.certs.get(0)).build();
+
+            // ok we're all set up, let's rotate!
+            SigningCertificateLineage lineage;
+            if (inputKeyLineage != null) {
+                // we already have history, add the new key to the end of it
+                lineage = SigningCertificateLineage.readFromFile(inputKeyLineage);
+                lineage = lineage.spawnDescendant(oldSignerConfig, newSignerConfig);
+            } else {
+                // this is the first entry in our signing history, create a new one from the old and
+                // new signer info
+                lineage = new SigningCertificateLineage.Builder(oldSignerConfig, newSignerConfig)
+                        .setMinSdkVersion(minSdkVersion)
+                        .build();
+            }
+
+            // and write out the result
+            lineage.writeToFile(outputKeyLineage);
+        }
+
+        if (verbose) {
+            System.out.println("Rotation entry generated.");
+        }
+    }
+
+    private static SignerParams processSignerParams(OptionsParser optionsParser)
+            throws OptionsParser.OptionsException, ParameterException {
+        SignerParams signerParams = new SignerParams();
+        String optionName;
+        while ((optionName = optionsParser.nextOption()) != null) {
+            if ("ks".equals(optionName)) {
+                signerParams.keystoreFile = optionsParser.getRequiredValue("KeyStore file");
+            } else if ("ks-key-alias".equals(optionName)) {
+                signerParams.keystoreKeyAlias =
+                        optionsParser.getRequiredValue("KeyStore key alias");
+            } else if ("ks-pass".equals(optionName)) {
+                signerParams.keystorePasswordSpec =
+                        optionsParser.getRequiredValue("KeyStore password");
+            } else if ("key-pass".equals(optionName)) {
+                signerParams.keyPasswordSpec = optionsParser.getRequiredValue("Key password");
+            } else if ("pass-encoding".equals(optionName)) {
+                String charsetName =
+                        optionsParser.getRequiredValue("Password character encoding");
+                try {
+                    signerParams.passwordCharset = PasswordRetriever.getCharsetByName(charsetName);
+                } catch (IllegalArgumentException e) {
+                    throw new ParameterException(
+                            "Unsupported password character encoding requested using"
+                                    + " --pass-encoding: " + charsetName);
+                }
+            } else if ("ks-type".equals(optionName)) {
+                signerParams.keystoreType = optionsParser.getRequiredValue("KeyStore type");
+            } else if ("ks-provider-name".equals(optionName)) {
+                signerParams.keystoreProviderName =
+                        optionsParser.getRequiredValue("JCA KeyStore Provider name");
+            } else if ("ks-provider-class".equals(optionName)) {
+                signerParams.keystoreProviderClass =
+                        optionsParser.getRequiredValue("JCA KeyStore Provider class name");
+            } else if ("ks-provider-arg".equals(optionName)) {
+                signerParams.keystoreProviderArg =
+                        optionsParser.getRequiredValue(
+                                "JCA KeyStore Provider constructor argument");
+            } else if ("key".equals(optionName)) {
+                signerParams.keyFile = optionsParser.getRequiredValue("Private key file");
+            } else if ("cert".equals(optionName)) {
+                signerParams.certFile = optionsParser.getRequiredValue("Certificate file");
+            } else {
+                // not a signer option, reset optionsParser and let caller deal with it
+                optionsParser.putOption();
+                break;
+            }
+        }
+
+        if (signerParams.isEmpty()) {
+            throw new ParameterException("Signer specified without arguments");
+        }
+        return signerParams;
+    }
+
     private static void printUsage(String page) {
         try (BufferedReader in =
                 new BufferedReader(
@@ -632,6 +871,7 @@ public class ApkSignerTool {
 
         PrivateKey privateKey;
         List<X509Certificate> certs;
+        SigningCertificateLineage lineage;
 
         private boolean isEmpty() {
             return (name == null)

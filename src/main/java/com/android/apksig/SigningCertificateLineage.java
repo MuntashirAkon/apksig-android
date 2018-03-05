@@ -328,6 +328,7 @@ public class SigningCertificateLineage {
         result.putInt(CURRENT_VERSION);
         result.putInt(encodedLineage.length);
         result.put(encodedLineage);
+        result.flip();
         return result;
     }
 
