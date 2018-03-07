@@ -96,10 +96,11 @@ public enum SignatureAlgorithm {
 
     /**
      * RSASSA-PKCS1-v1_5 with SHA2-256 digest, content digested using SHA2-256 in 4 KB chunks, in
-     * the same way fsverity operates.
+     * the same way fsverity operates. This digest and the content length (before digestion, 8 bytes
+     * in little endian) construct the final digest.
      */
     VERITY_RSA_PKCS1_V1_5_WITH_SHA256(
-            0x0411,
+            0x0421,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "RSA",
             Pair.of("SHA256withRSA", null),
@@ -107,10 +108,11 @@ public enum SignatureAlgorithm {
 
     /**
      * ECDSA with SHA2-256 digest, content digested using SHA2-256 in 4 KB chunks, in the same way
-     * fsverity operates.
+     * fsverity operates. This digest and the content length (before digestion, 8 bytes in little
+     * endian) construct the final digest.
      */
     VERITY_ECDSA_WITH_SHA256(
-            0x0413,
+            0x0423,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "EC",
             Pair.of("SHA256withECDSA", null),
@@ -118,10 +120,11 @@ public enum SignatureAlgorithm {
 
     /**
      * DSA with SHA2-256 digest, content digested using SHA2-256 in 4 KB chunks, in the same way
-     * fsverity operates.
+     * fsverity operates. This digest and the content length (before digestion, 8 bytes in little
+     * endian) construct the final digest.
      */
     VERITY_DSA_WITH_SHA256(
-            0x0415,
+            0x0425,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "DSA",
             Pair.of("SHA256withDSA", null),
