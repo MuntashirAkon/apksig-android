@@ -493,11 +493,24 @@ public class ApkSigningBlockUtils {
     private static void computeApkVerityDigest(DataSource beforeCentralDir, DataSource centralDir,
             DataSource eocd, Map<ContentDigestAlgorithm, byte[]> outputContentDigests)
             throws IOException, NoSuchAlgorithmException {
+        // FORMAT:
+        // OFFSET       DATA TYPE  DESCRIPTION
+        // * @+0  bytes uint8[32]  Merkle tree root hash of SHA-256
+        // * @+32 bytes int64      Length of source data
+        int backBufferSize =
+                ContentDigestAlgorithm.VERITY_CHUNKED_SHA256.getChunkDigestOutputSizeBytes() +
+                Long.SIZE / Byte.SIZE;
+        ByteBuffer encoded = ByteBuffer.allocate(backBufferSize);
+        encoded.order(ByteOrder.LITTLE_ENDIAN);
+
         // Use 0s as salt for now.  This also needs to be consistent in the fsverify header for
         // kernel to use.
         VerityTreeBuilder builder = new VerityTreeBuilder(new byte[8]);
-        outputContentDigests.put(ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
-                builder.generateVerityTreeRootHash(beforeCentralDir, centralDir, eocd));
+        byte[] rootHash = builder.generateVerityTreeRootHash(beforeCentralDir, centralDir, eocd);
+        encoded.put(rootHash);
+        encoded.putLong(beforeCentralDir.size() + centralDir.size() + eocd.size());
+
+        outputContentDigests.put(ContentDigestAlgorithm.VERITY_CHUNKED_SHA256, encoded.array());
     }
 
     private static final long getChunkCount(long inputSize, int chunkSize) {
