@@ -101,7 +101,7 @@ public class ApkSigner {
     private final DataSink mOutputApkDataSink;
     private final DataSource mOutputApkDataSource;
 
-    private SigningCertificateLineage mSigningCertificateLineage;
+    private final SigningCertificateLineage mSigningCertificateLineage;
 
     private ApkSigner(
             List<SignerConfig> signerConfigs,

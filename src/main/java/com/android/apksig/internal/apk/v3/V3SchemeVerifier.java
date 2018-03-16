@@ -147,8 +147,7 @@ public abstract class V3SchemeVerifier {
             ApkSigningBlockUtils.Result result)
             throws IOException, NoSuchAlgorithmException {
         Set<ContentDigestAlgorithm> contentDigestsToVerify = new HashSet<>(1);
-        parseSigners(apkSignatureSchemeV3Block, contentDigestsToVerify, minSdkVersion,
-                maxSdkVersion, result);
+        parseSigners(apkSignatureSchemeV3Block, contentDigestsToVerify, result);
 
         if (result.containsErrors()) {
             return;
@@ -229,8 +228,6 @@ public abstract class V3SchemeVerifier {
     private static void parseSigners(
             ByteBuffer apkSignatureSchemeV3Block,
             Set<ContentDigestAlgorithm> contentDigestsToVerify,
-            int minSdkVersion,
-            int maxSdkVersion,
             ApkSigningBlockUtils.Result result) throws NoSuchAlgorithmException {
         ByteBuffer signers;
         try {
