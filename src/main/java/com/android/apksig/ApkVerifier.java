@@ -663,6 +663,13 @@ public class ApkVerifier {
                     }
                 }
             }
+            if (!mV3SchemeSigners.isEmpty()) {
+                for (V3SchemeSignerInfo signer : mV3SchemeSigners) {
+                    if (signer.containsErrors()) {
+                        return true;
+                    }
+                }
+            }
 
             return false;
         }
@@ -864,10 +871,6 @@ public class ApkVerifier {
              */
             public List<X509Certificate> getCertificates() {
                 return mCerts;
-            }
-
-            private void addError(Issue msg, Object... parameters) {
-                mErrors.add(new IssueWithParams(msg, parameters));
             }
 
             public boolean containsErrors() {
