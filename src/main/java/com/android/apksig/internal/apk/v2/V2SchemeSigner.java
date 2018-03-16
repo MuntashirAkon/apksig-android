@@ -256,7 +256,7 @@ public abstract class V2SchemeSigner {
     }
 
     // Attribute to check whether a newer APK Signature Scheme signature was stripped
-    private static final int STRIPPING_PROTECTION_ATTR_ID = 0xbeeff00d;
+    protected static final int STRIPPING_PROTECTION_ATTR_ID = 0xbeeff00d;
 
     private static byte[] generateAdditionalAttributes(boolean v3SigningEnabled) {
         if (v3SigningEnabled) {
