@@ -43,6 +43,7 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.AlgorithmParameterSpec;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -67,10 +68,9 @@ public class V3SigningCertificateLineage {
     private final static int CURRENT_VERSION = FIRST_VERSION;
 
     /**
-     * Deserializes the binary representation of an {@link V3SigningCertificateLineage}.  This is
-     * currently the same representation that is included within an APK Signature Scheme v3 signer
-     * block. Also verifies that the structure is well-formed, e.g. that the signature for each node
-     * is from its parent.
+     * Deserializes the binary representation of an {@link V3SigningCertificateLineage}. Also
+     * verifies that the structure is well-formed, e.g. that the signature for each node is from its
+     * parent.
      */
     public static List<SigningCertificateNode> readSigningCertificateLineage(ByteBuffer inputBytes)
             throws IOException {
@@ -256,6 +256,22 @@ public class V3SigningCertificateLineage {
             this.sigAlgorithm = sigAlgorithm;
             this.signature = signature;
             this.flags = flags;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof SigningCertificateNode)) return false;
+
+            SigningCertificateNode that = (SigningCertificateNode) o;
+            if (!signingCert.equals(that.signingCert)) return false;
+            if (parentSigAlgorithm != that.parentSigAlgorithm) return false;
+            if (sigAlgorithm != that.sigAlgorithm) return false;
+            if (!Arrays.equals(signature, that.signature)) return false;
+            if (flags != that.flags) return false;
+
+            // we made it
+            return true;
         }
 
         /**

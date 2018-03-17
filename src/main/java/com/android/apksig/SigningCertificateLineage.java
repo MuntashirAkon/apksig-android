@@ -72,9 +72,6 @@ public class SigningCertificateLineage {
 
     private static final int CURRENT_VERSION = FIRST_VERSION;
 
-    /** special value used to see if cert is in package */
-    private static final int PAST_CERT_EXISTS = 0;
-
     /** accept data from already installed pkg with this cert */
     private static final int PAST_CERT_INSTALLED_DATA = 1;
 
@@ -126,6 +123,25 @@ public class SigningCertificateLineage {
         ByteBuffer inBuff = dataSource.getByteBuffer(0, (int) dataSource.size());
         inBuff.order(ByteOrder.LITTLE_ENDIAN);
         return read(inBuff);
+    }
+
+    /**
+     * Extracts a Signing Certificate Lineage from a v3 signer proof-of-rotation attribute.
+     *
+     * <note>
+     *     this may not give a complete representation of an APK's signing certificate history,
+     *     since the APK may have multiple signers corresponding to different platform versions.
+     *     Use <code> readFromApkFile</code> to handle this case.
+     * </note>
+     * @param attrValue
+     */
+    public static SigningCertificateLineage readFromV3AttributeValue(byte[] attrValue)
+            throws IOException {
+        List<SigningCertificateNode> parsedLineage =
+                V3SigningCertificateLineage.readSigningCertificateLineage(ByteBuffer.wrap(
+                        attrValue));
+        int minSdkVersion = calculateMinSdkVersion(parsedLineage);
+        return  new SigningCertificateLineage(minSdkVersion, parsedLineage);
     }
 
     public static SigningCertificateLineage readFromApkFile(File apkFile) {
@@ -186,7 +202,7 @@ public class SigningCertificateLineage {
         if (childCapabilities == null) {
             throw new NullPointerException("childCapabilities == null");
         }
-        if (mSigningLineage.size() == 0) {
+        if (mSigningLineage.isEmpty()) {
             throw new IllegalArgumentException("Cannot spawn descendant signing certificate on an"
                     + " empty SigningCertificateLineage: no parent node");
         }
@@ -236,6 +252,15 @@ public class SigningCertificateLineage {
         return new SigningCertificateLineage(mMinSdkVersion, lineageCopy);
     }
 
+    /**
+     * The number of signing certificates in the lineage, including the current signer, which means
+     * this value can also be used to V2determine the number of signing certificate rotations by
+     * subtracting 1.
+     */
+    public int size() {
+        return mSigningLineage.size();
+    }
+
     private SignatureAlgorithm getSignatureAlgorithm(SignerConfig parent)
             throws InvalidKeyException {
         PublicKey publicKey = parent.getCertificate().getPublicKey();
@@ -248,7 +273,7 @@ public class SigningCertificateLineage {
 
     private SigningCertificateLineage spawnFirstDescendant(
             SignerConfig parent, SignerCapabilities signerCapabilities) {
-        if (mSigningLineage.size() > 0) {
+        if (!mSigningLineage.isEmpty()) {
             throw new IllegalStateException("SigningCertificateLineage already has its first node");
         }
 
@@ -399,10 +424,8 @@ public class SigningCertificateLineage {
         if (x509Certificate == null) {
             throw new NullPointerException("x509Certificate == null");
         }
-        int index = -1;
         for (int i = 0; i < mSigningLineage.size(); i++) {
             if (mSigningLineage.get(i).signingCert.equals(x509Certificate)) {
-                index = i;
                 return new SigningCertificateLineage(
                         mMinSdkVersion, new ArrayList<>(mSigningLineage.subList(0, i + 1)));
             }
@@ -410,6 +433,53 @@ public class SigningCertificateLineage {
 
         // looks like we didn't find the cert,
         throw new IllegalArgumentException("Certificate not found in SigningCertificateLineage");
+    }
+
+    /**
+     * Consolidates all of the lineages found in an APK into one lineage, which is the longest one.
+     * In so doing, it also checks that all of the smaller lineages are contained in the largest,
+     * and that they properly cover the desired platform ranges.
+     *
+     * An APK may contain multiple lineages, one for each signer, which correspond to different
+     * supported platform versions.  In this event, the lineage(s) from the earlier platform
+     * version(s) need to be present in the most recent (longest) one to make sure that when a
+     * platform version changes.
+     *
+     * <note> This does not verify that the largest lineage corresponds to the most recent supported
+     * platform version.  That check requires is performed during v3 verification. </note>
+     */
+    public static SigningCertificateLineage consolidateLineages(
+            List<SigningCertificateLineage> lineages) {
+        if (lineages == null || lineages.isEmpty()) {
+            return null;
+        }
+        int largestIndex = 0;
+        int maxSize = 0;
+
+        // determine the longest chain
+        for (int i = 0; i < lineages.size(); i++) {
+            int curSize = lineages.get(i).size();
+            if (curSize > maxSize) {
+                largestIndex = i;
+                maxSize = curSize;
+            }
+        }
+
+        List<SigningCertificateNode> largestList = lineages.get(largestIndex).mSigningLineage;
+        // make sure all other lineages fit into this one, with the same capabilities
+        for (int i = 0; i < lineages.size(); i++) {
+            if (i == largestIndex) {
+                continue;
+            }
+            List<SigningCertificateNode> underTest = lineages.get(i).mSigningLineage;
+            if (!underTest.equals(largestList.subList(0, underTest.size()))) {
+                throw new IllegalArgumentException("Inconsistent SigningCertificateLineages. "
+                        + "Not all lineages are subsets of each other.");
+            }
+        }
+
+        // if we've made it this far, they all check out, so just return the largest
+        return lineages.get(largestIndex);
     }
 
     /**

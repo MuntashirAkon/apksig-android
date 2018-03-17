@@ -162,9 +162,13 @@ public class ApkSigningBlockUtils {
         // treated as though its Central Directory offset points to the start of APK Signing Block.
         // We thus modify the EoCD accordingly.
         ByteBuffer modifiedEocd = ByteBuffer.allocate(eocd.remaining());
+        int eocdSavedPos = eocd.position();
         modifiedEocd.order(ByteOrder.LITTLE_ENDIAN);
         modifiedEocd.put(eocd);
         modifiedEocd.flip();
+
+        // restore eocd to position prior to modification in case it is to be used elsewhere
+        eocd.position(eocdSavedPos);
         ZipUtils.setZipEocdCentralDirectoryOffset(modifiedEocd, beforeApkSigningBlock.size());
         Map<ContentDigestAlgorithm, byte[]> actualContentDigests;
         try {
@@ -198,11 +202,19 @@ public class ApkSigningBlockUtils {
                 byte[] expectedDigest = expected.getValue();
                 byte[] actualDigest = actualContentDigests.get(contentDigestAlgorithm);
                 if (!Arrays.equals(expectedDigest, actualDigest)) {
-                    signerInfo.addError(
-                            ApkVerifier.Issue.V2_SIG_APK_DIGEST_DID_NOT_VERIFY,
-                            contentDigestAlgorithm,
-                            toHex(expectedDigest),
-                            toHex(actualDigest));
+                    if (result.signatureSchemeVersion == VERSION_APK_SIGNATURE_SCHEME_V2) {
+                        signerInfo.addError(
+                                ApkVerifier.Issue.V2_SIG_APK_DIGEST_DID_NOT_VERIFY,
+                                contentDigestAlgorithm,
+                                toHex(expectedDigest),
+                                toHex(actualDigest));
+                    } else if (result.signatureSchemeVersion == VERSION_APK_SIGNATURE_SCHEME_V3) {
+                        signerInfo.addError(
+                                ApkVerifier.Issue.V3_SIG_APK_DIGEST_DID_NOT_VERIFY,
+                                contentDigestAlgorithm,
+                                toHex(expectedDigest),
+                                toHex(actualDigest));
+                    }
                     continue;
                 }
                 signerInfo.verifiedContentDigests.put(contentDigestAlgorithm, actualDigest);
@@ -247,7 +259,6 @@ public class ApkSigningBlockUtils {
             if (id == blockId) {
                 return getByteBuffer(pairs, len - 4);
             }
-            result.addWarning(ApkVerifier.Issue.APK_SIG_BLOCK_UNKNOWN_ENTRY_ID, id);
             pairs.position(nextEntryPos);
         }
 
@@ -303,8 +314,7 @@ public class ApkSigningBlockUtils {
      * {@code size}, byte order set to this buffer's byte order; and then increments the position by
      * {@code size}.
      */
-    private static ByteBuffer getByteBuffer(ByteBuffer source, int size)
-            throws BufferUnderflowException {
+    private static ByteBuffer getByteBuffer(ByteBuffer source, int size) {
         if (size < 0) {
             throw new IllegalArgumentException("size: " + size);
         }
@@ -800,6 +810,64 @@ public class ApkSigningBlockUtils {
         return Pair.of(signerConfigs, contentDigests);
     }
 
+    /**
+     * Returns the subset of signatures which are expected to be verified by at least one Android
+     * platform version in the {@code [minSdkVersion, maxSdkVersion]} range. The returned result is
+     * guaranteed to contain at least one signature.
+     *
+     * <p>Each Android platform version typically verifies exactly one signature from the provided
+     * {@code signatures} set. This method returns the set of these signatures collected over all
+     * requested platform versions. As a result, the result may contain more than one signature.
+     *
+     * @throws NoSupportedSignaturesException if no supported signatures were
+     *         found for an Android platform version in the range.
+     */
+    public static List<SupportedSignature> getSignaturesToVerify(
+            List<SupportedSignature> signatures, int minSdkVersion, int maxSdkVersion)
+            throws NoSupportedSignaturesException {
+        // Pick the signature with the strongest algorithm at all required SDK versions, to mimic
+        // Android's behavior on those versions.
+        //
+        // Here we assume that, once introduced, a signature algorithm continues to be supported in
+        // all future Android versions. We also assume that the better-than relationship between
+        // algorithms is exactly the same on all Android platform versions (except that older
+        // platforms might support fewer algorithms). If these assumption are no longer true, the
+        // logic here will need to change accordingly.
+        Map<Integer, SupportedSignature> bestSigAlgorithmOnSdkVersion = new HashMap<>();
+        int minProvidedSignaturesVersion = Integer.MAX_VALUE;
+        for (SupportedSignature sig : signatures) {
+            SignatureAlgorithm sigAlgorithm = sig.algorithm;
+            int sigMinSdkVersion = sigAlgorithm.getMinSdkVersion();
+            if (sigMinSdkVersion > maxSdkVersion) {
+                continue;
+            }
+            if (sigMinSdkVersion < minProvidedSignaturesVersion) {
+                minProvidedSignaturesVersion = sigMinSdkVersion;
+            }
+
+            SupportedSignature candidate = bestSigAlgorithmOnSdkVersion.get(sigMinSdkVersion);
+            if ((candidate == null)
+                    || (compareSignatureAlgorithm(
+                            sigAlgorithm, candidate.algorithm) > 0)) {
+                bestSigAlgorithmOnSdkVersion.put(sigMinSdkVersion, sig);
+            }
+        }
+
+        // Must have some supported signature algorithms for minSdkVersion.
+        if (minSdkVersion < minProvidedSignaturesVersion) {
+            throw new NoSupportedSignaturesException(
+                    "Minimum provided signature version " + minProvidedSignaturesVersion +
+                    " < minSdkVersion " + minSdkVersion);
+        }
+        if (bestSigAlgorithmOnSdkVersion.isEmpty()) {
+            throw new NoSupportedSignaturesException("No supported signature");
+        }
+        return bestSigAlgorithmOnSdkVersion.values().stream()
+                .sorted((sig1, sig2) -> Integer.compare(
+                        sig1.algorithm.getId(), sig2.algorithm.getId()))
+                .collect(Collectors.toList());
+    }
+
     public static class NoSupportedSignaturesException extends Exception {
         private static final long serialVersionUID = 1L;
 
@@ -902,13 +970,19 @@ public class ApkSigningBlockUtils {
     }
 
     public static class Result {
+        public final int signatureSchemeVersion;
 
         /** Whether the APK's APK Signature Scheme signature verifies. */
         public boolean verified;
 
         public final List<SignerInfo> signers = new ArrayList<>();
+        public SigningCertificateLineage signingCertificateLineage = null;
         private final List<ApkVerifier.IssueWithParams> mWarnings = new ArrayList<>();
         private final List<ApkVerifier.IssueWithParams> mErrors = new ArrayList<>();
+
+        public Result(int signatureSchemeVersion) {
+            this.signatureSchemeVersion = signatureSchemeVersion;
+        }
 
         public boolean containsErrors() {
             if (!mErrors.isEmpty()) {
@@ -949,6 +1023,9 @@ public class ApkSigningBlockUtils {
             public Map<SignatureAlgorithm, byte[]> verifiedSignatures = new HashMap<>();
             public List<AdditionalAttribute> additionalAttributes = new ArrayList<>();
             public byte[] signedData;
+            public int minSdkVersion;
+            public int maxSdkVersion;
+            public SigningCertificateLineage signingCertificateLineage;
 
             private final List<ApkVerifier.IssueWithParams> mWarnings = new ArrayList<>();
             private final List<ApkVerifier.IssueWithParams> mErrors = new ArrayList<>();
@@ -1026,6 +1103,16 @@ public class ApkSigningBlockUtils {
                     return mValue.clone();
                 }
             }
+        }
+    }
+
+    public static class SupportedSignature {
+        public final SignatureAlgorithm algorithm;
+        public final byte[] signature;
+
+        public SupportedSignature(SignatureAlgorithm algorithm, byte[] signature) {
+            this.algorithm = algorithm;
+            this.signature = signature;
         }
     }
 }

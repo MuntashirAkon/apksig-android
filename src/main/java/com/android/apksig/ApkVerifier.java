@@ -24,6 +24,7 @@ import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.v2.V2SchemeVerifier;
+import com.android.apksig.internal.apk.v3.V3SchemeVerifier;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.util.DataSource;
@@ -39,7 +40,7 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -58,9 +59,17 @@ import java.util.Set;
  */
 public class ApkVerifier {
 
-    private static final int APK_SIGNATURE_SCHEME_V2_ID = 2;
     private static final Map<Integer, String> SUPPORTED_APK_SIG_SCHEME_NAMES =
-            Collections.singletonMap(APK_SIGNATURE_SCHEME_V2_ID, "APK Signature Scheme v2");
+            loadSupportedApkSigSchemeNames();
+
+    private static Map<Integer,String> loadSupportedApkSigSchemeNames() {
+        Map<Integer, String> supportedMap = new HashMap<>(2);
+        supportedMap.put(
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2, "APK Signature Scheme v2");
+        supportedMap.put(
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3, "APK Signature Scheme v3");
+        return supportedMap;
+    }
 
     private final File mApkFile;
     private final DataSource mApkDataSource;
@@ -176,24 +185,54 @@ public class ApkVerifier {
 
         Result result = new Result();
 
-        // Android N and newer attempts to verify APK Signature Scheme v2 signature of the APK.
-        // If the signature is not found, it falls back to JAR signature verification. If the
-        // signature is found but does not verify, the APK is rejected.
-        Set<Integer> foundApkSigSchemeIds;
+        // Android N and newer attempts to verify APKs using the APK Signing Block, which can
+        // include v2 and/or v3 signatures.  If none is found, it falls back to JAR signature
+        // verification. If the signature is found but does not verify, the APK is rejected.
+        Set<Integer> foundApkSigSchemeIds = new HashSet<>(2);
         if (maxSdkVersion >= AndroidSdkVersion.N) {
-            foundApkSigSchemeIds = new HashSet<>(1);
-            try {
-                ApkSigningBlockUtils.Result v2Result =
-                        V2SchemeVerifier.verify(apk, zipSections,
-                                Math.max(minSdkVersion, AndroidSdkVersion.N), maxSdkVersion);
-                foundApkSigSchemeIds.add(APK_SIGNATURE_SCHEME_V2_ID);
-                result.mergeFrom(v2Result);
-            } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {}
-            if (result.containsErrors()) {
-                return result;
+
+            // Android P and newer attempts to verify APKs using APK Signature Scheme v3
+            if (maxSdkVersion >= AndroidSdkVersion.P) {
+                try {
+                    ApkSigningBlockUtils.Result v3Result =
+                            V3SchemeVerifier.verify(
+                                    apk,
+                                    zipSections,
+                                    Math.max(minSdkVersion, AndroidSdkVersion.P),
+                                    maxSdkVersion);
+                    foundApkSigSchemeIds.add(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
+                    result.mergeFrom(v3Result);
+                } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
+                    // v3 signature not required
+                }
+                if (result.containsErrors()) {
+                    return result;
+                }
             }
-        } else {
-            foundApkSigSchemeIds = Collections.emptySet();
+
+            // Attempt to verify the APK using v2 signing if necessary. Platforms prior to Android P
+            // ignore APK Signature Scheme v3 signatures and always attempt to verify either JAR or
+            // APK Signature Scheme v2 signatures.  Android P onwards verifies v2 signatures only if
+            // no APK Signature Scheme v3 (or newer scheme) signatures were found.
+            if (minSdkVersion < AndroidSdkVersion.P || foundApkSigSchemeIds.isEmpty()) {
+                try {
+                    ApkSigningBlockUtils.Result v2Result =
+                            V2SchemeVerifier.verify(
+                                    apk,
+                                    zipSections,
+                                    SUPPORTED_APK_SIG_SCHEME_NAMES,
+                                    foundApkSigSchemeIds,
+                                    Math.max(minSdkVersion, AndroidSdkVersion.N),
+                                    maxSdkVersion);
+                    foundApkSigSchemeIds.add(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2);
+                    result.mergeFrom(v2Result);
+                } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
+                    // v2 signature not required
+                }
+                if (result.containsErrors()) {
+                    return result;
+                }
+            }
         }
 
         // Android O and newer requires that APKs targeting security sandbox version 2 and higher
@@ -277,13 +316,76 @@ public class ApkVerifier {
                 }
             }
         }
+
+        // If there is a v3 scheme signer and an earlier scheme signer, make sure that there is a
+        // match, or in the event of signing certificate rotation, that the v1/v2 scheme signer
+        // matches the oldest signing certificate in the provided SigningCertificateLineage
+        if (result.isVerifiedUsingV3Scheme()
+                && (result.isVerifiedUsingV1Scheme() || result.isVerifiedUsingV2Scheme())) {
+            SigningCertificateLineage lineage = result.getSigningCertificateLineage();
+            X509Certificate oldSignerCert;
+            if (result.isVerifiedUsingV1Scheme()) {
+                List<Result.V1SchemeSignerInfo> v1Signers = result.getV1SchemeSigners();
+                if (v1Signers.size() != 1) {
+                    // APK Signature Scheme v3 only supports single-signers, error to sign with
+                    // multiple and then only one
+                    result.addError(Issue.V3_SIG_MULTIPLE_PAST_SIGNERS);
+                }
+                oldSignerCert = v1Signers.get(0).mCertChain.get(0);
+            } else {
+                List<Result.V2SchemeSignerInfo> v2Signers = result.getV2SchemeSigners();
+                if (v2Signers.size() != 1) {
+                    // APK Signature Scheme v3 only supports single-signers, error to sign with
+                    // multiple and then only one
+                    result.addError(Issue.V3_SIG_MULTIPLE_PAST_SIGNERS);
+                }
+                oldSignerCert = v2Signers.get(0).mCerts.get(0);
+            }
+            if (lineage == null) {
+                // no signing certificate history with which to contend, just make sure that v3
+                // matches previous versions
+                List<Result.V3SchemeSignerInfo> v3Signers = result.getV3SchemeSigners();
+                if (v3Signers.size() != 1) {
+                    // multiple v3 signers should never exist without rotation history, since
+                    // multiple signers implies a different signer for different platform versions
+                    result.addError(Issue.V3_SIG_MULTIPLE_SIGNERS);
+                }
+                try {
+                    if (!Arrays.equals(oldSignerCert.getEncoded(),
+                           v3Signers.get(0).mCerts.get(0).getEncoded())) {
+                        result.addError(Issue.V3_SIG_PAST_SIGNERS_MISMATCH);
+                    }
+                } catch (CertificateEncodingException e) {
+                    // we just go the encoding for the v1/v2 certs above, so must be v3
+                    throw new RuntimeException(
+                            "Failed to encode APK Signature Scheme v3 signer cert", e);
+                }
+            } else {
+                // we have some signing history, make sure that the root of the history is the same
+                // as our v1/v2 signer
+                try {
+                    lineage = lineage.getSubLineage(oldSignerCert);
+                    if (lineage.size() != 1) {
+                        // the v1/v2 signer was found, but not at the root of the lineage
+                        result.addError(Issue.V3_SIG_PAST_SIGNERS_MISMATCH);
+                    }
+                } catch (IllegalArgumentException e) {
+                    // the v1/v2 signer was not found in the lineage
+                    result.addError(Issue.V3_SIG_PAST_SIGNERS_MISMATCH);
+                }
+            }
+        }
+
         if (result.containsErrors()) {
             return result;
         }
 
         // Verified
         result.setVerified();
-        if (result.isVerifiedUsingV2Scheme()) {
+        if (result.isVerifiedUsingV3Scheme()) {
+            List<Result.V3SchemeSignerInfo> v3Signers = result.getV3SchemeSigners();
+            result.addSignerCertificate(v3Signers.get(v3Signers.size() - 1).getCertificate());
+        } else if (result.isVerifiedUsingV2Scheme()) {
             for (Result.V2SchemeSignerInfo signerInfo : result.getV2SchemeSigners()) {
                 result.addSignerCertificate(signerInfo.getCertificate());
             }
@@ -293,7 +395,7 @@ public class ApkVerifier {
             }
         } else {
             throw new RuntimeException(
-                    "APK considered verified, but has not verified using either v1 or v2 schemes");
+                    "APK verified, but has not verified using any of v1, v2 or v3schemes");
         }
 
         return result;
@@ -387,10 +489,13 @@ public class ApkVerifier {
         private final List<V1SchemeSignerInfo> mV1SchemeSigners = new ArrayList<>();
         private final List<V1SchemeSignerInfo> mV1SchemeIgnoredSigners = new ArrayList<>();
         private final List<V2SchemeSignerInfo> mV2SchemeSigners = new ArrayList<>();
+        private final List<V3SchemeSignerInfo> mV3SchemeSigners = new ArrayList<>();
 
         private boolean mVerified;
         private boolean mVerifiedUsingV1Scheme;
         private boolean mVerifiedUsingV2Scheme;
+        private boolean mVerifiedUsingV3Scheme;
+        private SigningCertificateLineage mSigningCertificateLineage;
 
         /**
          * Returns {@code true} if the APK's signatures verified.
@@ -415,6 +520,13 @@ public class ApkVerifier {
          */
         public boolean isVerifiedUsingV2Scheme() {
             return mVerifiedUsingV2Scheme;
+        }
+
+        /**
+         * Returns {@code true} if the APK's APK Signature Scheme v3 signature verified.
+         */
+        public boolean isVerifiedUsingV3Scheme() {
+            return mVerifiedUsingV3Scheme;
         }
 
         /**
@@ -457,6 +569,26 @@ public class ApkVerifier {
             return mV2SchemeSigners;
         }
 
+        /**
+         * Returns information about APK Signature Scheme v3 signers associated with the APK's
+         * signature.
+         *
+         * <note> Multiple signers represent different targeted platform versions, not
+         * a signing identity of multiple signers.  APK Signature Scheme v3 only supports single
+         * signer identities.</note>
+         */
+        public List<V3SchemeSignerInfo> getV3SchemeSigners() {
+            return mV3SchemeSigners;
+        }
+
+        /**
+         * Returns the combined SigningCertificateLineage associated with this APK's APK Signature
+         * Scheme v3 signing block.
+         */
+        public SigningCertificateLineage getSigningCertificateLineage() {
+            return mSigningCertificateLineage;
+        }
+
         void addError(Issue msg, Object... parameters) {
             mErrors.add(new IssueWithParams(msg, parameters));
         }
@@ -488,12 +620,25 @@ public class ApkVerifier {
         }
 
         private void mergeFrom(ApkSigningBlockUtils.Result source) {
-            mVerifiedUsingV2Scheme = source.verified;
+            switch (source.signatureSchemeVersion) {
+                case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2:
+                    mVerifiedUsingV2Scheme = source.verified;
+                    for (ApkSigningBlockUtils.Result.SignerInfo signer : source.signers) {
+                        mV2SchemeSigners.add(new V2SchemeSignerInfo(signer));
+                    }
+                    break;
+                case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3:
+                    mVerifiedUsingV3Scheme = source.verified;
+                    for (ApkSigningBlockUtils.Result.SignerInfo signer : source.signers) {
+                        mV3SchemeSigners.add(new V3SchemeSignerInfo(signer));
+                    }
+                    mSigningCertificateLineage = source.signingCertificateLineage;
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown Signing Block Scheme Id");
+            }
             mErrors.addAll(source.getErrors());
             mWarnings.addAll(source.getWarnings());
-            for (ApkSigningBlockUtils.Result.SignerInfo signer : source.signers) {
-                mV2SchemeSigners.add(new V2SchemeSignerInfo(signer));
-            }
         }
 
         /**
@@ -513,6 +658,13 @@ public class ApkVerifier {
             }
             if (!mV2SchemeSigners.isEmpty()) {
                 for (V2SchemeSignerInfo signer : mV2SchemeSigners) {
+                    if (signer.containsErrors()) {
+                        return true;
+                    }
+                }
+            }
+            if (!mV3SchemeSigners.isEmpty()) {
+                for (V3SchemeSignerInfo signer : mV3SchemeSigners) {
                     if (signer.containsErrors()) {
                         return true;
                     }
@@ -661,6 +813,64 @@ public class ApkVerifier {
 
             private void addError(Issue msg, Object... parameters) {
                 mErrors.add(new IssueWithParams(msg, parameters));
+            }
+
+            public boolean containsErrors() {
+                return !mErrors.isEmpty();
+            }
+
+            public List<IssueWithParams> getErrors() {
+                return mErrors;
+            }
+
+            public List<IssueWithParams> getWarnings() {
+                return mWarnings;
+            }
+        }
+
+        /**
+         * Information about an APK Signature Scheme v3 signer associated with the APK's signature.
+         */
+        public static class V3SchemeSignerInfo {
+            private final int mIndex;
+            private final List<X509Certificate> mCerts;
+
+            private final List<IssueWithParams> mErrors;
+            private final List<IssueWithParams> mWarnings;
+
+            private V3SchemeSignerInfo(ApkSigningBlockUtils.Result.SignerInfo result) {
+                mIndex = result.index;
+                mCerts = result.certs;
+                mErrors = result.getErrors();
+                mWarnings = result.getWarnings();
+            }
+
+            /**
+             * Returns this signer's {@code 0}-based index in the list of signers contained in the
+             * APK's APK Signature Scheme v3 signature.
+             */
+            public int getIndex() {
+                return mIndex;
+            }
+
+            /**
+             * Returns this signer's signing certificate or {@code null} if not available. The
+             * certificate is guaranteed to be available if no errors were encountered during
+             * verification (see {@link #containsErrors()}.
+             *
+             * <p>This certificate contains the signer's public key.
+             */
+            public X509Certificate getCertificate() {
+                return mCerts.isEmpty() ? null : mCerts.get(0);
+            }
+
+            /**
+             * Returns this signer's certificates. The first certificate is for the signer's public
+             * key. An empty list may be returned if an error was encountered during verification
+             * (see {@link #containsErrors()}).
+             */
+            public List<X509Certificate> getCertificates() {
+                return mCerts;
             }
 
             public boolean containsErrors() {
@@ -1090,6 +1300,32 @@ public class ApkVerifier {
         V2_SIG_MALFORMED_ADDITIONAL_ATTRIBUTE("Malformed additional attribute #%1$d"),
 
         /**
+         * APK Signature Scheme v2 signature references an unknown APK signature scheme ID.
+         *
+         * <ul>
+         * <li>Parameter 1: signer index ({@code Integer})</li>
+         * <li>Parameter 2: unknown APK signature scheme ID ({@code} Integer)</li>
+         * </ul>
+         */
+        V2_SIG_UNKNOWN_APK_SIG_SCHEME_ID(
+                "APK Signature Scheme v2 signer: %1$s references unknown APK signature scheme ID: "
+                        + "%2$d"),
+
+        /**
+         * APK Signature Scheme v2 signature indicates that the APK is supposed to be signed with a
+         * supported APK signature scheme (in addition to the v2 signature) but no such signature
+         * was found in the APK.
+         *
+         * <ul>
+         * <li>Parameter 1: signer index ({@code Integer})</li>
+         * <li>Parameter 2: APK signature scheme English name ({@code} String)</li>
+         * </ul>
+         */
+        V2_SIG_MISSING_APK_SIG_REFERENCED(
+                "APK Signature Scheme v2 signature %1$s indicates the APK is signed using %2$s but "
+                        + "no such signature was found. Signature stripped?"),
+
+        /**
          * APK Signature Scheme v2 signature contains no signers.
          */
         V2_SIG_NO_SIGNERS("No signers in APK Signature Scheme v2 signature"),
@@ -1186,6 +1422,276 @@ public class ApkVerifier {
         V2_SIG_APK_DIGEST_DID_NOT_VERIFY(
                 "APK integrity check failed. %1$s digest mismatch."
                         + " Expected: <%2$s>, actual: <%3$s>"),
+
+        /**
+         * Failed to parse the list of signers contained in the APK Signature Scheme v3 signature.
+         */
+        V3_SIG_MALFORMED_SIGNERS("Malformed list of signers"),
+
+        /**
+         * Failed to parse this signer's signer block contained in the APK Signature Scheme v3
+         * signature.
+         */
+        V3_SIG_MALFORMED_SIGNER("Malformed signer block"),
+
+        /**
+         * Public key embedded in the APK Signature Scheme v3 signature of this signer could not be
+         * parsed.
+         *
+         * <ul>
+         * <li>Parameter 1: error details ({@code Throwable})</li>
+         * </ul>
+         */
+        V3_SIG_MALFORMED_PUBLIC_KEY("Malformed public key: %1$s"),
+
+        /**
+         * This APK Signature Scheme v3 signer's certificate could not be parsed.
+         *
+         * <ul>
+         * <li>Parameter 1: index ({@code 0}-based) of the certificate in the signer's list of
+         *     certificates ({@code Integer})</li>
+         * <li>Parameter 2: sequence number ({@code 1}-based) of the certificate in the signer's
+         *     list of certificates ({@code Integer})</li>
+         * <li>Parameter 3: error details ({@code Throwable})</li>
+         * </ul>
+         */
+        V3_SIG_MALFORMED_CERTIFICATE("Malformed certificate #%2$d: %3$s"),
+
+        /**
+         * Failed to parse this signer's signature record contained in the APK Signature Scheme v3
+         * signature.
+         *
+         * <ul>
+         * <li>Parameter 1: record number (first record is {@code 1}) ({@code Integer})</li>
+         * </ul>
+         */
+        V3_SIG_MALFORMED_SIGNATURE("Malformed APK Signature Scheme v3 signature record #%1$d"),
+
+        /**
+         * Failed to parse this signer's digest record contained in the APK Signature Scheme v3
+         * signature.
+         *
+         * <ul>
+         * <li>Parameter 1: record number (first record is {@code 1}) ({@code Integer})</li>
+         * </ul>
+         */
+        V3_SIG_MALFORMED_DIGEST("Malformed APK Signature Scheme v3 digest record #%1$d"),
+
+        /**
+         * This APK Signature Scheme v3 signer contains a malformed additional attribute.
+         *
+         * <ul>
+         * <li>Parameter 1: attribute number (first attribute is {@code 1}) {@code Integer})</li>
+         * </ul>
+         */
+        V3_SIG_MALFORMED_ADDITIONAL_ATTRIBUTE("Malformed additional attribute #%1$d"),
+
+        /**
+         * APK Signature Scheme v3 signature contains no signers.
+         */
+        V3_SIG_NO_SIGNERS("No signers in APK Signature Scheme v3 signature"),
+
+        /**
+         * APK Signature Scheme v3 signature contains multiple signers (only one allowed per
+         * platform version).
+         */
+        V3_SIG_MULTIPLE_SIGNERS("Multiple APK Signature Scheme v3 signatures found for a single "
+                + " platform version."),
+
+        /**
+         * APK Signature Scheme v3 signature found, but multiple v1 and/or multiple v2 signers
+         * found, where only one may be used with APK Signature Scheme v3
+         */
+        V3_SIG_MULTIPLE_PAST_SIGNERS("Multiple signatures found for pre-v3 signing with an APK "
+                + " Signature Scheme v3 signer.  Only one allowed."),
+
+        /**
+         * APK Signature Scheme v3 signature found, but its signer doesn't match the v1/v2 signers,
+         * or have them as the root of its signing certificate history
+         */
+        V3_SIG_PAST_SIGNERS_MISMATCH(
+                "v3 signer differs from v1/v2 signer without proper signing certificate lineage."),
+
+        /**
+         * This APK Signature Scheme v3 signer contains a signature produced using an unknown
+         * algorithm.
+         *
+         * <ul>
+         * <li>Parameter 1: algorithm ID ({@code Integer})</li>
+         * </ul>
+         */
+        V3_SIG_UNKNOWN_SIG_ALGORITHM("Unknown signature algorithm: %1$#x"),
+
+        /**
+         * This APK Signature Scheme v3 signer contains an unknown additional attribute.
+         *
+         * <ul>
+         * <li>Parameter 1: attribute ID ({@code Integer})</li>
+         * </ul>
+         */
+        V3_SIG_UNKNOWN_ADDITIONAL_ATTRIBUTE("Unknown additional attribute: ID %1$#x"),
+
+        /**
+         * An exception was encountered while verifying APK Signature Scheme v3 signature of this
+         * signer.
+         *
+         * <ul>
+         * <li>Parameter 1: signature algorithm ({@link SignatureAlgorithm})</li>
+         * <li>Parameter 2: exception ({@code Throwable})</li>
+         * </ul>
+         */
+        V3_SIG_VERIFY_EXCEPTION("Failed to verify %1$s signature: %2$s"),
+
+        /**
+         * The APK Signature Scheme v3 signer contained an invalid value for either min or max SDK
+         * versions.
+         *
+         * <ul>
+         * <li>Parameter 1: minSdkVersion ({@code Integer})
+         * <li>Parameter 2: maxSdkVersion ({@code Integer})
+         * </ul>
+         */
+        V3_SIG_INVALID_SDK_VERSIONS("Invalid SDK Version parameter(s) encountered in APK Signature "
+                + "scheme v3 signature: minSdkVersion %1$s maxSdkVersion: %2$s"),
+
+        /**
+         * APK Signature Scheme v3 signature over this signer's signed-data block did not verify.
+         *
+         * <ul>
+         * <li>Parameter 1: signature algorithm ({@link SignatureAlgorithm})</li>
+         * </ul>
+         */
+        V3_SIG_DID_NOT_VERIFY("%1$s signature over signed-data did not verify"),
+
+        /**
+         * This APK Signature Scheme v3 signer offers no signatures.
+         */
+        V3_SIG_NO_SIGNATURES("No signatures"),
+
+        /**
+         * This APK Signature Scheme v3 signer offers signatures but none of them are supported.
+         */
+        V3_SIG_NO_SUPPORTED_SIGNATURES("No supported signatures"),
+
+        /**
+         * This APK Signature Scheme v3 signer offers no certificates.
+         */
+        V3_SIG_NO_CERTIFICATES("No certificates"),
+
+        /**
+         * This APK Signature Scheme v3 signer's minSdkVersion listed in the signer's signed data
+         * does not match the minSdkVersion listed in the signatures record.
+         *
+         * <ul>
+         * <li>Parameter 1: minSdkVersion in signature record ({@code Integer}) </li>
+         * <li>Parameter 2: minSdkVersion in signed data ({@code Integer}) </li>
+         * </ul>
+         */
+        V3_MIN_SDK_VERSION_MISMATCH_BETWEEN_SIGNER_AND_SIGNED_DATA_RECORD(
+                "minSdkVersion mismatch between signed data and signature record:"
+                        + " <%1$s> vs <%2$s>"),
+
+        /**
+         * This APK Signature Scheme v3 signer's maxSdkVersion listed in the signer's signed data
+         * does not match the maxSdkVersion listed in the signatures record.
+         *
+         * <ul>
+         * <li>Parameter 1: maxSdkVersion in signature record ({@code Integer}) </li>
+         * <li>Parameter 2: maxSdkVersion in signed data ({@code Integer}) </li>
+         * </ul>
+         */
+        V3_MAX_SDK_VERSION_MISMATCH_BETWEEN_SIGNER_AND_SIGNED_DATA_RECORD(
+                "maxSdkVersion mismatch between signed data and signature record:"
+                        + " <%1$s> vs <%2$s>"),
+
+        /**
+         * This APK Signature Scheme v3 signer's public key listed in the signer's certificate does
+         * not match the public key listed in the signatures record.
+         *
+         * <ul>
+         * <li>Parameter 1: hex-encoded public key from certificate ({@code String})</li>
+         * <li>Parameter 2: hex-encoded public key from signatures record ({@code String})</li>
+         * </ul>
+         */
+        V3_SIG_PUBLIC_KEY_MISMATCH_BETWEEN_CERTIFICATE_AND_SIGNATURES_RECORD(
+                "Public key mismatch between certificate and signature record: <%1$s> vs <%2$s>"),
+
+        /**
+         * This APK Signature Scheme v3 signer's signature algorithms listed in the signatures
+         * record do not match the signature algorithms listed in the signatures record.
+         *
+         * <ul>
+         * <li>Parameter 1: signature algorithms from signatures record ({@code List<Integer>})</li>
+         * <li>Parameter 2: signature algorithms from digests record ({@code List<Integer>})</li>
+         * </ul>
+         */
+        V3_SIG_SIG_ALG_MISMATCH_BETWEEN_SIGNATURES_AND_DIGESTS_RECORDS(
+                "Signature algorithms mismatch between signatures and digests records"
+                        + ": %1$s vs %2$s"),
+
+        /**
+         * The APK's digest does not match the digest contained in the APK Signature Scheme v3
+         * signature.
+         *
+         * <ul>
+         * <li>Parameter 1: content digest algorithm ({@link ContentDigestAlgorithm})</li>
+         * <li>Parameter 2: hex-encoded expected digest of the APK ({@code String})</li>
+         * <li>Parameter 3: hex-encoded actual digest of the APK ({@code String})</li>
+         * </ul>
+         */
+        V3_SIG_APK_DIGEST_DID_NOT_VERIFY(
+                "APK integrity check failed. %1$s digest mismatch."
+                        + " Expected: <%2$s>, actual: <%3$s>"),
+
+        /**
+         * The signer's SigningCertificateLineage attribute containd a proof-of-rotation record with
+         * signature(s) that did not verify.
+         */
+        V3_SIG_POR_DID_NOT_VERIFY("SigningCertificateLineage attribute containd a proof-of-rotation"
+                + " record with signature(s) that did not verify."),
+
+        /**
+         * Failed to parse the SigningCertificateLineage structure in the APK Signature Scheme v3
+         * signature's additional attributes section.
+         */
+        V3_SIG_MALFORMED_LINEAGE("Failed to parse the SigningCertificateLineage structure in the "
+                + "APK Signature Scheme v3 signature's additional attributes section."),
+
+        /**
+         * The APK's signing certificate does not match the terminal node in the provided
+         * proof-of-rotation structure describing the signing certificate history
+         */
+        V3_SIG_POR_CERT_MISMATCH(
+                "APK signing certificate differs from the associated certificate found in the "
+                        + "signer's SigningCertificateLineage."),
+
+        /**
+         * The APK Signature Scheme v3 signers encountered do not offer a continuous set of
+         * supported platform versions.  Either they overlap, resulting in potentially two
+         * acceptable signers for a platform version, or there are holes which would create problems
+         * in the event of platform version upgrades.
+         */
+        V3_INCONSISTENT_SDK_VERSIONS("APK Signature Scheme v3 signers supported min/max SDK "
+                + "versions are not continuous."),
+
+        /**
+         * The APK Signature Scheme v3 signers don't cover all requested SDK versions.
+         *
+         *  <ul>
+         * <li>Parameter 1: minSdkVersion ({@code Integer})
+         * <li>Parameter 2: maxSdkVersion ({@code Integer})
+         * </ul>
+         */
+        V3_MISSING_SDK_VERSIONS("APK Signature Scheme v3 signers supported min/max SDK "
+                + "versions do not cover the entire desired range.  Found min:  %1$s max %2$s"),
+
+        /**
+         * The SigningCertificateLineages for different platform versions using APK Signature Scheme
+         * v3 do not go together.  Specifically, each should be a subset of another, with the size
+         * of each increasing as the platform level increases.
+         */
+        V3_INCONSISTENT_LINEAGES("SigningCertificateLineages targeting different platform versions"
+                + " using APK Signature Scheme v3 are not all a part of the same overall lineage."),
 
         /**
          * APK Signing Block contains an unknown entry.
