@@ -264,7 +264,7 @@ public class V3SigningCertificateLineage {
             if (!(o instanceof SigningCertificateNode)) return false;
 
             SigningCertificateNode that = (SigningCertificateNode) o;
-            if (signingCert != that.signingCert) return false;
+            if (!signingCert.equals(that.signingCert)) return false;
             if (parentSigAlgorithm != that.parentSigAlgorithm) return false;
             if (sigAlgorithm != that.sigAlgorithm) return false;
             if (!Arrays.equals(signature, that.signature)) return false;
