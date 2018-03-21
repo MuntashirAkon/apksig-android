@@ -133,7 +133,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     private boolean mV3SignaturePending;
 
     /**
-     * Request to output the emitted v2 signature or {@code null} if the request hasn't been issued.
+     * Request to output the emitted v2 and/or v3 signature(s) {@code null} if the request hasn't
+     * been issued.
      */
     private OutputApkSigningBlockRequestImpl mAddSigningBlockRequest;
 
@@ -270,7 +271,16 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 throw new InvalidKeyException("Unsupported key algorithm " + keyAlgorithm + " is "
                         + "not supported for APK Signature Scheme v3 signing");
             }
-            config.maxSdkVersion = currentMinSdk - 1; // assuming we never have sdk value of INT_MAX
+            if (i == rawConfigs.size() - 1) {
+                // first go through the loop, config should support all future platform versions.
+                // this assumes we don't deprecate support for signers in the future.  If we do,
+                // this needs to change
+                config.maxSdkVersion = Integer.MAX_VALUE;
+            } else {
+                // otherwise, we only want to use this signer up to the minimum platform version
+                // on which a newer one is acceptable
+                config.maxSdkVersion = currentMinSdk - 1;
+            }
             config.minSdkVersion = getMinSdkFromV3SignatureAlgorithms(config.signatureAlgorithms);
             if (mSigningCertificateLineage != null) {
                 config.mSigningCertificateLineage =
