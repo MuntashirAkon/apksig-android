@@ -100,7 +100,7 @@ public enum SignatureAlgorithm {
      * in little endian) construct the final digest.
      */
     VERITY_RSA_PKCS1_V1_5_WITH_SHA256(
-            0x0421,
+            0xff21,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "RSA",
             Pair.of("SHA256withRSA", null),
@@ -112,7 +112,7 @@ public enum SignatureAlgorithm {
      * endian) construct the final digest.
      */
     VERITY_ECDSA_WITH_SHA256(
-            0x0423,
+            0xff23,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "EC",
             Pair.of("SHA256withECDSA", null),
@@ -124,7 +124,7 @@ public enum SignatureAlgorithm {
      * endian) construct the final digest.
      */
     VERITY_DSA_WITH_SHA256(
-            0x0425,
+            0xff25,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "DSA",
             Pair.of("SHA256withDSA", null),
