@@ -89,6 +89,11 @@ public class SigningCertificateLineage {
      */
     private static final int PAST_CERT_ROLLBACK = 8;
 
+    /**
+     * Preserve authenticator module-based access in AccountManager gated by signing certificate.
+     */
+    private static final int PAST_CERT_AUTH = 16;
+
     private final int mMinSdkVersion;
 
     /**
@@ -414,7 +419,8 @@ public class SigningCertificateLineage {
     // TODO add API to modify flags corresponding to a given signing certificate
 
     private static int calculateDefaultFlags() {
-        return PAST_CERT_INSTALLED_DATA | PAST_CERT_PERMISSION | PAST_CERT_SHARED_USER_ID;
+        return PAST_CERT_INSTALLED_DATA | PAST_CERT_PERMISSION
+                | PAST_CERT_SHARED_USER_ID | PAST_CERT_AUTH;
     }
 
     /**
@@ -593,6 +599,20 @@ public class SigningCertificateLineage {
                     mFlags |= PAST_CERT_ROLLBACK;
                 } else {
                     mFlags &= ~PAST_CERT_ROLLBACK;
+                }
+                return this;
+            }
+
+            /**
+             * Set the {@code PAST_CERT_AUTH} flag in this capabilities object.  This flag
+             * is used by the platform to determine whether or not privileged access based on
+             * authenticator module signing certificates should be granted.
+             */
+            public Builder setAuth(boolean enabled) {
+                if (enabled) {
+                    mFlags |= PAST_CERT_AUTH;
+                } else {
+                    mFlags &= ~PAST_CERT_AUTH;
                 }
                 return this;
             }
