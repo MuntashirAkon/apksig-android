@@ -314,8 +314,7 @@ public class ApkSigningBlockUtils {
      * {@code size}, byte order set to this buffer's byte order; and then increments the position by
      * {@code size}.
      */
-    private static ByteBuffer getByteBuffer(ByteBuffer source, int size)
-            throws BufferUnderflowException {
+    private static ByteBuffer getByteBuffer(ByteBuffer source, int size) {
         if (size < 0) {
             throw new IllegalArgumentException("size: " + size);
         }

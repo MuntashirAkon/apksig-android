@@ -72,9 +72,6 @@ public class SigningCertificateLineage {
 
     private static final int CURRENT_VERSION = FIRST_VERSION;
 
-    /** special value used to see if cert is in package */
-    private static final int PAST_CERT_EXISTS = 0;
-
     /** accept data from already installed pkg with this cert */
     private static final int PAST_CERT_INSTALLED_DATA = 1;
 
@@ -137,7 +134,6 @@ public class SigningCertificateLineage {
      *     Use <code> readFromApkFile</code> to handle this case.
      * </note>
      * @param attrValue
-     * @return
      */
     public static SigningCertificateLineage readFromV3AttributeValue(byte[] attrValue)
             throws IOException {
@@ -206,7 +202,7 @@ public class SigningCertificateLineage {
         if (childCapabilities == null) {
             throw new NullPointerException("childCapabilities == null");
         }
-        if (mSigningLineage.size() == 0) {
+        if (mSigningLineage.isEmpty()) {
             throw new IllegalArgumentException("Cannot spawn descendant signing certificate on an"
                     + " empty SigningCertificateLineage: no parent node");
         }
@@ -277,7 +273,7 @@ public class SigningCertificateLineage {
 
     private SigningCertificateLineage spawnFirstDescendant(
             SignerConfig parent, SignerCapabilities signerCapabilities) {
-        if (mSigningLineage.size() > 0) {
+        if (!mSigningLineage.isEmpty()) {
             throw new IllegalStateException("SigningCertificateLineage already has its first node");
         }
 
@@ -427,10 +423,8 @@ public class SigningCertificateLineage {
         if (x509Certificate == null) {
             throw new NullPointerException("x509Certificate == null");
         }
-        int index = -1;
         for (int i = 0; i < mSigningLineage.size(); i++) {
             if (mSigningLineage.get(i).signingCert.equals(x509Certificate)) {
-                index = i;
                 return new SigningCertificateLineage(
                         mMinSdkVersion, new ArrayList<>(mSigningLineage.subList(0, i + 1)));
             }
@@ -455,7 +449,7 @@ public class SigningCertificateLineage {
      */
     public static SigningCertificateLineage consolidateLineages(
             List<SigningCertificateLineage> lineages) {
-        if (lineages == null || lineages.size() == 0) {
+        if (lineages == null || lineages.isEmpty()) {
             return null;
         }
         int largestIndex = 0;
