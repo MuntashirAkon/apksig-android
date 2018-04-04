@@ -174,8 +174,23 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
                 // v3 signing only supports single signers, of which the oldest (first) will be the
                 // one to use for v1 and v2 signing
+                SignerConfig oldestConfig = signerConfigs.get(0);
+
+                // in the event of signing certificate changes, make sure we have the oldest in the
+                // signing history to sign with v1
+                if (signingCertificateLineage != null) {
+                    SigningCertificateLineage subLineage =
+                            signingCertificateLineage.getSubLineage(
+                                    oldestConfig.mCertificates.get(0));
+                    if (subLineage.size() != 1) {
+                        throw new IllegalArgumentException(
+                                "v1 signing enabled but the oldest signer in the "
+                                + "SigningCertificateLineage is missing.  Please provide the oldest"
+                                + " signer to enable v1 signing");
+                    }
+                }
                 createV1SignerConfigs(
-                        Collections.singletonList(signerConfigs.get(0)), minSdkVersion);
+                        Collections.singletonList(oldestConfig), minSdkVersion);
             } else {
                 createV1SignerConfigs(signerConfigs, minSdkVersion);
             }
@@ -240,6 +255,20 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             // to use for v1 and v2 signing
             List<ApkSigningBlockUtils.SignerConfig> signerConfig =
                     new ArrayList<>();
+
+            SignerConfig oldestConfig = mSignerConfigs.get(0);
+
+            // first make sure that if we have signing certificate history that the oldest signer
+            // corresponds to the oldest ancestor
+            if (mSigningCertificateLineage != null) {
+                SigningCertificateLineage subLineage =
+                        mSigningCertificateLineage.getSubLineage(oldestConfig.mCertificates.get(0));
+                if (subLineage.size() != 1) {
+                    throw new IllegalArgumentException("v2 signing enabled but the oldest signer in"
+                                    + " the SigningCertificateLineage is missing.  Please provide"
+                                    + " the oldest signer to enable v2 signing.");
+                }
+            }
             signerConfig.add(
                     createSigningBlockSignerConfig(
                             mSignerConfigs.get(0), apkSigningBlockPaddingSupported,
