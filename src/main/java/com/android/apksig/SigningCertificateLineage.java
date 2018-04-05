@@ -81,6 +81,14 @@ public class SigningCertificateLineage {
     /** grant SIGNATURE permissions to pkgs with this cert */
     private static final int PAST_CERT_PERMISSION = 4;
 
+    /**
+     * Enable updates back to this certificate.  WARNING: this effectively removes any benefit of
+     * signing certificate changes, since a compromised key could retake control of an app even
+     * after change, and should only be used if there is a problem encountered when trying to ditch
+     * an older cert.
+     */
+    private static final int PAST_CERT_ROLLBACK = 8;
+
     private final int mMinSdkVersion;
 
     /**
@@ -567,6 +575,25 @@ public class SigningCertificateLineage {
                     mFlags |= PAST_CERT_PERMISSION;
                 } else {
                     mFlags &= ~PAST_CERT_PERMISSION;
+                }
+                return this;
+            }
+
+            /**
+             * Set the {@code PAST_CERT_ROLLBACK} flag in this capabilities object.  This flag
+             * is used by the platform to determine if this app is willing to upgrade to a new
+             * version that is signed by one of its past signing certificates.
+             *
+             * <note> WARNING: this effectively removes any benefit of signing certificate changes,
+             * since a compromised key could retake control of an app even after change, and should
+             * only be used if there is a problem encountered when trying to ditch an older cert
+             * </note>
+             */
+            public Builder setRollback(boolean enabled) {
+                if (enabled) {
+                    mFlags |= PAST_CERT_ROLLBACK;
+                } else {
+                    mFlags &= ~PAST_CERT_ROLLBACK;
                 }
                 return this;
             }
