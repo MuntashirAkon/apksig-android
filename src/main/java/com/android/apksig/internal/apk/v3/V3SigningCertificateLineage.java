@@ -44,6 +44,7 @@ import java.security.cert.X509Certificate;
 import java.security.spec.AlgorithmParameterSpec;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -108,6 +109,7 @@ public class V3SigningCertificateLineage {
                 throw new IllegalArgumentException("Encoded SigningCertificateLineage has a version"
                         + " different than any of which we are aware");
             }
+            HashSet<X509Certificate> certHistorySet = new HashSet<>();
             while (inputBytes.hasRemaining()) {
                 nodeCount++;
                 ByteBuffer nodeBytes = getLengthPrefixedSlice(inputBytes);
@@ -147,6 +149,12 @@ public class V3SigningCertificateLineage {
                 lastCert = (X509Certificate)
                         certFactory.generateCertificate(new ByteArrayInputStream(encodedCert));
                 lastCert = new GuaranteedEncodedFormX509Certificate(lastCert, encodedCert);
+                if (certHistorySet.contains(lastCert)) {
+                    throw new SecurityException("Encountered duplicate entries in "
+                            + "SigningCertificateLineage at certificate #" + nodeCount + ".  All "
+                            + "signing certificates should be unique");
+                }
+                certHistorySet.add(lastCert);
                 lastSigAlgorithmId = sigAlgorithmId;
                 result.add(new SigningCertificateNode(
                         lastCert, SignatureAlgorithm.findById(signedSigAlgorithm),
