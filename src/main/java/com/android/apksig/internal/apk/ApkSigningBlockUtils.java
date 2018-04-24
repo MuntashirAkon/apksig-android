@@ -178,6 +178,22 @@ public class ApkSigningBlockUtils {
                             beforeApkSigningBlock,
                             centralDir,
                             new ByteBufferDataSource(modifiedEocd));
+            // Special checks for the verity algorithm requirements.
+            if (actualContentDigests.containsKey(ContentDigestAlgorithm.VERITY_CHUNKED_SHA256)) {
+                if ((beforeApkSigningBlock.size() % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES != 0)) {
+                    throw new RuntimeException(
+                            "APK Signing Block is not aligned on 4k boundary: " +
+                            beforeApkSigningBlock.size());
+                }
+
+                long centralDirOffset = ZipUtils.getZipEocdCentralDirectoryOffset(eocd);
+                long signingBlockSize = centralDirOffset - beforeApkSigningBlock.size();
+                if (signingBlockSize % ANDROID_COMMON_PAGE_ALIGNMENT_BYTES != 0) {
+                    throw new RuntimeException(
+                            "APK Signing Block size is not multiple of page size: " +
+                            signingBlockSize);
+                }
+            }
         } catch (DigestException e) {
             throw new RuntimeException("Failed to compute content digests", e);
         }
