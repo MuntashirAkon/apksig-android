@@ -31,7 +31,9 @@ import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 import com.android.apksig.util.ReadableDataSink;
 import com.android.apksig.zip.ZipFormatException;
+import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -49,6 +51,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * APK signer.
@@ -237,6 +240,9 @@ public class ApkSigner {
         List<CentralDirectoryRecord> inputCdRecords =
                 parseZipCentralDirectory(inputCd, inputZipSections);
 
+        List<Pattern> pinPatterns = extractPinPatterns(inputCdRecords, inputApkLfhSection);
+        List<Hints.ByteRange> pinByteRanges = pinPatterns == null ? null : new ArrayList<>();
+
         // Step 3. Obtain a signer engine instance
         ApkSignerEngine signerEngine;
         if (mSignerEngine != null) {
@@ -298,6 +304,9 @@ public class ApkSigner {
                 new HashMap<>(inputCdRecords.size());
         for (final CentralDirectoryRecord inputCdRecord : inputCdRecordsSortedByLfhOffset) {
             String entryName = inputCdRecord.getName();
+            if (Hints.PIN_BYTE_RANGE_ZIP_ENTRY_NAME.equals(entryName)) {
+                continue;  // We'll re-add below if needed.
+            }
             ApkSignerEngine.InputJarEntryInstructions entryInstructions =
                     signerEngine.inputJarEntry(entryName);
             boolean shouldOutput;
@@ -369,6 +378,23 @@ public class ApkSigner {
                                 outputApkOut,
                                 outputLocalFileHeaderOffset);
                 outputOffset += outputLocalFileRecordSize;
+
+                if (pinPatterns != null) {
+                    boolean pinThisFile = false;
+                    for (Pattern pinPattern : pinPatterns) {
+                        if (pinPattern.matcher(inputCdRecord.getName()).matches()) {
+                            pinThisFile = true;
+                            break;
+                        }
+                    }
+
+                    if (pinThisFile) {
+                        pinByteRanges.add(
+                            new Hints.ByteRange(
+                                outputLocalFileHeaderOffset,
+                                outputOffset));
+                    }
+                }
 
                 // Enqueue entry's Central Directory record for output
                 CentralDirectoryRecord outputCdRecord;
@@ -453,6 +479,35 @@ public class ApkSigner {
                                 localFileHeaderOffset));
             }
             outputJarSignatureRequest.done();
+        }
+
+        if (pinByteRanges != null) {
+            pinByteRanges.add(new Hints.ByteRange(outputOffset, Long.MAX_VALUE));  // central dir
+            String entryName = Hints.PIN_BYTE_RANGE_ZIP_ENTRY_NAME;
+            byte[] uncompressedData = Hints.encodeByteRangeList(pinByteRanges);
+            ZipUtils.DeflateResult deflateResult =
+                    ZipUtils.deflate(ByteBuffer.wrap(uncompressedData));
+            byte[] compressedData = deflateResult.output;
+            long uncompressedDataCrc32 = deflateResult.inputCrc32;
+            long localFileHeaderOffset = outputOffset;
+            outputOffset +=
+                    LocalFileRecord.outputRecordWithDeflateCompressedData(
+                        entryName,
+                        lastModifiedTimeForNewEntries,
+                        lastModifiedDateForNewEntries,
+                        compressedData,
+                        uncompressedDataCrc32,
+                        uncompressedData.length,
+                        outputApkOut);
+            outputCdRecords.add(
+                CentralDirectoryRecord.createWithDeflateCompressedData(
+                    entryName,
+                    lastModifiedTimeForNewEntries,
+                    lastModifiedDateForNewEntries,
+                    uncompressedDataCrc32,
+                    compressedData.length,
+                    uncompressedData.length,
+                    localFileHeaderOffset));
         }
 
         // Step 8. Construct output ZIP Central Directory in an in-memory buffer
@@ -707,6 +762,16 @@ public class ApkSigner {
         return cdRecords;
     }
 
+    private static CentralDirectoryRecord findCdRecord(
+        List<CentralDirectoryRecord> cdRecords, String name) {
+        for (CentralDirectoryRecord cdRecord : cdRecords) {
+            if (name.equals(cdRecord.getName())) {
+                return cdRecord;
+            }
+        }
+        return null;
+    }
+
     /**
      * Returns the contents of the APK's {@code AndroidManifest.xml} or {@code null} if this entry
      * is not present in the APK.
@@ -714,13 +779,8 @@ public class ApkSigner {
     static ByteBuffer getAndroidManifestFromApk(
             List<CentralDirectoryRecord> cdRecords, DataSource lhfSection)
                     throws IOException, ApkFormatException, ZipFormatException {
-        CentralDirectoryRecord androidManifestCdRecord = null;
-        for (CentralDirectoryRecord cdRecord : cdRecords) {
-            if (ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(cdRecord.getName())) {
-                androidManifestCdRecord = cdRecord;
-                break;
-            }
-        }
+        CentralDirectoryRecord androidManifestCdRecord =
+                findCdRecord(cdRecords, ANDROID_MANIFEST_ZIP_ENTRY_NAME);
         if (androidManifestCdRecord == null) {
             throw new ApkFormatException("Missing " + ANDROID_MANIFEST_ZIP_ENTRY_NAME);
         }
@@ -728,6 +788,30 @@ public class ApkSigner {
         return ByteBuffer.wrap(
                 LocalFileRecord.getUncompressedData(
                         lhfSection, androidManifestCdRecord, lhfSection.size()));
+    }
+
+    /**
+     * Return list of pin patterns embedded in the pin pattern asset
+     * file.  If no such file, return {@code null}.
+     */
+    private static List<Pattern> extractPinPatterns(
+            List<CentralDirectoryRecord> cdRecords, DataSource lhfSection)
+                    throws IOException, ApkFormatException {
+        CentralDirectoryRecord pinListCdRecord =
+                findCdRecord(cdRecords, Hints.PIN_HINT_ASSET_ZIP_ENTRY_NAME);
+        List<Pattern> pinPatterns = null;
+        if (pinListCdRecord != null) {
+            pinPatterns = new ArrayList<>();
+            byte[] patternBlob;
+            try {
+                patternBlob = LocalFileRecord.getUncompressedData(
+                    lhfSection, pinListCdRecord, lhfSection.size());
+            } catch (ZipFormatException ex) {
+                throw new ApkFormatException("Bad " + pinListCdRecord);
+            }
+            pinPatterns = Hints.parsePinPatterns(patternBlob);
+        }
+        return pinPatterns;
     }
 
     /**
