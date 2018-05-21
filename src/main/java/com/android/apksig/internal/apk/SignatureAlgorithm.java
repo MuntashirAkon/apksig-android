@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.apk.v2;
+package com.android.apksig.internal.apk;
 
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.Pair;
@@ -23,9 +23,10 @@ import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;
 
 /**
- * APK Signature Scheme v2 signature algorithm.
+ * APK Signing Block signature algorithm.
  */
 public enum SignatureAlgorithm {
+    // TODO reserve the 0x0000 ID to mean null
     /**
      * RSASSA-PSS with SHA2-256 digest, SHA2-256 MGF1, 32 bytes of salt, trailer: 0xbc, content
      * digested using SHA2-256 in 1 MB chunks.
@@ -95,10 +96,11 @@ public enum SignatureAlgorithm {
 
     /**
      * RSASSA-PKCS1-v1_5 with SHA2-256 digest, content digested using SHA2-256 in 4 KB chunks, in
-     * the same way fsverity operates.
+     * the same way fsverity operates. This digest and the content length (before digestion, 8 bytes
+     * in little endian) construct the final digest.
      */
     VERITY_RSA_PKCS1_V1_5_WITH_SHA256(
-            0x9901,  // experimental
+            0x0421,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "RSA",
             Pair.of("SHA256withRSA", null),
@@ -106,10 +108,11 @@ public enum SignatureAlgorithm {
 
     /**
      * ECDSA with SHA2-256 digest, content digested using SHA2-256 in 4 KB chunks, in the same way
-     * fsverity operates.
+     * fsverity operates. This digest and the content length (before digestion, 8 bytes in little
+     * endian) construct the final digest.
      */
     VERITY_ECDSA_WITH_SHA256(
-            0x9903,  // experimental
+            0x0423,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "EC",
             Pair.of("SHA256withECDSA", null),
@@ -117,10 +120,11 @@ public enum SignatureAlgorithm {
 
     /**
      * DSA with SHA2-256 digest, content digested using SHA2-256 in 4 KB chunks, in the same way
-     * fsverity operates.
+     * fsverity operates. This digest and the content length (before digestion, 8 bytes in little
+     * endian) construct the final digest.
      */
     VERITY_DSA_WITH_SHA256(
-            0x9905,  // experimental
+            0x0425,
             ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
             "DSA",
             Pair.of("SHA256withDSA", null),
@@ -132,7 +136,7 @@ public enum SignatureAlgorithm {
     private final Pair<String, ? extends AlgorithmParameterSpec> mJcaSignatureAlgAndParams;
     private final int mMinSdkVersion;
 
-    private SignatureAlgorithm(int id,
+    SignatureAlgorithm(int id,
             ContentDigestAlgorithm contentDigestAlgorithm,
             String jcaKeyAlgorithm,
             Pair<String, ? extends AlgorithmParameterSpec> jcaSignatureAlgAndParams,
@@ -147,21 +151,21 @@ public enum SignatureAlgorithm {
     /**
      * Returns the ID of this signature algorithm as used in APK Signature Scheme v2 wire format.
      */
-    int getId() {
+    public int getId() {
         return mId;
     }
 
     /**
      * Returns the content digest algorithm associated with this signature algorithm.
      */
-    ContentDigestAlgorithm getContentDigestAlgorithm() {
+    public ContentDigestAlgorithm getContentDigestAlgorithm() {
         return mContentDigestAlgorithm;
     }
 
     /**
      * Returns the JCA {@link java.security.Key} algorithm used by this signature scheme.
      */
-    String getJcaKeyAlgorithm() {
+    public String getJcaKeyAlgorithm() {
         return mJcaKeyAlgorithm;
     }
 
@@ -169,15 +173,15 @@ public enum SignatureAlgorithm {
      * Returns the {@link java.security.Signature} algorithm and the {@link AlgorithmParameterSpec}
      * (or null if not needed) to parameterize the {@code Signature}.
      */
-    Pair<String, ? extends AlgorithmParameterSpec> getJcaSignatureAlgorithmAndParams() {
+    public Pair<String, ? extends AlgorithmParameterSpec> getJcaSignatureAlgorithmAndParams() {
         return mJcaSignatureAlgAndParams;
     }
 
-    int getMinSdkVersion() {
+    public int getMinSdkVersion() {
         return mMinSdkVersion;
     }
 
-    static SignatureAlgorithm findById(int id) {
+    public static SignatureAlgorithm findById(int id) {
         for (SignatureAlgorithm alg : SignatureAlgorithm.values()) {
             if (alg.getId() == id) {
                 return alg;
