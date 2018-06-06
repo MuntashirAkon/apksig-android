@@ -152,7 +152,7 @@ public class SigningCertificateLineage {
             throws IOException {
         List<SigningCertificateNode> parsedLineage =
                 V3SigningCertificateLineage.readSigningCertificateLineage(ByteBuffer.wrap(
-                        attrValue));
+                        attrValue).order(ByteOrder.LITTLE_ENDIAN));
         int minSdkVersion = calculateMinSdkVersion(parsedLineage);
         return  new SigningCertificateLineage(minSdkVersion, parsedLineage);
     }
