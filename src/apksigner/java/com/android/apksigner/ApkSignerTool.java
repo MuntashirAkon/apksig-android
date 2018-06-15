@@ -20,7 +20,6 @@ import com.android.apksig.ApkSigner;
 import com.android.apksig.ApkVerifier;
 import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.apk.MinSdkVersionException;
-import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -1054,8 +1053,7 @@ public class ApkSignerTool {
             }
             this.certs = new ArrayList<>(certChain.length);
             for (Certificate cert : certChain) {
-                this.certs.add(new GuaranteedEncodedFormX509Certificate((X509Certificate) cert,
-                        cert.getEncoded()));
+                this.certs.add((X509Certificate) cert);
             }
         }
 

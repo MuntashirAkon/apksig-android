@@ -43,11 +43,11 @@ public class GuaranteedEncodedFormX509Certificate extends DelegatingX509Certific
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof GuaranteedEncodedFormX509Certificate)) return false;
+        if (!(o instanceof X509Certificate)) return false;
 
         try {
             byte[] a = this.getEncoded();
-            byte[] b = ((GuaranteedEncodedFormX509Certificate) o).getEncoded();
+            byte[] b = ((X509Certificate) o).getEncoded();
             return Arrays.equals(a, b);
         } catch (CertificateEncodingException e) {
             return false;
