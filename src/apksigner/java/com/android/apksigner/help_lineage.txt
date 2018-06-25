@@ -1,51 +1,47 @@
-USAGE: apksigner rotate [options]
+USAGE: apksigner lineage [options]
 
-This takes the provided keys and creates a SigningCertificateLineage entry linking the old to the
-new, for use in a key rotation scenario using APK Signature Scheme v3.
+This modifies the capabilities of one or more signers in the provided SigningCertificateLineage.
+This can be used to revoke capabilities of a previous signing certificate once the install base
+has been migrated to the new signing certificate.
 
 
         GENERAL OPTIONS
 
 --in                  Input SigningCertificateLineage. This file contains a binary representation of
-                      a SigningCertificateLineage object, which contains the proof-of-rotation for
-                      different signing certificates.  This can be used with APK Signature Scheme v3
-                      to rotate the signing certificate for an APK.
-
+                      a SigningCertificateLineage object which contains the proof-of-rotation for
+                      different signing certificates.
 
 --out                 File into which to put the binary representation of a
                       SigningCertificateLineage object.
 
--v, --verbose         Verbose output mode
+--print-certs         Show information about the signing certificates and their capabilities
+                      in the SigningCertificateLineage.
 
--h, --help            Show help about this command and exit
+-v, --verbose         Verbose output mode.
+
+-h, --help            Show help about this command and exit.
+
 
         PER-SIGNER OPTIONS
-These options specify the configuration of a particular signer. To rotate keys, two signers must be
-specified, an old and a new.
+This option is required for each signer to be modified in the provided SigningCertificateLineage.
 
---old-signer          The signing information for the signer from which to be rotated.  This will
-                      be used to sign a new entry in the SigningCertificateLineage allowing the
-                      addition of the new-signer.  If an input SigningCertificateLineage object was
-                      provided, this signer must match the leaf descendant so that the existing
-                      signing certificate history may be extended.
+--signer              Indicates the start of a new signing certificate to be modified.
 
---new-signer          The signing information for the signer to which you want to rotate.  This will
-                      be the last key in the SigningCertificate object, signed by the old-signer.
 
         PER-SIGNER SIGNING KEY, CERTIFICATE, & CAPABILITY OPTIONS
-There are two ways to provide the signer's private key and certificate: (1) Java
-KeyStore (see --ks), or (2) private key file in PKCS #8 format and certificate
-file in X.509 format (see --key and --cert).
+To modify the capabilities of a previous signer in the lineage the signer's
+private key and certificate must be specified. There are two ways to provide
+the signer's private key and certificate: (1) Java KeyStore (see --ks), or
+(2) private key file in PKCS #8 format and certificate file in X.509 format
+(see --key and --cert).
 
 The --set-xx capability options allow an older signing certificate to still be
 used in some situations on the platform even though the APK is now being signed
 by a newer signing certificate. By default, the new signer will have all
 capabilities, but the capability options can be specified for the new signer
-during rotation to act as a default level of trust when moving to a newer
-signing certificate.The capability options accept an optional boolean value of
-true or false; if this value is not specified then the option will default to
-true.
-
+to act as a default level of trust when moving to a newer signing certificate.
+The capability options accept an optional boolean value of true or false; if
+this value is not specified then the option will default to true.
 
 --ks                  Load private key and certificate chain from the Java
                       KeyStore initialized from the specified file. NONE means
@@ -174,35 +170,14 @@ true.
                       authenticator module using the new signing certificate.
 
 
-        JCA PROVIDER INSTALLATION OPTIONS
-These options enable you to install additional Java Crypto Architecture (JCA)
-Providers, such as PKCS #11 providers. Use --next-provider to delimit options of
-different providers. Providers are installed in the order in which they appear
-on the command-line.
-
---provider-class      Fully-qualified class name of the JCA Provider.
-
---provider-arg        Value to pass into the constructor of the JCA Provider
-                      class specified by --provider-class. The value is passed
-                      into the constructor as java.lang.String. By default, the
-                      no-arg provider's constructor is used.
-
---provider-pos        Position / priority at which to install this provider in
-                      the JCA provider list. By default, the provider is
-                      installed as the lowest priority provider.
-                      See java.security.Security.insertProviderAt.
-
         EXAMPLES
 
-1. Create a new SigningCertificateLineage to enable rotation:
-$ apksigner rotate --out /path/to/new/file --old-signer --ks release.jks \
-    --new-signer --ks release2.jks
+1. Remove all capabilities from a previous signer in the linage:
+$ apksigner lineage --in /path/to/existing/lineage --out /path/to/new/file \
+    --signer --ks release.jks --set-installed-data false \
+    --set-shared-uid false --set-permission false --set-rollback false \
+    --set-auth false
 
-2. Extend an existing SigningCertificateLineage to rotate again after previous rotation:
-$ apksigner rotate --in /path/to/existing/lineage --out /path/to/new/file \
-    --old-signer --ks release2.jks --new-signer --ks release3.jks
+2. Display details about the signing certificates and their capabilities in the lineage:
+$ apksigner lineage --in /path/to/existing/lineage --print-certs -v
 
-3. Create a new SigningCertificateLineage with explicit capabilities for the previous signer:
-$ apksigner rotate --out /path/to/new/file --old-signer --ks release.jks \
-    --set-installed-data true --set-shared-uid true --set-permission true --set-rollback false \
-    --set-auth true --new-signer --ks release2.jks
