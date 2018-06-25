@@ -419,11 +419,107 @@ public class SigningCertificateLineage {
         return sortedSignerConfigs;
     }
 
-    // TODO add API to return all signing certificate(s)
+    /**
+     * Returns the SignerCapabilities for the signer in the lineage that matches the provided
+     * config.
+     */
+    public SignerCapabilities getSignerCapabilities(SignerConfig config) {
+        if (config == null) {
+            throw new NullPointerException("config == null");
+        }
 
-    // TODO add API to query if given signing certificate is in set of signing certificates
+        X509Certificate cert = config.getCertificate();
+        return getSignerCapabilities(cert);
+    }
 
-    // TODO add API to modify flags corresponding to a given signing certificate
+    /**
+     * Returns the SignerCapabilities for the signer in the lineage that matches the provided
+     * certificate.
+     */
+    public SignerCapabilities getSignerCapabilities(X509Certificate cert) {
+        if (cert == null) {
+            throw new NullPointerException("cert == null");
+        }
+
+        for (int i = 0; i < mSigningLineage.size(); i++) {
+            SigningCertificateNode lineageNode = mSigningLineage.get(i);
+            if (lineageNode.signingCert.equals(cert)) {
+                int flags = lineageNode.flags;
+                return new SignerCapabilities.Builder(flags).build();
+            }
+        }
+
+        // the provided signer certificate was not found in the lineage
+        throw new IllegalArgumentException("Certificate (" + cert.getSubjectDN()
+                + ") not found in the SigningCertificateLineage");
+    }
+
+    /**
+     * Updates the SignerCapabilities for the signer in the lineage that matches the provided
+     * config. Only those capabilities that have been modified through the setXX methods will be
+     * updated for the signer to prevent unset default values from being applied.
+     */
+    public void updateSignerCapabilities(SignerConfig config, SignerCapabilities capabilities) {
+        if (config == null) {
+            throw new NullPointerException("config == null");
+        }
+
+        X509Certificate cert = config.getCertificate();
+        for (int i = 0; i < mSigningLineage.size(); i++) {
+            SigningCertificateNode lineageNode = mSigningLineage.get(i);
+            if (lineageNode.signingCert.equals(cert)) {
+                int flags = lineageNode.flags;
+                SignerCapabilities newCapabilities = new SignerCapabilities.Builder(
+                        flags).setCallerConfiguredCapabilities(capabilities).build();
+                lineageNode.flags = newCapabilities.getFlags();
+                return;
+            }
+        }
+
+        // the provided signer config was not found in the lineage
+        throw new IllegalArgumentException("Certificate (" + cert.getSubjectDN()
+                + ") not found in the SigningCertificateLineage");
+    }
+
+    /**
+     * Returns a list containing all of the certificates in the lineage.
+     */
+    public List<X509Certificate> getCertificatesInLineage() {
+        List<X509Certificate> certs = new ArrayList<>();
+        for (int i = 0; i < mSigningLineage.size(); i++) {
+            X509Certificate cert = mSigningLineage.get(i).signingCert;
+            certs.add(cert);
+        }
+        return certs;
+    }
+
+    /**
+     * Returns {@code true} if the specified config is in the lineage.
+     */
+    public boolean isSignerInLineage(SignerConfig config) {
+        if (config == null) {
+            throw new NullPointerException("config == null");
+        }
+
+        X509Certificate cert = config.getCertificate();
+        return isCertificateInLineage(cert);
+    }
+
+    /**
+     * Returns {@code true} if the specified certificate is in the lineage.
+     */
+    public boolean isCertificateInLineage(X509Certificate cert) {
+        if (cert == null) {
+            throw new NullPointerException("cert == null");
+        }
+
+        for (int i = 0; i < mSigningLineage.size(); i++) {
+            if (mSigningLineage.get(i).signingCert.equals(cert)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private static int calculateDefaultFlags() {
         return PAST_CERT_INSTALLED_DATA | PAST_CERT_PERMISSION
@@ -438,7 +534,9 @@ public class SigningCertificateLineage {
      * conjunction with the appropriate SDK version values.
      *
      * @param x509Certificate the signing certificate for which to search
-     * @return A new SigningCertificateLineage if present, or null otherwise.
+     * @return A new SigningCertificateLineage if the given certificate is present.
+     *
+     * @throws IllegalArgumentException if the provided certificate is not in the lineage.
      */
     public SigningCertificateLineage getSubLineage(X509Certificate x509Certificate) {
         if (x509Certificate == null) {
@@ -522,12 +620,62 @@ public class SigningCertificateLineage {
     public static class SignerCapabilities {
         private final int mFlags;
 
+        private final int mCallerConfiguredFlags;
+
         private SignerCapabilities(int flags) {
+            this(flags, 0);
+        }
+
+        private SignerCapabilities(int flags, int callerConfiguredFlags) {
             mFlags = flags;
+            mCallerConfiguredFlags = callerConfiguredFlags;
         }
 
         private int getFlags() {
             return mFlags;
+        }
+
+        /**
+         * Returns {@code true} if the capabilities of this object match those of the provided
+         * object.
+         */
+        public boolean equals(SignerCapabilities other) {
+            return this.mFlags == other.mFlags;
+        }
+
+        /**
+         * Returns {@code true} if this object has the installed data capability.
+         */
+        public boolean hasInstalledData() {
+            return (mFlags & PAST_CERT_INSTALLED_DATA) != 0;
+        }
+
+        /**
+         * Returns {@code true} if this object has the shared UID capability.
+         */
+        public boolean hasSharedUid() {
+            return (mFlags & PAST_CERT_SHARED_USER_ID) != 0;
+        }
+
+        /**
+         * Returns {@code true} if this object has the permission capability.
+         */
+        public boolean hasPermission() {
+            return (mFlags & PAST_CERT_PERMISSION) != 0;
+        }
+
+        /**
+         * Returns {@code true} if this object has the rollback capability.
+         */
+        public boolean hasRollback() {
+            return (mFlags & PAST_CERT_ROLLBACK) != 0;
+        }
+
+        /**
+         * Returns {@code true} if this object has the auth capability.
+         */
+        public boolean hasAuth() {
+            return (mFlags & PAST_CERT_AUTH) != 0;
         }
 
         /**
@@ -536,11 +684,21 @@ public class SigningCertificateLineage {
         public static class Builder {
             private int mFlags;
 
+            private int mCallerConfiguredFlags;
+
             /**
              * Constructs a new {@code Builder}.
              */
             public Builder() {
                 mFlags = calculateDefaultFlags();
+            }
+
+            /**
+             * Constructs a new {@code Builder} with the initial capabilities set to the provided
+             * flags.
+             */
+            public Builder(int flags) {
+                mFlags = flags;
             }
 
             /**
@@ -554,6 +712,7 @@ public class SigningCertificateLineage {
              * their install base is as migrated as it will be.
              */
             public Builder setInstalledData(boolean enabled) {
+                mCallerConfiguredFlags |= PAST_CERT_INSTALLED_DATA;
                 if (enabled) {
                     mFlags |= PAST_CERT_INSTALLED_DATA;
                 } else {
@@ -570,6 +729,7 @@ public class SigningCertificateLineage {
              * certificate, but can't guarantee the order of updates to those apps.
              */
             public Builder setSharedUid(boolean enabled) {
+                mCallerConfiguredFlags |= PAST_CERT_SHARED_USER_ID;
                 if (enabled) {
                     mFlags |= PAST_CERT_SHARED_USER_ID;
                 } else {
@@ -588,6 +748,7 @@ public class SigningCertificateLineage {
              * if this capability is not set and the signing certificates differ.
              */
             public Builder setPermission(boolean enabled) {
+                mCallerConfiguredFlags |= PAST_CERT_PERMISSION;
                 if (enabled) {
                     mFlags |= PAST_CERT_PERMISSION;
                 } else {
@@ -607,6 +768,7 @@ public class SigningCertificateLineage {
              * </note>
              */
             public Builder setRollback(boolean enabled) {
+                mCallerConfiguredFlags |= PAST_CERT_ROLLBACK;
                 if (enabled) {
                     mFlags |= PAST_CERT_ROLLBACK;
                 } else {
@@ -621,6 +783,7 @@ public class SigningCertificateLineage {
              * authenticator module signing certificates should be granted.
              */
             public Builder setAuth(boolean enabled) {
+                mCallerConfiguredFlags |= PAST_CERT_AUTH;
                 if (enabled) {
                     mFlags |= PAST_CERT_AUTH;
                 } else {
@@ -630,11 +793,27 @@ public class SigningCertificateLineage {
             }
 
             /**
+             * Applies the capabilities that were explicitly set in the provided capabilities object
+             * to this builder. Any values that were not set will not be applied to this builder
+             * to prevent unintentinoally setting a capability back to a default value.
+             */
+            public Builder setCallerConfiguredCapabilities(SignerCapabilities capabilities) {
+                // The mCallerConfiguredFlags should have a bit set for each capability that was
+                // set by a caller. If a capability was explicitly set then the corresponding bit
+                // in mCallerConfiguredFlags should be set. This allows the provided capabilities
+                // to take effect for those set by the caller while those that were not set will
+                // be cleared by the bitwise and and the initial value for the builder will remain.
+                mFlags = (mFlags & ~capabilities.mCallerConfiguredFlags) |
+                        (capabilities.mFlags & capabilities.mCallerConfiguredFlags);
+                return this;
+            }
+
+            /**
              * Returns a new {@code SignerConfig} instance configured based on the configuration of
              * this builder.
              */
             public SignerCapabilities build() {
-                return new SignerCapabilities(mFlags);
+                return new SignerCapabilities(mFlags, mCallerConfiguredFlags);
             }
         }
     }
