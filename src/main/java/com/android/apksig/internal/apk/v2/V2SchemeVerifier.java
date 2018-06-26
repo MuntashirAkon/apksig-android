@@ -31,6 +31,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
@@ -428,9 +429,10 @@ public abstract class V2SchemeVerifier {
                 switch (id) {
                     case V2SchemeSigner.STRIPPING_PROTECTION_ATTR_ID:
                         // stripping protection added when signing with a newer scheme
-                        int foundId = attribute.getInt();
+                        int foundId = ByteBuffer.wrap(value).order(
+                                ByteOrder.LITTLE_ENDIAN).getInt();
                         if (supportedApkSigSchemeIds.contains(foundId)) {
-                            supportedExpectedApkSigSchemeIds.add(id);
+                            supportedExpectedApkSigSchemeIds.add(foundId);
                         } else {
                             result.addWarning(
                                     Issue.V2_SIG_UNKNOWN_APK_SIG_SCHEME_ID, result.index, foundId);
