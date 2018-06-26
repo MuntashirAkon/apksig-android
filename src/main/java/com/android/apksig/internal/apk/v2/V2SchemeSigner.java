@@ -232,7 +232,7 @@ public abstract class V2SchemeSigner {
         signer.signedData = encodeAsSequenceOfLengthPrefixedElements(new byte[][] {
             encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(signedData.digests),
             encodeAsSequenceOfLengthPrefixedElements(signedData.certificates),
-            // additional attributes
+            signedData.additionalAttributes,
             new byte[0],
         });
         signer.publicKey = encodedPublicKey;
@@ -267,7 +267,7 @@ public abstract class V2SchemeSigner {
             int payloadSize = 4 + 4 + 4;
             ByteBuffer result = ByteBuffer.allocate(payloadSize);
             result.order(ByteOrder.LITTLE_ENDIAN);
-            result.putInt(payloadSize);
+            result.putInt(payloadSize - 4);
             result.putInt(STRIPPING_PROTECTION_ATTR_ID);
             result.putInt(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
             return result.array();
