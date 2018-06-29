@@ -400,15 +400,9 @@ public class SigningCertificateLineage {
         for (int i = 0; i < mSigningLineage.size(); i++) {
             for (int j = 0; j < signerConfigs.size(); j++) {
                 DefaultApkSignerEngine.SignerConfig config = signerConfigs.get(j);
-                try {
-                    if (Arrays.equals(mSigningLineage.get(i).signingCert.getEncoded(),
-                            config.getCertificates().get(0).getEncoded())) {
-                        sortedSignerConfigs.add(config);
-                        break;
-                    }
-                } catch (CertificateEncodingException e) {
-                    throw new RuntimeException("Failed to encode the provided signing certificates",
-                            e);
+                if (mSigningLineage.get(i).signingCert.equals(config.getCertificates().get(0))) {
+                    sortedSignerConfigs.add(config);
+                    break;
                 }
             }
         }
@@ -542,16 +536,11 @@ public class SigningCertificateLineage {
         if (x509Certificate == null) {
             throw new NullPointerException("x509Certificate == null");
         }
-        try {
-            byte[] encodedCert = x509Certificate.getEncoded();
-            for (int i = 0; i < mSigningLineage.size(); i++) {
-                if (Arrays.equals(mSigningLineage.get(i).signingCert.getEncoded(), encodedCert)) {
-                    return new SigningCertificateLineage(
-                            mMinSdkVersion, new ArrayList<>(mSigningLineage.subList(0, i + 1)));
-                }
+        for (int i = 0; i < mSigningLineage.size(); i++) {
+            if (mSigningLineage.get(i).signingCert.equals(x509Certificate)) {
+                return new SigningCertificateLineage(
+                        mMinSdkVersion, new ArrayList<>(mSigningLineage.subList(0, i + 1)));
             }
-        } catch (CertificateEncodingException e) {
-            throw new RuntimeException("Failed to encode the provided signing certificate", e);
         }
 
         // looks like we didn't find the cert,

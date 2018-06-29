@@ -136,6 +136,7 @@ public class ApkSignerTool {
         boolean verbose = false;
         boolean v1SigningEnabled = true;
         boolean v2SigningEnabled = true;
+        boolean v3SigningEnabled = true;
         boolean debuggableApkPermitted = true;
         int minSdkVersion = 1;
         boolean minSdkVersionSpecified = false;
@@ -166,6 +167,8 @@ public class ApkSignerTool {
                 v1SigningEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("v2-signing-enabled".equals(optionName)) {
                 v2SigningEnabled = optionsParser.getOptionalBooleanValue(true);
+            } else if ("v3-signing-enabled".equals(optionName)) {
+                v3SigningEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("debuggable-apk-permitted".equals(optionName)) {
                 debuggableApkPermitted = optionsParser.getOptionalBooleanValue(true);
             } else if ("next-signer".equals(optionName)) {
@@ -342,6 +345,7 @@ public class ApkSignerTool {
                         .setOtherSignersSignaturesPreserved(false)
                         .setV1SigningEnabled(v1SigningEnabled)
                         .setV2SigningEnabled(v2SigningEnabled)
+                        .setV3SigningEnabled(v3SigningEnabled)
                         .setDebuggableApkPermitted(debuggableApkPermitted)
                         .setSigningCertificateLineage(lineage);
         if (minSdkVersionSpecified) {
@@ -474,6 +478,9 @@ public class ApkSignerTool {
                 System.out.println(
                         "Verified using v2 scheme (APK Signature Scheme v2): "
                                 + result.isVerifiedUsingV2Scheme());
+                System.out.println(
+                        "Verified using v3 scheme (APK Signature Scheme v3): "
+                                + result.isVerifiedUsingV3Scheme());
                 System.out.println("Number of signers: " + signerCerts.size());
             }
             if (printCerts) {
@@ -517,6 +524,18 @@ public class ApkSignerTool {
                 warningsEncountered = true;
                 warningsOut.println(
                         "WARNING: APK Signature Scheme v2 " + signerName + ": " + warning);
+            }
+        }
+        for (ApkVerifier.Result.V3SchemeSignerInfo signer : result.getV3SchemeSigners()) {
+            String signerName = "signer #" + (signer.getIndex() + 1);
+            for (ApkVerifier.IssueWithParams error : signer.getErrors()) {
+                System.err.println(
+                        "ERROR: APK Signature Scheme v3 " + signerName + ": " + error);
+            }
+            for (ApkVerifier.IssueWithParams warning : signer.getWarnings()) {
+                warningsEncountered = true;
+                warningsOut.println(
+                        "WARNING: APK Signature Scheme v3 " + signerName + ": " + warning);
             }
         }
 
