@@ -16,8 +16,13 @@
 
 package com.android.apksig.internal.util;
 
+import com.android.apksig.ApkSignerTest;
+import com.android.apksig.SigningCertificateLineage;
+import com.android.apksig.util.DataSource;
+
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -108,5 +113,25 @@ public final class Resources {
         }
 
         return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(encoded));
+    }
+
+    public static SigningCertificateLineage.SignerConfig toLineageSignerConfig(Class<?> cls,
+            String resourcePrefix) throws Exception {
+        PrivateKey privateKey = toPrivateKey(cls, resourcePrefix + ".pk8");
+        X509Certificate cert = Resources.toCertificate(cls,
+                resourcePrefix + ".x509.pem");
+        return new SigningCertificateLineage.SignerConfig.Builder(privateKey, cert).build();
+    }
+
+    public static DataSource toDataSource(Class<?> cls, String dataSourceResourceName)
+            throws IOException {
+        return new ByteBufferDataSource(ByteBuffer.wrap(Resources
+                .toByteArray(ApkSignerTest.class, dataSourceResourceName)));
+    }
+
+    public static SigningCertificateLineage toSigningCertificateLineage(Class<?> cls,
+            String fileResourceName) throws IOException {
+        DataSource lineageDataSource = toDataSource(cls, fileResourceName);
+        return SigningCertificateLineage.readFromDataSource(lineageDataSource);
     }
 }

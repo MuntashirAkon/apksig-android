@@ -10,7 +10,8 @@ new, for use in a key rotation scenario using APK Signature Scheme v3.
                       a SigningCertificateLineage object, which contains the proof-of-rotation for
                       different signing certificates.  This can be used with APK Signature Scheme v3
                       to rotate the signing certificate for an APK.
-
+                      An APK previously signed with a SigningCertificateLineage can also be
+                      specified; the lineage will then be read from the signed data in the APK.
 
 --out                 File into which to put the binary representation of a
                       SigningCertificateLineage object.

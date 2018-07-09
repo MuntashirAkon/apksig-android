@@ -73,6 +73,9 @@ certificate.
                       points in the lineage and will be used on older platform
                       versions when the newest signer in the lineage is
                       unsupported.
+                      An APK previously signed with a SigningCertificateLineage
+                      can also be specified; the lineage will then be read from
+                      the signed data in the APK.
 
 -h, --help            Show help about this command and exit
 
