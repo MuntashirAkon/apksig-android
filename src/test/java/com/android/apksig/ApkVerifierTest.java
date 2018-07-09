@@ -258,6 +258,15 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void testV3StrippedRejected() throws Exception {
+        // APK signed with v2 and v3 schemes, but v3 signature was stripped from the file by
+        // modifying the v3 block ID to be the verity padding block ID. Without the stripping
+        // protection this modification ignores the v3 signing scheme block.
+        assertVerificationFailure(
+                "v3-stripped.apk", Issue.V2_SIG_MISSING_APK_SIG_REFERENCED);
+    }
+
+    @Test
     public void testV2OneSignerOneSignatureAccepted() throws Exception {
         // APK signed with v2 scheme only, one signer, one signature
         assertVerifiedForEachForMinSdkVersion(
@@ -275,6 +284,22 @@ public class ApkVerifierTest {
                 "v2-only-with-ecdsa-sha512-%s.apk", EC_KEY_NAMES, AndroidSdkVersion.N);
         assertVerifiedForEachForMinSdkVersion(
                 "v2-only-with-rsa-pkcs1-sha512-%s.apk", RSA_KEY_NAMES, AndroidSdkVersion.N);
+    }
+
+    @Test
+    public void testV3OneSignerOneSignatureAccepted() throws Exception {
+        // APK signed with v3 scheme only, one signer, one signature
+        assertVerifiedForEachForMinSdkVersion(
+                "v3-only-with-dsa-sha256-%s.apk", DSA_KEY_NAMES, AndroidSdkVersion.P);
+        assertVerifiedForEachForMinSdkVersion(
+                "v3-only-with-ecdsa-sha256-%s.apk", EC_KEY_NAMES, AndroidSdkVersion.P);
+        assertVerifiedForEachForMinSdkVersion(
+                "v3-only-with-rsa-pkcs1-sha256-%s.apk", RSA_KEY_NAMES, AndroidSdkVersion.P);
+
+        assertVerifiedForEachForMinSdkVersion(
+                "v3-only-with-ecdsa-sha512-%s.apk", EC_KEY_NAMES, AndroidSdkVersion.P);
+        assertVerifiedForEachForMinSdkVersion(
+                "v3-only-with-rsa-pkcs1-sha512-%s.apk", RSA_KEY_NAMES, AndroidSdkVersion.P);
     }
 
     @Test
@@ -312,6 +337,27 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void testV3SignatureDoesNotMatchSignedDataRejected() throws Exception {
+        // APK signed with v3 scheme only, but the signature over signed-data does not verify
+
+        // Bitflip in DSA signature. Based on v3-only-with-dsa-sha256-2048.apk.
+        assertVerificationFailure(
+                "v3-only-with-dsa-sha256-2048-sig-does-not-verify.apk",
+                Issue.V3_SIG_DID_NOT_VERIFY);
+
+        // Bitflip in signed data. Based on v3-only-with-rsa-pkcs1-sha256-3072.apk
+        assertVerificationFailure(
+                "v3-only-with-rsa-pkcs1-sha256-3072-sig-does-not-verify.apk",
+                Issue.V3_SIG_DID_NOT_VERIFY);
+
+        // Based on v3-only-with-ecdsa-sha512-p521 with the signature ID changed to be ECDSA with
+        // SHA-256.
+        assertVerificationFailure(
+                "v3-only-with-ecdsa-sha512-p521-sig-does-not-verify.apk",
+                Issue.V3_SIG_DID_NOT_VERIFY);
+    }
+
+    @Test
     public void testV2RsaPssSignatureDoesNotMatchSignedDataRejected() throws Exception {
         assumeThatRsaPssAvailable();
 
@@ -340,6 +386,24 @@ public class ApkVerifierTest {
         // leftmost bit in content digest before signing signed-data.
         assertVerificationFailure(
                 "v2-only-with-ecdsa-sha256-p256-digest-mismatch.apk", error);
+    }
+
+    @Test
+    public void testV3ContentDigestMismatchRejected() throws Exception {
+        // APK signed with v3 scheme only, but the digest of contents does not match the digest
+        // stored in signed-data.
+
+        // Based on v3-only-with-rsa-pkcs1-sha512-8192. Obtained by flipping a bit in the local
+        // file header of the APK.
+        assertVerificationFailure(
+                "v3-only-with-rsa-pkcs1-sha512-8192-digest-mismatch.apk",
+                Issue.V3_SIG_APK_DIGEST_DID_NOT_VERIFY);
+
+        // Based on v3-only-with-dsa-sha256-3072.apk. Obtained by modifying APK signer to flip the
+        // leftmost bit in content digest before signing signed-data.
+        assertVerificationFailure(
+                "v3-only-with-dsa-sha256-3072-digest-mismatch.apk",
+                Issue.V3_SIG_APK_DIGEST_DID_NOT_VERIFY);
     }
 
     @Test
@@ -373,6 +437,21 @@ public class ApkVerifierTest {
         assertVerified(verify("v1-with-apk-sig-block-but-without-apk-sig-scheme-v2-block.apk"));
     }
 
+    @Test
+    public void testNoV3ApkSignatureSchemeBlockRejected() throws Exception {
+        // Obtained from v3-only-with-ecdsa-sha512-p384.apk by flipping a bit in the magic field
+        // in the footer of the APK Signing Block.
+        assertVerificationFailure(
+                "v3-only-with-ecdsa-sha512-p384-wrong-apk-sig-block-magic.apk",
+                Issue.JAR_SIG_NO_MANIFEST);
+
+        // Obtained from v3-only-with-rsa-pkcs1-sha512-4096.apk by modifying the size in the APK
+        // Signature Block header and footer.
+        assertVerificationFailure(
+                "v3-only-with-rsa-pkcs1-sha512-4096-apk-sig-block-size-mismatch.apk",
+                Issue.JAR_SIG_NO_MANIFEST);
+    }
+
     @Test(expected = ApkFormatException.class)
     public void testTruncatedZipCentralDirectoryRejected() throws Exception {
         // Obtained by modifying APK signer to truncate the ZIP Central Directory by one byte. The
@@ -392,6 +471,16 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void testV3UnknownPairIgnoredInApkSigningBlock() throws Exception {
+        // Obtained by modifying APK signer to emit an unknown ID value pair into APK Signing Block
+        // before the ID value pair containing the APK Signature Scheme v3 Block. The unknown
+        // ID value should be ignored.
+        assertVerified(
+                verifyForMinSdkVersion(
+                        "v3-only-unknown-pair-in-apk-sig-block.apk", AndroidSdkVersion.P));
+    }
+
+    @Test
     public void testV2UnknownSignatureAlgorithmsIgnored() throws Exception {
         // APK is signed with a known signature algorithm and with a couple of unknown ones.
         // Obtained by modifying APK signer to use "unknown" signature algorithms in addition to
@@ -399,6 +488,24 @@ public class ApkVerifierTest {
         assertVerified(
                 verifyForMinSdkVersion(
                         "v2-only-with-ignorable-unsupported-sig-algs.apk", AndroidSdkVersion.N));
+    }
+
+    @Test
+    public void testV3UnknownSignatureAlgorithmsIgnored() throws Exception {
+        // APK is signed with a known signature algorithm and a couple of unknown ones.
+        // Obtained by modifying APK signer to use "unknown" signature algorithms in addition to
+        // known ones.
+        assertVerified(
+                verifyForMinSdkVersion(
+                        "v3-only-with-ignorable-unsupported-sig-algs.apk", AndroidSdkVersion.P));
+    }
+
+    @Test
+    public void testV3WithOnlyUnknownSignatureAlgorithmsRejected() throws Exception {
+        // APK is only signed with an unknown signature algorithm. Obtained by modifying APK
+        // signer's ID for a known signature algorithm.
+        assertVerificationFailure(
+                "v3-only-no-supported-sig-algs.apk", Issue.V3_SIG_NO_SUPPORTED_SIGNATURES);
     }
 
     @Test
@@ -411,6 +518,19 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void testV3UnknownAdditionalAttributeIgnored() throws Exception {
+        // APK's v3 signature contains unknown additional attributes before and after the lineage.
+        // Obtained by modifying APK signer to output additional attributes with IDs 0x11223344
+        // and 0x99aabbcc with values 0x55667788 and 0xddeeff00
+        assertVerified(
+                verifyForMinSdkVersion("v3-only-unknown-additional-attr.apk", AndroidSdkVersion.P));
+
+        // APK's v2 and v3 signatures contain unknown additional attributes before and after the
+        // anti-stripping and lineage attributes.
+        assertVerified(
+                verifyForMinSdkVersion("v2v3-unknown-additional-attr.apk", AndroidSdkVersion.P));    }
+
+    @Test
     public void testV2MismatchBetweenSignaturesAndDigestsBlockRejected() throws Exception {
         // APK is signed with a single signature algorithm, but the digests block claims that it is
         // signed with two different signature algorithms. Obtained by modifying APK Signer to
@@ -418,6 +538,16 @@ public class ApkVerifierTest {
         assertVerificationFailure(
                 "v2-only-signatures-and-digests-block-mismatch.apk",
                 Issue.V2_SIG_SIG_ALG_MISMATCH_BETWEEN_SIGNATURES_AND_DIGESTS_RECORDS);
+    }
+
+    @Test
+    public void testV3MismatchBetweenSignaturesAndDigestsBlockRejected() throws Exception {
+        // APK is signed with a single signature algorithm, but the digests block claims that it is
+        // signed with two different signature algorithms. Obtained by modifying APK Signer to
+        // emit an additional digest record with signature algorithm 0x11223344.
+        assertVerificationFailure(
+                "v3-only-signatures-and-digests-block-mismatch.apk",
+                Issue.V3_SIG_SIG_ALG_MISMATCH_BETWEEN_SIGNATURES_AND_DIGESTS_RECORDS);
     }
 
     @Test
@@ -431,11 +561,29 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void testV3MismatchBetweenPublicKeyAndCertificateRejected() throws Exception {
+        // APK is signed with v3 only. The public key field does not match the public key in the
+        // leaf certificate. Obtained by modifying APK signer to write out a modified leaf
+        // certificate where the RSA modulus has a bitflip.
+        assertVerificationFailure(
+                "v3-only-cert-and-public-key-mismatch.apk",
+                Issue.V3_SIG_PUBLIC_KEY_MISMATCH_BETWEEN_CERTIFICATE_AND_SIGNATURES_RECORD);
+    }
+
+    @Test
     public void testV2SignerBlockWithNoCertificatesRejected() throws Exception {
         // APK is signed with v2 only. There are no certificates listed in the signer block.
         // Obtained by modifying APK signer to output no certificates.
         assertVerificationFailure(
                 "v2-only-no-certs-in-sig.apk", Issue.V2_SIG_NO_CERTIFICATES);
+    }
+
+    @Test
+    public void testV3SignerBlockWithNoCertificatesRejected() throws Exception {
+        // APK is signed with v3 only. There are no certificates listed in the signer block.
+        // Obtained by modifying APK signer to output no certificates.
+        assertVerificationFailure(
+                "v3-only-no-certs-in-sig.apk", Issue.V3_SIG_NO_CERTIFICATES);
     }
 
     @Test
@@ -591,6 +739,12 @@ public class ApkVerifierTest {
         // APK Signature Scheme v2 signed empty ZIP archive
         try {
             verifyForMinSdkVersion("v2-only-empty.apk", AndroidSdkVersion.N);
+            fail("ApkFormatException should've been thrown");
+        } catch (ApkFormatException expected) {}
+
+        // APK Signature Scheme v3 signed empty ZIP archive
+        try {
+            verifyForMinSdkVersion("v3-only-empty.apk", AndroidSdkVersion.P);
             fail("ApkFormatException should've been thrown");
         } catch (ApkFormatException expected) {}
     }
@@ -979,6 +1133,19 @@ public class ApkVerifierTest {
                     msg.append('\n');
                 }
                 msg.append("APK Signature Scheme v2 signer ")
+                        .append(signerName).append(": ").append(issue);
+            }
+        }
+        for (ApkVerifier.Result.V3SchemeSignerInfo signer : result.getV3SchemeSigners()) {
+            String signerName = "signer #" + (signer.getIndex() + 1);
+            for (IssueWithParams issue : signer.getErrors()) {
+                if (expectedIssue.equals(issue.getIssue())) {
+                    return;
+                }
+                if (msg.length() > 0) {
+                    msg.append('\n');
+                }
+                msg.append("APK Signature Scheme v3 signer ")
                         .append(signerName).append(": ").append(issue);
             }
         }

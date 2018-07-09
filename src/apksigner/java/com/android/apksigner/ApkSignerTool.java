@@ -20,7 +20,10 @@ import com.android.apksig.ApkSigner;
 import com.android.apksig.ApkVerifier;
 import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.SigningCertificateLineage.SignerCapabilities;
+import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.MinSdkVersionException;
+import com.android.apksig.util.DataSource;
+import com.android.apksig.util.DataSources;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -31,6 +34,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -84,6 +90,8 @@ public class ApkSignerTool {
     private static MessageDigest sha256 = null;
     private static MessageDigest sha1 = null;
     private static MessageDigest md5 = null;
+
+    public static final int ZIP_MAGIC = 0x04034b50;
 
     public static void main(String[] params) throws Exception {
         if ((params.length == 0) || ("--help".equals(params[0])) || ("-h".equals(params[0]))) {
@@ -217,7 +225,7 @@ public class ApkSignerTool {
                 signerParams.certFile = optionsParser.getRequiredValue("Certificate file");
             } else if ("lineage".equals(optionName)) {
                 File lineageFile = new File(optionsParser.getRequiredValue("Lineage File"));
-                lineage = SigningCertificateLineage.readFromFile(lineageFile);
+                lineage = getLineageFromInputFile(lineageFile);
             } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
                 verbose = optionsParser.getOptionalBooleanValue(true);
             } else if ("next-provider".equals(optionName)) {
@@ -651,7 +659,7 @@ public class ApkSignerTool {
             SigningCertificateLineage lineage;
             if (inputKeyLineage != null) {
                 // we already have history, add the new key to the end of it
-                lineage = SigningCertificateLineage.readFromFile(inputKeyLineage);
+                lineage = getLineageFromInputFile(inputKeyLineage);
                 lineage.updateSignerCapabilities(oldSignerConfig,
                         oldSignerParams.signerCapabilitiesBuilder.build());
                 lineage = lineage.spawnDescendant(oldSignerConfig,
@@ -682,6 +690,7 @@ public class ApkSignerTool {
         boolean verbose = false;
         boolean printCerts = false;
         boolean lineageUpdated = false;
+        File inputKeyLineage = null;
         File outputKeyLineage = null;
         String optionName;
         OptionsParser optionsParser = new OptionsParser(params);
@@ -692,8 +701,7 @@ public class ApkSignerTool {
                 printUsage(HELP_PAGE_LINEAGE);
                 return;
             } else if ("in".equals(optionName)) {
-                File inputKeyLineage = new File(optionsParser.getRequiredValue("Input file name"));
-                lineage = SigningCertificateLineage.readFromFile(inputKeyLineage);
+                inputKeyLineage = new File(optionsParser.getRequiredValue("Input file name"));
             } else if ("out".equals(optionName)) {
                 outputKeyLineage = new File(optionsParser.getRequiredValue("Output file name"));
             } else if ("signer".equals(optionName)) {
@@ -709,9 +717,11 @@ public class ApkSignerTool {
                                 + ". See --help for supported options.");
             }
         }
-        if (lineage == null) {
+        if (inputKeyLineage == null) {
             throw new ParameterException("Input lineage file parameter not present");
         }
+        lineage = getLineageFromInputFile(inputKeyLineage);
+
         try (PasswordRetriever passwordRetriever = new PasswordRetriever()) {
             for (int i = 0; i < signers.size(); i++) {
                 SignerParams signerParams = signers.get(i);
@@ -772,6 +782,29 @@ public class ApkSignerTool {
                         "The lineage was modified but an output file for the lineage was not "
                                 + "specified");
             }
+        }
+    }
+
+    /**
+     * Extracts the Signing Certificate Lineage from the provided lineage or APK file.
+     */
+    private static SigningCertificateLineage getLineageFromInputFile(File inputLineageFile)
+            throws ParameterException {
+        try (RandomAccessFile f = new RandomAccessFile(inputLineageFile, "r")) {
+            if (f.length() < 4) {
+                throw new ParameterException("The input file is not a valid lineage file.");
+            }
+            DataSource apk = DataSources.asDataSource(f);
+            int magicValue = apk.getByteBuffer(0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
+            if (magicValue == SigningCertificateLineage.MAGIC) {
+                return SigningCertificateLineage.readFromFile(inputLineageFile);
+            } else if (magicValue == ZIP_MAGIC) {
+                return SigningCertificateLineage.readFromApkFile(inputLineageFile);
+            } else {
+                throw new ParameterException("The input file is not a valid lineage file.");
+            }
+        } catch (IOException | ApkFormatException | IllegalArgumentException e) {
+            throw new ParameterException(e.getMessage());
         }
     }
 
