@@ -10,6 +10,8 @@ has been migrated to the new signing certificate.
 --in                  Input SigningCertificateLineage. This file contains a binary representation of
                       a SigningCertificateLineage object which contains the proof-of-rotation for
                       different signing certificates.
+                      An APK previously signed with a SigningCertificateLineage can also be
+                      specified; the lineage will then be read from the signed data in the APK.
 
 --out                 File into which to put the binary representation of a
                       SigningCertificateLineage object.
