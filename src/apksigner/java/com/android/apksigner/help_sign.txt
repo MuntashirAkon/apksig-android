@@ -73,6 +73,9 @@ certificate.
                       points in the lineage and will be used on older platform
                       versions when the newest signer in the lineage is
                       unsupported.
+                      An APK previously signed with a SigningCertificateLineage
+                      can also be specified; the lineage will then be read from
+                      the signed data in the APK.
 
 -h, --help            Show help about this command and exit
 
@@ -233,5 +236,5 @@ $ apksigner sign --ks release.jks --pass-encoding ibm437 app.apk
 $ apksigner sign --ks release.jks --pass-encoding utf-8 app.apk
 
 8. Sign an APK with rotated signing certificate:
-$ apksigner sign --ks release.jks --next-signer --ks release2.jks app.apk \
-    --lineage /path/to/signing/history/lineage
+$ apksigner sign --ks release.jks --next-signer --ks release2.jks \
+    --lineage /path/to/signing/history/lineage app.apk
