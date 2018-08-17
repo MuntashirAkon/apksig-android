@@ -37,6 +37,7 @@ import com.android.apksig.internal.pkcs7.SignerIdentifier;
 import com.android.apksig.internal.pkcs7.SignerInfo;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.ByteBufferUtils;
+import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.util.InclusiveIntRange;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
@@ -44,7 +45,7 @@ import com.android.apksig.internal.zip.LocalFileRecord;
 import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.zip.ZipFormatException;
-import java.io.ByteArrayInputStream;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -56,7 +57,6 @@ import java.security.Principal;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -72,6 +72,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.jar.Attributes;
+
 import javax.security.auth.x500.X500Principal;
 
 /**
@@ -748,22 +749,13 @@ public abstract class V1SchemeVerifier {
                 return Collections.emptyList();
             }
 
-            CertificateFactory certFactory;
-            try {
-                certFactory = CertificateFactory.getInstance("X.509");
-            } catch (CertificateException e) {
-                throw new RuntimeException("Failed to create X.509 CertificateFactory", e);
-            }
-
             List<X509Certificate> result = new ArrayList<>(encodedCertificates.size());
             for (int i = 0; i < encodedCertificates.size(); i++) {
                 Asn1OpaqueObject encodedCertificate = encodedCertificates.get(i);
                 X509Certificate certificate;
                 byte[] encodedForm = ByteBufferUtils.toByteArray(encodedCertificate.getEncoded());
                 try {
-                    certificate =
-                            (X509Certificate) certFactory.generateCertificate(
-                                    new ByteArrayInputStream(encodedForm));
+                    certificate = X509CertificateUtils.generateCertificate(encodedForm);
                 } catch (CertificateException e) {
                     throw new CertificateException("Failed to parse certificate #" + (i + 1), e);
                 }
@@ -848,6 +840,8 @@ public abstract class V1SchemeVerifier {
         private static final String OID_SIG_SHA1_WITH_DSA = "1.2.840.10040.4.3";
         private static final String OID_SIG_SHA224_WITH_DSA = "2.16.840.1.101.3.4.3.1";
         static final String OID_SIG_SHA256_WITH_DSA = "2.16.840.1.101.3.4.3.2";
+        static final String OID_SIG_SHA384_WITH_DSA = "2.16.840.1.101.3.4.3.3";
+        static final String OID_SIG_SHA512_WITH_DSA = "2.16.840.1.101.3.4.3.4";
 
         static final String OID_SIG_EC_PUBLIC_KEY = "1.2.840.10045.2.1";
         private static final String OID_SIG_SHA1_WITH_ECDSA = "1.2.840.10045.4.1";
@@ -1215,6 +1209,8 @@ public abstract class V1SchemeVerifier {
                 OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA1_WITH_DSA, "SHA-1 with DSA");
                 OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA224_WITH_DSA, "SHA-224 with DSA");
                 OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA256_WITH_DSA, "SHA-256 with DSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA384_WITH_DSA, "SHA-384 with DSA");
+                OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA512_WITH_DSA, "SHA-512 with DSA");
 
                 OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_EC_PUBLIC_KEY, "ECDSA");
                 OID_TO_USER_FRIENDLY_NAME.put(OID_SIG_SHA1_WITH_ECDSA, "SHA-1 with ECDSA");

@@ -24,6 +24,7 @@ import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.SignatureInfo;
 import com.android.apksig.internal.util.ByteBufferUtils;
+import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.util.DataSource;
 
@@ -345,10 +346,7 @@ public abstract class V2SchemeVerifier {
             byte[] encodedCert = ApkSigningBlockUtils.readLengthPrefixedByteArray(certificates);
             X509Certificate certificate;
             try {
-                certificate =
-                        (X509Certificate)
-                                certFactory.generateCertificate(
-                                        new ByteArrayInputStream(encodedCert));
+                certificate = X509CertificateUtils.generateCertificate(encodedCert, certFactory);
             } catch (CertificateException e) {
                 result.addError(
                         Issue.V2_SIG_MALFORMED_CERTIFICATE,

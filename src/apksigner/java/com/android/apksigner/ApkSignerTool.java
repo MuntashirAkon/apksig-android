@@ -22,6 +22,7 @@ import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.SigningCertificateLineage.SignerCapabilities;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.MinSdkVersionException;
+import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 
@@ -1347,7 +1348,7 @@ public class ApkSignerTool {
             // Load certificates
             Collection<? extends Certificate> certs;
             try (FileInputStream in = new FileInputStream(certFile)) {
-                certs = CertificateFactory.getInstance("X.509").generateCertificates(in);
+                certs = X509CertificateUtils.generateCertificates(in);
             }
             List<X509Certificate> certList = new ArrayList<>(certs.size());
             for (Certificate cert : certs) {
