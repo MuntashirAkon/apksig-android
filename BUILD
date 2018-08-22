@@ -45,7 +45,10 @@ java_binary(
         "src/apksigner/java/**/*.txt",
     ]),
     visibility = ["//visibility:public"],
-    deps = [":apksig"],
+    deps = [
+        ":apksig",
+        "//tools/base/bazel:langtools",
+    ],
 )
 
 java_test(
