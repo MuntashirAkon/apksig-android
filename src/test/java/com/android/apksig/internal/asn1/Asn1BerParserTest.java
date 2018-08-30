@@ -61,6 +61,39 @@ public class Asn1BerParserTest {
     }
 
     @Test
+    public void testBitString() throws Exception {
+        assertEquals(
+                "123456",
+                HexEncoding.encode(parse("30050303123456", SequenceWithBitString.class).buf));
+        assertEquals(
+                "", HexEncoding.encode(parse("30020300", SequenceWithBitString.class).buf));
+    }
+
+    @Test
+    public void testBoolean() throws Exception {
+        assertEquals(false, parse("3003010100", SequenceWithBoolean.class).value);
+        assertEquals(true, parse("3003010101", SequenceWithBoolean.class).value);
+        assertEquals(true, parse("30030101FF", SequenceWithBoolean.class).value);
+    }
+
+    @Test
+    public void testUTCTime() throws Exception {
+        assertEquals("1212211221Z",
+                parse("300d170b313231323231313232315a", SequenceWithUTCTime.class).value);
+        assertEquals("9912312359Z",
+                parse("300d170b393931323331323335395a", SequenceWithUTCTime.class).value);
+    }
+
+    @Test
+    public void testGeneralizedTime() throws Exception {
+        assertEquals("201212211220.999-07", parse("301518133230313231323231313232302e3939392d3037",
+                SequenceWithGeneralizedTime.class).value);
+        assertEquals("20380119031407.000+00",
+                parse("3017181532303338303131393033313430372e3030302b3030",
+                        SequenceWithGeneralizedTime.class).value);
+    }
+
+    @Test
     public void testInteger() throws Exception {
         // Various Java types decoded from INTEGER
         // Empty SEQUENCE (0x3000) followed by garbage (0x12345678)
@@ -98,6 +131,15 @@ public class Asn1BerParserTest {
     @Test
     public void testSetOf() throws Exception {
         assertEquals(2, parse("3006310430003000", SequenceWithSetOf.class).values.size());
+    }
+
+    @Test
+    public void testUnencodedContainer() throws Exception {
+        SequenceWithSequenceOfUnencodedContainers seq = parse("300C300A31023000310430003000",
+                SequenceWithSequenceOfUnencodedContainers.class);
+        assertEquals(2, seq.containers.size());
+        assertEquals(1, seq.containers.get(0).values.size());
+        assertEquals(2, seq.containers.get(1).values.size());
     }
 
     @Test
@@ -361,6 +403,12 @@ public class Asn1BerParserTest {
     }
 
     @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithBitString {
+        @Asn1Field(index = 0, type = Asn1Type.BIT_STRING)
+        public ByteBuffer buf;
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
     public static class SequenceWithSequenceOf {
         @Asn1Field(index = 0, type = Asn1Type.SEQUENCE_OF)
         public List<EmptySequence> values;
@@ -376,5 +424,35 @@ public class Asn1BerParserTest {
     public static class SequenceWithAsn1Opaque {
         @Asn1Field(type = Asn1Type.ANY)
         public Asn1OpaqueObject obj;
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithSequenceOfUnencodedContainers {
+        @Asn1Field(type = Asn1Type.SEQUENCE_OF)
+        public List<UnencodedContainerWithSetOf> containers;
+    }
+
+    @Asn1Class(type = Asn1Type.UNENCODED_CONTAINER)
+    public static class UnencodedContainerWithSetOf {
+        @Asn1Field(type = Asn1Type.SET_OF)
+        public List<EmptySequence> values;
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithBoolean {
+        @Asn1Field(type = Asn1Type.BOOLEAN)
+        public boolean value;
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithUTCTime {
+        @Asn1Field(type = Asn1Type.UTC_TIME)
+        public String value;
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithGeneralizedTime {
+        @Asn1Field(type = Asn1Type.GENERALIZED_TIME)
+        public String value;
     }
 }
