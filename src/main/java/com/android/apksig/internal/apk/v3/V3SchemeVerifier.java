@@ -30,10 +30,10 @@ import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.SignatureInfo;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.ByteBufferUtils;
+import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.util.DataSource;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -293,7 +293,7 @@ public abstract class V3SchemeVerifier {
         int parsedMaxSdkVersion = signerBlock.getInt();
         result.minSdkVersion = parsedMinSdkVersion;
         result.maxSdkVersion = parsedMaxSdkVersion;
-        if (parsedMinSdkVersion < 1 || parsedMinSdkVersion > parsedMaxSdkVersion) {
+        if (parsedMinSdkVersion < 0 || parsedMinSdkVersion > parsedMaxSdkVersion) {
             result.addError(
                     Issue.V3_SIG_INVALID_SDK_VERSIONS, parsedMinSdkVersion, parsedMaxSdkVersion);
         }
@@ -407,10 +407,7 @@ public abstract class V3SchemeVerifier {
             byte[] encodedCert = readLengthPrefixedByteArray(certificates);
             X509Certificate certificate;
             try {
-                certificate =
-                        (X509Certificate)
-                                certFactory.generateCertificate(
-                                        new ByteArrayInputStream(encodedCert));
+                certificate = X509CertificateUtils.generateCertificate(encodedCert, certFactory);
             } catch (CertificateException e) {
                 result.addError(
                         Issue.V3_SIG_MALFORMED_CERTIFICATE,

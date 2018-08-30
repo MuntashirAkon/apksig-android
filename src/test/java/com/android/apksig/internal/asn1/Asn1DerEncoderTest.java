@@ -17,6 +17,7 @@
 package com.android.apksig.internal.asn1;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.fail;
 
 import com.android.apksig.internal.util.HexEncoding;
@@ -61,6 +62,26 @@ public class Asn1DerEncoderTest {
                 encodeToHex(
                         new SequenceWithByteBufferOctetString(ByteBuffer.wrap(new byte[0]))));
     }
+
+    @Test
+    public void testBitString() throws Exception {
+        assertEquals(
+                "30050303010203",
+                encodeToHex(
+                        new SequenceWithByteBufferBitString(
+                                ByteBuffer.wrap(new byte[] {1, 2, 3}))));
+        assertEquals(
+                "30030301ff",
+                encodeToHex(
+                        new SequenceWithByteBufferBitString(
+                                ByteBuffer.wrap(new byte[] {(byte) 0xff}))));
+
+        assertEquals(
+                "30020300",
+                encodeToHex(
+                        new SequenceWithByteBufferBitString(ByteBuffer.wrap(new byte[0]))));
+    }
+
 
     @Test
     public void testOid() throws Exception {
@@ -138,6 +159,57 @@ public class Asn1DerEncoderTest {
                         new Asn1OpaqueObject(new byte[] {0x06, 0x01, 0x00}))));
     }
 
+    @Test
+    public void testBoolean() throws Exception {
+        assertEquals("3003010100", encodeToHex(new SequenceWithBoolean(false)));
+        String value = encodeToHex(new SequenceWithBoolean(true));
+        // The encoding of a true value can be any non-zero value so verify the static portion of
+        // the encoding of a sequeuence with a boolean, then verify the last byte is non-zero
+        assertEquals("The encoding of a sequence with a boolean is not the expected length.", 10,
+                value.length());
+        assertEquals(
+                "The prefix of the encoding of a sequence with a boolean is not the expected "
+                        + "value.",
+                "30030101", value.substring(0, 8));
+        assertNotEquals("The encoding of true should be non-zero.", "00", value.substring(8));
+    }
+
+    @Test
+    public void testUTCTime() throws Exception {
+        assertEquals("300d170b313231323231313232315a",
+                encodeToHex(new SequenceWithUTCTime("1212211221Z")));
+        assertEquals("300d170b393931323331323335395a",
+                encodeToHex(new SequenceWithUTCTime("9912312359Z")));
+    }
+
+    @Test
+    public void testGeneralizedTime() throws Exception {
+        assertEquals("301518133230313231323231313232302e3939392d3037",
+                encodeToHex(new SequenceWithGeneralizedTime("201212211220.999-07")));
+        assertEquals("3017181532303338303131393033313430372e3030302b3030",
+                encodeToHex(new SequenceWithGeneralizedTime("20380119031407.000+00")));
+    }
+
+    @Test
+    public void testUnencodedContainer() throws Exception {
+        assertEquals("30233021310b30030201003004020200ff310830060204800000003108300602047fffffff",
+                encodeToHex(
+                        new SequenceWithSequenceOfUnencodedContainers(
+                                Arrays.asList(
+                                        new UnencodedContainerWithSetOfIntegers(
+                                                Arrays.asList(
+                                                        new SequenceWithInteger(0),
+                                                        new SequenceWithInteger(255))),
+                                        new UnencodedContainerWithSetOfIntegers(
+                                                Arrays.asList(
+                                                        new SequenceWithInteger(
+                                                                Integer.MIN_VALUE))),
+                                        new UnencodedContainerWithSetOfIntegers(
+                                                Arrays.asList(
+                                                        new SequenceWithInteger(
+                                                                Integer.MAX_VALUE)))))));
+    }
+
     private static byte[] encode(Object obj) throws Asn1EncodingException {
         return Asn1DerEncoder.encode(obj);
     }
@@ -176,6 +248,17 @@ public class Asn1DerEncoderTest {
         public ByteBuffer data;
 
         public SequenceWithByteBufferOctetString(ByteBuffer data) {
+            this.data = data;
+        }
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithByteBufferBitString {
+
+        @Asn1Field(index = 1, type = Asn1Type.BIT_STRING)
+        public ByteBuffer data;
+
+        public SequenceWithByteBufferBitString(ByteBuffer data) {
             this.data = data;
         }
     }
@@ -250,6 +333,60 @@ public class Asn1DerEncoderTest {
 
         public SequenceWithOpaque(Asn1OpaqueObject obj) {
             this.obj = obj;
+        }
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithBoolean {
+
+        @Asn1Field(index = 1, type = Asn1Type.BOOLEAN)
+        public boolean value;
+
+        public SequenceWithBoolean(boolean value) {
+            this.value = value;
+        }
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithUTCTime {
+
+        @Asn1Field(index = 1, type = Asn1Type.UTC_TIME)
+        public String utcTime;
+
+        public SequenceWithUTCTime(String utcTime) {
+            this.utcTime = utcTime;
+        }
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithGeneralizedTime {
+
+        @Asn1Field(index = 1, type = Asn1Type.GENERALIZED_TIME)
+        public String generalizedTime;
+
+        public SequenceWithGeneralizedTime(String generalizedTime) {
+            this.generalizedTime = generalizedTime;
+        }
+    }
+
+    @Asn1Class(type = Asn1Type.SEQUENCE)
+    public static class SequenceWithSequenceOfUnencodedContainers {
+        @Asn1Field(index = 1, type = Asn1Type.SEQUENCE_OF)
+        public List<UnencodedContainerWithSetOfIntegers> containers;
+
+        public SequenceWithSequenceOfUnencodedContainers(
+                List<UnencodedContainerWithSetOfIntegers> containers) {
+            this.containers = containers;
+        }
+    }
+
+    @Asn1Class(type = Asn1Type.UNENCODED_CONTAINER)
+    public static class UnencodedContainerWithSetOfIntegers {
+        @Asn1Field(index = 1, type = Asn1Type.SET_OF)
+        public List<SequenceWithInteger> values;
+
+        public UnencodedContainerWithSetOfIntegers(List<SequenceWithInteger> values) {
+            this.values = values;
         }
     }
 }

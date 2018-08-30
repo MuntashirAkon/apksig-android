@@ -51,9 +51,19 @@ public abstract class BerEncoding {
     public static final int TAG_CLASS_PRIVATE = 3;
 
     /**
+     * Tag number: BOOLEAN
+     */
+    public static final int TAG_NUMBER_BOOLEAN = 0x1;
+
+    /**
      * Tag number: INTEGER
      */
     public static final int TAG_NUMBER_INTEGER = 0x2;
+
+    /**
+     * Tag number: BIT STRING
+     */
+    public static final int TAG_NUMBER_BIT_STRING = 0x3;
 
     /**
      * Tag number: OCTET STRING
@@ -80,6 +90,16 @@ public abstract class BerEncoding {
      */
     public static final int TAG_NUMBER_SET = 0x11;
 
+    /**
+     * Tag number: UTC_TIME
+     */
+    public final static int TAG_NUMBER_UTC_TIME = 0x17;
+
+    /**
+     * Tag number: GENERALIZED_TIME
+     */
+    public final static int TAG_NUMBER_GENERALIZED_TIME = 0x18;
+
     public static int getTagNumber(Asn1Type dataType) {
         switch (dataType) {
             case INTEGER:
@@ -88,11 +108,19 @@ public abstract class BerEncoding {
                 return TAG_NUMBER_OBJECT_IDENTIFIER;
             case OCTET_STRING:
                 return TAG_NUMBER_OCTET_STRING;
+            case BIT_STRING:
+                return TAG_NUMBER_BIT_STRING;
             case SET_OF:
                 return TAG_NUMBER_SET;
             case SEQUENCE:
             case SEQUENCE_OF:
                 return TAG_NUMBER_SEQUENCE;
+            case UTC_TIME:
+                return TAG_NUMBER_UTC_TIME;
+            case GENERALIZED_TIME:
+                return TAG_NUMBER_GENERALIZED_TIME;
+            case BOOLEAN:
+                return TAG_NUMBER_BOOLEAN;
             default:
                 throw new IllegalArgumentException("Unsupported data type: " + dataType);
         }
@@ -141,6 +169,8 @@ public abstract class BerEncoding {
                 return "INTEGER";
             case TAG_NUMBER_OCTET_STRING:
                 return "OCTET STRING";
+            case TAG_NUMBER_BIT_STRING:
+                return "BIT STRING";
             case TAG_NUMBER_NULL:
                 return "NULL";
             case TAG_NUMBER_OBJECT_IDENTIFIER:
@@ -149,6 +179,12 @@ public abstract class BerEncoding {
                 return "SEQUENCE";
             case TAG_NUMBER_SET:
                 return "SET";
+            case TAG_NUMBER_BOOLEAN:
+                return "BOOLEAN";
+            case TAG_NUMBER_GENERALIZED_TIME:
+                return "GENERALIZED TIME";
+            case TAG_NUMBER_UTC_TIME:
+                return "UTC TIME";
             default:
                 return "0x" + Integer.toHexString(tagNumber);
         }
