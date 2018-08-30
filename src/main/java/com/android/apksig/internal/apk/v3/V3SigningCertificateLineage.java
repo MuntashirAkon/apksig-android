@@ -25,8 +25,8 @@ import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
+import com.android.apksig.internal.util.X509CertificateUtils;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -39,7 +39,6 @@ import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.AlgorithmParameterSpec;
 import java.util.ArrayList;
@@ -93,12 +92,6 @@ public class V3SigningCertificateLineage {
         //   * uint32: signature algorithm id (used by to sign next cert in lineage)
         //   * length-prefixed bytes: signature over above signed data
 
-        CertificateFactory certFactory;
-        try {
-            certFactory = CertificateFactory.getInstance("X.509");
-        } catch (CertificateException e) {
-            throw new RuntimeException("Failed to obtain X.509 CertificateFactory", e);
-        }
         X509Certificate lastCert = null;
         int lastSigAlgorithmId = 0;
 
@@ -146,8 +139,7 @@ public class V3SigningCertificateLineage {
                     throw new SecurityException("Signing algorithm ID mismatch for certificate #"
                             + nodeBytes + " when verifying V3SigningCertificateLineage object");
                 }
-                lastCert = (X509Certificate)
-                        certFactory.generateCertificate(new ByteArrayInputStream(encodedCert));
+                lastCert = X509CertificateUtils.generateCertificate(encodedCert);
                 lastCert = new GuaranteedEncodedFormX509Certificate(lastCert, encodedCert);
                 if (certHistorySet.contains(lastCert)) {
                     throw new SecurityException("Encountered duplicate entries in "
