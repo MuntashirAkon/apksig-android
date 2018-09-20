@@ -129,14 +129,15 @@ public final class Asn1BerParser {
                         || (container.getTagNumber() != expectedTagNumber)) {
                     throw new Asn1UnexpectedTagException(
                             "Unexpected data value read as " + containerClass.getName()
-                            + ". Expected " + BerEncoding.tagClassAndNumberToString(
+                                    + ". Expected " + BerEncoding.tagClassAndNumberToString(
                                     expectedTagClass, expectedTagNumber)
-                            + ", but read: " + BerEncoding.tagClassAndNumberToString(
+                                    + ", but read: " + BerEncoding.tagClassAndNumberToString(
                                     container.getTagClass(), container.getTagNumber()));
                 }
                 return parseSequence(container, containerClass);
             }
-
+            case UNENCODED_CONTAINER:
+                return parseSequence(container, containerClass, true);
             default:
                 throw new Asn1DecodingException("Parsing container " + dataType + " not supported");
         }
@@ -177,7 +178,6 @@ public final class Asn1BerParser {
         } catch (IllegalArgumentException | ReflectiveOperationException e) {
             throw new Asn1DecodingException("Failed to instantiate " + containerClass.getName(), e);
         }
-
         // Set the matching field's value from the data value
         for (AnnotatedField field : fields) {
             try {
@@ -194,6 +194,11 @@ public final class Asn1BerParser {
 
     private static <T> T parseSequence(BerDataValue container, Class<T> containerClass)
             throws Asn1DecodingException {
+        return parseSequence(container, containerClass, false);
+    }
+
+    private static <T> T parseSequence(BerDataValue container, Class<T> containerClass,
+            boolean isUnencodedContainer) throws Asn1DecodingException {
         List<AnnotatedField> fields = getAnnotatedFields(containerClass);
         Collections.sort(
                 fields, (f1, f2) -> f1.getAnnotation().index() - f2.getAnnotation().index());
@@ -226,7 +231,13 @@ public final class Asn1BerParser {
         while (nextUnreadFieldIndex < fields.size()) {
             BerDataValue dataValue;
             try {
-                dataValue = elementsReader.readDataValue();
+                // if this is the first field of an unencoded container then the entire contents of
+                // the container should be used when assigning to this field.
+                if (isUnencodedContainer && nextUnreadFieldIndex == 0) {
+                    dataValue = container;
+                } else {
+                    dataValue = elementsReader.readDataValue();
+                }
             } catch (BerDataValueFormatException e) {
                 throw new Asn1DecodingException("Malformed data value", e);
             }
@@ -310,6 +321,7 @@ public final class Asn1BerParser {
         switch (containerAnnotation.type()) {
             case CHOICE:
             case SEQUENCE:
+            case UNENCODED_CONTAINER:
                 return containerAnnotation.type();
             default:
                 throw new Asn1DecodingException(
@@ -591,7 +603,6 @@ public final class Asn1BerParser {
             } else if (Asn1OpaqueObject.class.equals(targetType)) {
                 return (T) new Asn1OpaqueObject(dataValue.getEncoded());
             }
-
             ByteBuffer encodedContents = dataValue.getEncodedContents();
             switch (sourceType) {
                 case INTEGER:
@@ -606,6 +617,30 @@ public final class Asn1BerParser {
                 case OBJECT_IDENTIFIER:
                     if (String.class.equals(targetType)) {
                         return (T) oidToString(encodedContents);
+                    }
+                    break;
+                case UTC_TIME:
+                case GENERALIZED_TIME:
+                    if (String.class.equals(targetType)) {
+                        return (T) new String(ByteBufferUtils.toByteArray(encodedContents));
+                    }
+                    break;
+                case BOOLEAN:
+                    // A boolean should be encoded in a single byte with a value of 0 for false and
+                    // any non-zero value for true.
+                    if (boolean.class.equals(targetType)) {
+                        if (encodedContents.remaining() != 1) {
+                            throw new Asn1DecodingException(
+                                    "Incorrect encoded size of boolean value: "
+                                            + encodedContents.remaining());
+                        }
+                        boolean result;
+                        if (encodedContents.get() == 0) {
+                            result = false;
+                        } else {
+                            result = true;
+                        }
+                        return (T) new Boolean(result);
                     }
                     break;
                 case SEQUENCE:

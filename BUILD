@@ -47,6 +47,7 @@ java_binary(
     visibility = ["//visibility:public"],
     deps = [
         ":apksig",
+        ":apksig-all",
         "//tools/base/bazel:langtools",
     ],
 )

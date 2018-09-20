@@ -16,14 +16,18 @@
 
 package com.android.apksig.internal.util;
 
+import com.android.apksig.ApkSignerTest;
+import com.android.apksig.SigningCertificateLineage;
+import com.android.apksig.util.DataSource;
+
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
@@ -47,14 +51,21 @@ public final class Resources {
         }
     }
 
+    public static InputStream toInputStream(Class<?> cls, String resourceName) throws IOException {
+            InputStream in = cls.getResourceAsStream(resourceName);
+            if (in == null) {
+                throw new IllegalArgumentException("Resource not found: " + resourceName);
+            }
+            return in;
+    }
+
     public static X509Certificate toCertificate(
             Class <?> cls, String resourceName) throws IOException, CertificateException {
         try (InputStream in = cls.getResourceAsStream(resourceName)) {
             if (in == null) {
                 throw new IllegalArgumentException("Resource not found: " + resourceName);
             }
-            return (X509Certificate)
-                    CertificateFactory.getInstance("X.509").generateCertificate(in);
+            return X509CertificateUtils.generateCertificate(in);
         }
     }
 
@@ -65,7 +76,7 @@ public final class Resources {
             if (in == null) {
                 throw new IllegalArgumentException("Resource not found: " + resourceName);
             }
-            certs = CertificateFactory.getInstance("X.509").generateCertificates(in);
+            certs = X509CertificateUtils.generateCertificates(in);
         }
         List<X509Certificate> result = new ArrayList<>(certs.size());
         for (Certificate cert : certs) {
@@ -108,5 +119,25 @@ public final class Resources {
         }
 
         return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(encoded));
+    }
+
+    public static SigningCertificateLineage.SignerConfig toLineageSignerConfig(Class<?> cls,
+            String resourcePrefix) throws Exception {
+        PrivateKey privateKey = toPrivateKey(cls, resourcePrefix + ".pk8");
+        X509Certificate cert = Resources.toCertificate(cls,
+                resourcePrefix + ".x509.pem");
+        return new SigningCertificateLineage.SignerConfig.Builder(privateKey, cert).build();
+    }
+
+    public static DataSource toDataSource(Class<?> cls, String dataSourceResourceName)
+            throws IOException {
+        return new ByteBufferDataSource(ByteBuffer.wrap(Resources
+                .toByteArray(ApkSignerTest.class, dataSourceResourceName)));
+    }
+
+    public static SigningCertificateLineage toSigningCertificateLineage(Class<?> cls,
+            String fileResourceName) throws IOException {
+        DataSource lineageDataSource = toDataSource(cls, fileResourceName);
+        return SigningCertificateLineage.readFromDataSource(lineageDataSource);
     }
 }
