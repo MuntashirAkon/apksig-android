@@ -60,5 +60,8 @@ java_test(
         "src/test/resources/**/*",
     ]),
     test_class = "com.android.apksig.AllTests",
-    deps = [":apksig-all"],
+    deps = [
+        ":apksig-all",
+        "//tools/base/third_party:junit_junit",
+    ],
 )
