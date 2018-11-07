@@ -215,6 +215,12 @@ public class ApkSigningBlockUtils {
                 }
                 ContentDigestAlgorithm contentDigestAlgorithm =
                         signatureAlgorithm.getContentDigestAlgorithm();
+                // if the current digest algorithm is not in the list provided by the caller then
+                // ignore it; the signer may contain digests not recognized by the specified SDK
+                // range.
+                if (!contentDigestAlgorithms.contains(contentDigestAlgorithm)) {
+                    continue;
+                }
                 byte[] expectedDigest = expected.getValue();
                 byte[] actualDigest = actualContentDigests.get(contentDigestAlgorithm);
                 if (!Arrays.equals(expectedDigest, actualDigest)) {
