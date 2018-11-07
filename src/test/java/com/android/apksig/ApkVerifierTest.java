@@ -267,6 +267,17 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void testSignaturesIgnoredForMaxSDK() throws Exception {
+        // The V2 signature scheme was introduced in N, and V3 was introduced in P. This test
+        // verifies a max SDK of pre-P ignores the V3 signature and a max SDK of pre-N ignores both
+        // the V2 and V3 signatures.
+        assertVerified(verifyForMaxSdkVersion("v1v2v3-with-rsa-2048-lineage-3-signers.apk",
+                AndroidSdkVersion.O));
+        assertVerified(verifyForMaxSdkVersion("v1v2v3-with-rsa-2048-lineage-3-signers.apk",
+                AndroidSdkVersion.M));
+    }
+
+    @Test
     public void testV2OneSignerOneSignatureAccepted() throws Exception {
         // APK signed with v2 scheme only, one signer, one signature
         assertVerifiedForEachForMinSdkVersion(
