@@ -40,6 +40,7 @@ import com.android.apksig.internal.util.ByteBufferUtils;
 import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.util.InclusiveIntRange;
+import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.internal.zip.LocalFileRecord;
 import com.android.apksig.util.DataSinks;
@@ -163,6 +164,44 @@ public abstract class V1SchemeVerifier {
     }
 
     /**
+    * Parses raw representation of MANIFEST.MF file into a pair of main entry manifest section
+    * representation and a mapping between entry name and its manifest section representation.
+    *
+    * @param manifestBytes raw representation of Manifest.MF
+    * @param cdEntryNames expected set of entry names
+    * @param result object to keep track of errors that happened during the parsing
+    * @return a pair of main entry manifest section representation and a mapping between entry name
+    *     and its manifest section representation
+    */
+    public static Pair<ManifestParser.Section, Map<String, ManifestParser.Section>> parseManifest(
+            byte[] manifestBytes, Set<String> cdEntryNames, Result result) {
+        ManifestParser manifest = new ManifestParser(manifestBytes);
+        ManifestParser.Section manifestMainSection = manifest.readSection();
+        List<ManifestParser.Section> manifestIndividualSections = manifest.readAllSections();
+        Map<String, ManifestParser.Section> entryNameToManifestSection =
+                new HashMap<>(manifestIndividualSections.size());
+        int manifestSectionNumber = 0;
+        for (ManifestParser.Section manifestSection : manifestIndividualSections) {
+            manifestSectionNumber++;
+            String entryName = manifestSection.getName();
+            if (entryName == null) {
+                result.addError(Issue.JAR_SIG_UNNNAMED_MANIFEST_SECTION, manifestSectionNumber);
+                continue;
+            }
+            if (entryNameToManifestSection.put(entryName, manifestSection) != null) {
+                result.addError(Issue.JAR_SIG_DUPLICATE_MANIFEST_SECTION, entryName);
+                continue;
+            }
+            if (!cdEntryNames.contains(entryName)) {
+                result.addError(
+                        Issue.JAR_SIG_MISSING_ZIP_ENTRY_REFERENCED_IN_MANIFEST, entryName);
+                continue;
+            }
+        }
+        return Pair.of(manifestMainSection, entryNameToManifestSection);
+    }
+
+    /**
      * All JAR signers of an APK.
      */
     private static class Signers {
@@ -220,32 +259,18 @@ public abstract class V1SchemeVerifier {
             } catch (ZipFormatException e) {
                 throw new ApkFormatException("Malformed ZIP entry: " + manifestEntry.getName(), e);
             }
-            Map<String, ManifestParser.Section> entryNameToManifestSection = null;
-            ManifestParser manifest = new ManifestParser(manifestBytes);
-            ManifestParser.Section manifestMainSection = manifest.readSection();
-            List<ManifestParser.Section> manifestIndividualSections = manifest.readAllSections();
-            entryNameToManifestSection = new HashMap<>(manifestIndividualSections.size());
-            int manifestSectionNumber = 0;
-            for (ManifestParser.Section manifestSection : manifestIndividualSections) {
-                manifestSectionNumber++;
-                String entryName = manifestSection.getName();
-                if (entryName == null) {
-                    result.addError(Issue.JAR_SIG_UNNNAMED_MANIFEST_SECTION, manifestSectionNumber);
-                    continue;
-                }
-                if (entryNameToManifestSection.put(entryName, manifestSection) != null) {
-                    result.addError(Issue.JAR_SIG_DUPLICATE_MANIFEST_SECTION, entryName);
-                    continue;
-                }
-                if (!cdEntryNames.contains(entryName)) {
-                    result.addError(
-                            Issue.JAR_SIG_MISSING_ZIP_ENTRY_REFERENCED_IN_MANIFEST, entryName);
-                    continue;
-                }
-            }
+
+            Pair<ManifestParser.Section, Map<String, ManifestParser.Section>> manifestSections =
+                    parseManifest(manifestBytes, cdEntryNames, result);
+
             if (result.containsErrors()) {
                 return;
             }
+
+            ManifestParser.Section manifestMainSection = manifestSections.getFirst();
+            Map<String, ManifestParser.Section> entryNameToManifestSection =
+                    manifestSections.getSecond();
+
             // STATE OF AFFAIRS:
             // * All JAR entries listed in JAR manifest are present in the APK.
 
@@ -1605,7 +1630,7 @@ public abstract class V1SchemeVerifier {
         }
     }
 
-    private static Collection<NamedDigest> getDigestsToVerify(
+    public static Collection<NamedDigest> getDigestsToVerify(
             ManifestParser.Section section,
             String digestAttrSuffix,
             int minSdkVersion,
@@ -1918,9 +1943,9 @@ public abstract class V1SchemeVerifier {
         return getMessageDigest(algorithm).digest(data);
     }
 
-    private static class NamedDigest {
-        private final String jcaDigestAlgorithm;
-        private final byte[] digest;
+    public static class NamedDigest {
+        public final String jcaDigestAlgorithm;
+        public final byte[] digest;
 
         private NamedDigest(String jcaDigestAlgorithm, byte[] digest) {
             this.jcaDigestAlgorithm = jcaDigestAlgorithm;
