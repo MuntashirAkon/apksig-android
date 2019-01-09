@@ -22,8 +22,10 @@ import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.v1.DigestAlgorithm;
 import com.android.apksig.internal.apk.v1.V1SchemeSigner;
+import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
 import com.android.apksig.internal.apk.v3.V3SchemeSigner;
+import com.android.apksig.internal.jar.ManifestParser;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.util.TeeDataSink;
@@ -48,6 +50,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -398,6 +401,51 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         return newSignerConfig;
     }
 
+    private boolean isDebuggable(String entryName) {
+        return mDebuggableApkPermitted
+                || !ApkUtils.ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(entryName);
+    }
+
+    /**
+     * Initializes DefaultApkSignerEngine with the existing MANIFEST.MF. This reads existing digests
+     * from the MANIFEST.MF file (they are assumed correct) and stores them for the final signature
+     * without recalculation. This step has a significant performance benefit in case of incremental
+     * build.
+     *
+     * This method extracts and stored computed digest for every entry that it would compute it for
+     * in the {@link #outputJarEntry(String)} method
+     *
+     * @param manifestBytes raw representation of MANIFEST.MF file
+     * @param entryNames a set of expected entries names
+     * @return set of entry names which were processed by the engine during the initialization, a
+     *         subset of entryNames
+     */
+    @Override
+    @SuppressWarnings("AndroidJdkLibsChecker")
+    public Set<String> initWith(byte[] manifestBytes, Set<String> entryNames) {
+        V1SchemeVerifier.Result dummyResult = new V1SchemeVerifier.Result();
+        Pair<ManifestParser.Section, Map<String, ManifestParser.Section>> sections =
+                V1SchemeVerifier.parseManifest(manifestBytes, entryNames, dummyResult);
+        String alg = V1SchemeSigner.getJcaMessageDigestAlgorithm(mV1ContentDigestAlgorithm);
+        for (Map.Entry<String, ManifestParser.Section> entry: sections.getSecond().entrySet()) {
+            String entryName = entry.getKey();
+            if (V1SchemeSigner.isJarEntryDigestNeededInManifest(entry.getKey()) &&
+                    isDebuggable(entryName)) {
+
+                Optional<V1SchemeVerifier.NamedDigest> extractedDigest =
+                        V1SchemeVerifier.getDigestsToVerify(
+                                entry.getValue(), "-Digest", mMinSdkVersion, Integer.MAX_VALUE)
+                                .stream()
+                                .filter(d -> d.jcaDigestAlgorithm == alg)
+                                .findFirst();
+
+                extractedDigest.ifPresent(
+                        namedDigest -> mOutputJarEntryDigests.put(entryName, namedDigest.digest));
+            }
+        }
+        return mOutputJarEntryDigests.keySet();
+    }
+
     @Override
     public void inputApkSigningBlock(DataSource apkSigningBlock) {
         checkNotClosed();
@@ -446,15 +494,13 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         checkNotClosed();
         invalidateV2Signature();
 
-        if ((!mDebuggableApkPermitted)
-                && (ApkUtils.ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(entryName))) {
+        if (!isDebuggable(entryName)) {
             forgetOutputApkDebuggableStatus();
         }
 
         if (!mV1SigningEnabled) {
             // No need to inspect JAR entries when v1 signing is not enabled.
-            if ((!mDebuggableApkPermitted)
-                    && (ApkUtils.ANDROID_MANIFEST_ZIP_ENTRY_NAME.equals(entryName))) {
+            if (!isDebuggable(entryName)) {
                 // To reject debuggable APKs we need to inspect the APK's AndroidManifest.xml to
                 // check whether it declares that the APK is debuggable
                 mOutputAndroidManifestEntryDataRequest = new GetJarEntryDataRequest(entryName);

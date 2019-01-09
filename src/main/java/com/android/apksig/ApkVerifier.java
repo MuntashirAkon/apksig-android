@@ -40,6 +40,7 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -185,6 +186,26 @@ public class ApkVerifier {
 
         Result result = new Result();
 
+        // The SUPPORTED_APK_SIG_SCHEME_NAMES contains the mapping from version number to scheme
+        // name, but the verifiers use this parameter as the schemes supported by the target SDK
+        // range. Since the code below skips signature verification based on max SDK the mapping of
+        // supported schemes needs to be modified to ensure the verifiers do not report a stripped
+        // signature for an SDK range that does not support that signature version. For instance an
+        // APK with V1, V2, and V3 signatures and a max SDK of O would skip the V3 signature
+        // verification, but the SUPPORTED_APK_SIG_SCHEME_NAMES contains version 3, so when the V2
+        // verification is performed it would see the stripping protection attribute, see that V3
+        // is in the list of supported signatures, and report a stripped signature.
+        Map<Integer, String> supportedSchemeNames;
+        if (maxSdkVersion >= AndroidSdkVersion.P) {
+            supportedSchemeNames = SUPPORTED_APK_SIG_SCHEME_NAMES;
+        } else if (maxSdkVersion >= AndroidSdkVersion.N) {
+            supportedSchemeNames = new HashMap<>(1);
+            supportedSchemeNames.put(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2,
+                    SUPPORTED_APK_SIG_SCHEME_NAMES.get(
+                            ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2));
+        } else {
+            supportedSchemeNames = Collections.EMPTY_MAP;
+        }
         // Android N and newer attempts to verify APKs using the APK Signing Block, which can
         // include v2 and/or v3 signatures.  If none is found, it falls back to JAR signature
         // verification. If the signature is found but does not verify, the APK is rejected.
@@ -220,7 +241,7 @@ public class ApkVerifier {
                             V2SchemeVerifier.verify(
                                     apk,
                                     zipSections,
-                                    SUPPORTED_APK_SIG_SCHEME_NAMES,
+                                    supportedSchemeNames,
                                     foundApkSigSchemeIds,
                                     Math.max(minSdkVersion, AndroidSdkVersion.N),
                                     maxSdkVersion);
@@ -261,7 +282,7 @@ public class ApkVerifier {
                     V1SchemeVerifier.verify(
                             apk,
                             zipSections,
-                            SUPPORTED_APK_SIG_SCHEME_NAMES,
+                            supportedSchemeNames,
                             foundApkSigSchemeIds,
                             minSdkVersion,
                             maxSdkVersion);
