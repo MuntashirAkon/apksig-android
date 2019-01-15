@@ -36,6 +36,9 @@ public abstract class AndroidSdkVersion {
     /** Android 5.0. A flat one with beautiful shadows. But still tasty. */
     public static final int LOLLIPOP = 21;
 
+    /** Android 6.0. M is for Marshmallow! */
+    public static final int M = 23;
+
     /** Android 7.0. N is for Nougat. */
     public static final int N = 24;
 

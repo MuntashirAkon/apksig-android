@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,21 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.asn1;
+package com.android.apksig.internal.x509;
 
-public enum Asn1Type {
-    ANY,
-    CHOICE,
-    INTEGER,
-    OBJECT_IDENTIFIER,
-    OCTET_STRING,
-    SEQUENCE,
-    SEQUENCE_OF,
-    SET_OF,
-    BIT_STRING,
-    UTC_TIME,
-    GENERALIZED_TIME,
-    BOOLEAN,
-    // This type can be used to annotate classes that encapsulate ASN.1 structures that are not
-    // classified as a SEQUENCE or SET.
-    UNENCODED_CONTAINER
+import com.android.apksig.internal.asn1.Asn1Class;
+import com.android.apksig.internal.asn1.Asn1Field;
+import com.android.apksig.internal.asn1.Asn1Type;
+
+import java.util.List;
+
+/**
+ * X501 {@code Name} as specified in RFC 5280.
+ */
+@Asn1Class(type = Asn1Type.CHOICE)
+public class Name {
+
+    // This field is the RDNSequence specified in RFC 5280.
+    @Asn1Field(index = 0, type = Asn1Type.SEQUENCE_OF)
+    public List<RelativeDistinguishedName> relativeDistinguishedNames;
 }

@@ -25,5 +25,6 @@ import org.junit.runners.Suite;
     ChainedDataSourceTest.class,
     DirectByteBufferSinkTest.class,
     VerityTreeBuilderTest.class,
+    X509CertificateUtilsTest.class,
 })
 public class AllTests {}

@@ -21,10 +21,12 @@ import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
 import java.io.Closeable;
 import java.io.IOException;
+import java.lang.UnsupportedOperationException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SignatureException;
 import java.util.List;
+import java.util.Set;
 
 /**
  * APK signing logic which is independent of how input and output APKs are stored, parsed, and
@@ -113,6 +115,19 @@ import java.util.List;
  * @see <a href="https://source.android.com/security/apksigning/index.html">Application Signing</a>
  */
 public interface ApkSignerEngine extends Closeable {
+
+    /**
+     * Initializes the signer engine with the data already present in the apk (if any). There
+     * might already be data that can be reused if the entries has not been changed.
+     *
+     * @param manifestBytes
+     * @param entryNames
+     * @return set of entry names which were processed by the engine during the initialization, a
+     *         subset of entryNames
+     */
+    default Set<String> initWith(byte[] manifestBytes, Set<String> entryNames) {
+        throw new UnsupportedOperationException("initWith method is not implemented");
+    }
 
     /**
      * Indicates to this engine that the input APK contains the provided APK Signing Block. The
