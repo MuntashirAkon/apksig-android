@@ -29,19 +29,19 @@ import java.nio.channels.FileChannel;
  */
 public class RandomAccessFileDataSource implements DataSource {
 
-    private static final int MAX_READ_CHUNK_SIZE = 65536;
+    private static final int MAX_READ_CHUNK_SIZE = 1024 * 1024;
 
-    private final RandomAccessFile mFile;
+    private final FileChannel mChannel;
     private final long mOffset;
     private final long mSize;
 
     /**
      * Constructs a new {@code RandomAccessFileDataSource} based on the data contained in the
-     * specified the whole file. Changes to the contents of the file, including the size of the
-     * file, will be visible in this data source.
+     * whole file. Changes to the contents of the file, including the size of the file,
+     * will be visible in this data source.
      */
     public RandomAccessFileDataSource(RandomAccessFile file) {
-        mFile = file;
+        mChannel = file.getChannel();
         mOffset = 0;
         mSize = -1;
     }
@@ -54,13 +54,17 @@ public class RandomAccessFileDataSource implements DataSource {
      * @throws IndexOutOfBoundsException if {@code offset} or {@code size} is negative.
      */
     public RandomAccessFileDataSource(RandomAccessFile file, long offset, long size) {
+        this(file.getChannel(), offset, size);
+    }
+
+    private RandomAccessFileDataSource(FileChannel channel, long offset, long size) {
         if (offset < 0) {
             throw new IndexOutOfBoundsException("offset: " + size);
         }
         if (size < 0) {
             throw new IndexOutOfBoundsException("size: " + size);
         }
-        mFile = file;
+        mChannel = channel;
         mOffset = offset;
         mSize = size;
     }
@@ -69,7 +73,7 @@ public class RandomAccessFileDataSource implements DataSource {
     public long size() {
         if (mSize == -1) {
             try {
-                return mFile.length();
+                return mChannel.size();
             } catch (IOException e) {
                 return 0;
             }
@@ -86,7 +90,7 @@ public class RandomAccessFileDataSource implements DataSource {
             return this;
         }
 
-        return new RandomAccessFileDataSource(mFile, mOffset + offset, size);
+        return new RandomAccessFileDataSource(mChannel, mOffset + offset, size);
     }
 
     @Override
@@ -99,14 +103,24 @@ public class RandomAccessFileDataSource implements DataSource {
 
         long chunkOffsetInFile = mOffset + offset;
         long remaining = size;
-        byte[] buf = new byte[(int) Math.min(remaining, MAX_READ_CHUNK_SIZE)];
+        ByteBuffer buf = ByteBuffer.allocateDirect((int) Math.min(remaining, MAX_READ_CHUNK_SIZE));
+
         while (remaining > 0) {
-            int chunkSize = (int) Math.min(remaining, buf.length);
-            synchronized (mFile) {
-                mFile.seek(chunkOffsetInFile);
-                mFile.readFully(buf, 0, chunkSize);
+            int chunkSize = (int) Math.min(remaining, buf.capacity());
+            int chunkRemaining = chunkSize;
+            synchronized (mChannel) {
+                mChannel.position(chunkOffsetInFile);
+                while (chunkRemaining > 0) {
+                    int read = mChannel.read(buf);
+                    if (read < 0) {
+                        throw new IOException("Unexpected EOF encountered");
+                    }
+                    chunkRemaining -= read;
+                }
             }
-            sink.consume(buf, 0, chunkSize);
+            buf.flip();
+            sink.consume(buf);
+            buf.clear();
             chunkOffsetInFile += chunkSize;
             remaining -= chunkSize;
         }
@@ -130,12 +144,11 @@ public class RandomAccessFileDataSource implements DataSource {
             // FileChannel.read(ByteBuffer) reads up to dest.remaining(). Thus, we need to adjust
             // the buffer's limit to avoid reading more than size bytes.
             dest.limit(dest.position() + size);
-            FileChannel fileChannel = mFile.getChannel();
             while (remaining > 0) {
                 int chunkSize;
-                synchronized (mFile) {
-                    fileChannel.position(offsetInFile);
-                    chunkSize = fileChannel.read(dest);
+                synchronized (mChannel) {
+                    mChannel.position(offsetInFile);
+                    chunkSize = mChannel.read(dest);
                 }
                 offsetInFile += chunkSize;
                 remaining -= chunkSize;
