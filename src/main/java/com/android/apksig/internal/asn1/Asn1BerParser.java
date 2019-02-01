@@ -624,6 +624,7 @@ public final class Asn1BerParser {
                     if (String.class.equals(targetType)) {
                         return (T) new String(ByteBufferUtils.toByteArray(encodedContents));
                     }
+                    break;
                 case BOOLEAN:
                     // A boolean should be encoded in a single byte with a value of 0 for false and
                     // any non-zero value for true.
@@ -640,8 +641,8 @@ public final class Asn1BerParser {
                             result = true;
                         }
                         return (T) new Boolean(result);
-
                     }
+                    break;
                 case SEQUENCE:
                 {
                     Asn1Class containerAnnotation =
