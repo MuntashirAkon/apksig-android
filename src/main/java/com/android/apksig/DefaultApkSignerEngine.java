@@ -25,8 +25,8 @@ import com.android.apksig.internal.apk.v1.V1SchemeSigner;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
 import com.android.apksig.internal.apk.v3.V3SchemeSigner;
-import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.jar.ManifestParser;
+import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.util.TeeDataSink;
 import com.android.apksig.util.DataSink;
@@ -421,6 +421,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
      *         subset of entryNames
      */
     @Override
+    @SuppressWarnings("AndroidJdkLibsChecker")
     public Set<String> initWith(byte[] manifestBytes, Set<String> entryNames) {
         V1SchemeVerifier.Result dummyResult = new V1SchemeVerifier.Result();
         Pair<ManifestParser.Section, Map<String, ManifestParser.Section>> sections =
