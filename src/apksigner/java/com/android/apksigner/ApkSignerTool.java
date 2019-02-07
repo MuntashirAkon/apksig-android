@@ -22,58 +22,32 @@ import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.SigningCertificateLineage.SignerCapabilities;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.MinSdkVersionException;
-import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
-
 import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.security.InvalidKeyException;
-import java.security.Key;
-import java.security.KeyFactory;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
 import java.security.Provider;
 import java.security.PublicKey;
 import java.security.Security;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.DSAKey;
 import java.security.interfaces.DSAParams;
 import java.security.interfaces.ECKey;
 import java.security.interfaces.RSAKey;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Enumeration;
 import java.util.List;
-
-import javax.crypto.EncryptedPrivateKeyInfo;
-import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
 
 /**
  * Command-line tool for signing APKs and for checking whether an APK's signature are expected to
@@ -186,48 +160,49 @@ public class ApkSignerTool {
                     signerParams = new SignerParams();
                 }
             } else if ("ks".equals(optionName)) {
-                signerParams.keystoreFile = optionsParser.getRequiredValue("KeyStore file");
+                signerParams.setKeystoreFile(optionsParser.getRequiredValue("KeyStore file"));
             } else if ("ks-key-alias".equals(optionName)) {
-                signerParams.keystoreKeyAlias =
-                        optionsParser.getRequiredValue("KeyStore key alias");
+                signerParams.setKeystoreKeyAlias(
+                        optionsParser.getRequiredValue("KeyStore key alias"));
             } else if ("ks-pass".equals(optionName)) {
-                signerParams.keystorePasswordSpec =
-                        optionsParser.getRequiredValue("KeyStore password");
+                signerParams.setKeystorePasswordSpec(
+                        optionsParser.getRequiredValue("KeyStore password"));
             } else if ("key-pass".equals(optionName)) {
-                signerParams.keyPasswordSpec = optionsParser.getRequiredValue("Key password");
+                signerParams.setKeyPasswordSpec(optionsParser.getRequiredValue("Key password"));
             } else if ("pass-encoding".equals(optionName)) {
                 String charsetName =
                         optionsParser.getRequiredValue("Password character encoding");
                 try {
-                    signerParams.passwordCharset = PasswordRetriever.getCharsetByName(charsetName);
+                    signerParams.setPasswordCharset(
+                            PasswordRetriever.getCharsetByName(charsetName));
                 } catch (IllegalArgumentException e) {
                     throw new ParameterException(
                             "Unsupported password character encoding requested using"
                                     + " --pass-encoding: " + charsetName);
                 }
             } else if ("v1-signer-name".equals(optionName)) {
-                signerParams.v1SigFileBasename =
-                        optionsParser.getRequiredValue("JAR signature file basename");
+                signerParams.setV1SigFileBasename(
+                        optionsParser.getRequiredValue("JAR signature file basename"));
             } else if ("ks-type".equals(optionName)) {
-                signerParams.keystoreType = optionsParser.getRequiredValue("KeyStore type");
+                signerParams.setKeystoreType(optionsParser.getRequiredValue("KeyStore type"));
             } else if ("ks-provider-name".equals(optionName)) {
-                signerParams.keystoreProviderName =
-                        optionsParser.getRequiredValue("JCA KeyStore Provider name");
+                signerParams.setKeystoreProviderName(
+                        optionsParser.getRequiredValue("JCA KeyStore Provider name"));
             } else if ("ks-provider-class".equals(optionName)) {
-                signerParams.keystoreProviderClass =
-                        optionsParser.getRequiredValue("JCA KeyStore Provider class name");
+                signerParams.setKeystoreProviderClass(
+                        optionsParser.getRequiredValue("JCA KeyStore Provider class name"));
             } else if ("ks-provider-arg".equals(optionName)) {
-                signerParams.keystoreProviderArg =
+                signerParams.setKeystoreProviderArg(
                         optionsParser.getRequiredValue(
-                                "JCA KeyStore Provider constructor argument");
+                                "JCA KeyStore Provider constructor argument"));
             } else if ("key".equals(optionName)) {
-                signerParams.keyFile = optionsParser.getRequiredValue("Private key file");
+                signerParams.setKeyFile(optionsParser.getRequiredValue("Private key file"));
             } else if ("cert".equals(optionName)) {
-                signerParams.certFile = optionsParser.getRequiredValue("Certificate file");
+                signerParams.setCertFile(optionsParser.getRequiredValue("Certificate file"));
             } else if ("lineage".equals(optionName)) {
                 File lineageFile = new File(optionsParser.getRequiredValue("Lineage File"));
                 lineage = getLineageFromInputFile(lineageFile);
-            } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
+            } else if ("v".equals(optionName) || "verbose".equals(optionName)) {
                 verbose = optionsParser.getOptionalBooleanValue(true);
             } else if ("next-provider".equals(optionName)) {
                 if (!providerParams.isEmpty()) {
@@ -297,28 +272,28 @@ public class ApkSignerTool {
         try (PasswordRetriever passwordRetriever = new PasswordRetriever()) {
             for (SignerParams signer : signers) {
                 signerNumber++;
-                signer.name = "signer #" + signerNumber;
+                signer.setName("signer #" + signerNumber);
                 try {
                     signer.loadPrivateKeyAndCerts(passwordRetriever);
                 } catch (ParameterException e) {
                     System.err.println(
-                            "Failed to load signer \"" + signer.name + "\": "
+                            "Failed to load signer \"" + signer.getName() + "\": "
                                     + e.getMessage());
                     System.exit(2);
                     return;
                 } catch (Exception e) {
-                    System.err.println("Failed to load signer \"" + signer.name + "\"");
+                    System.err.println("Failed to load signer \"" + signer.getName() + "\"");
                     e.printStackTrace();
                     System.exit(2);
                     return;
                 }
                 String v1SigBasename;
-                if (signer.v1SigFileBasename != null) {
-                    v1SigBasename = signer.v1SigFileBasename;
-                } else if (signer.keystoreKeyAlias != null) {
-                    v1SigBasename = signer.keystoreKeyAlias;
-                } else if (signer.keyFile != null) {
-                    String keyFileName = new File(signer.keyFile).getName();
+                if (signer.getV1SigFileBasename() != null) {
+                    v1SigBasename = signer.getV1SigFileBasename();
+                } else if (signer.getKeystoreKeyAlias() != null) {
+                    v1SigBasename = signer.getKeystoreKeyAlias();
+                } else if (signer.getKeyFile() != null) {
+                    String keyFileName = new File(signer.getKeyFile()).getName();
                     int delimiterIndex = keyFileName.indexOf('.');
                     if (delimiterIndex == -1) {
                         v1SigBasename = keyFileName;
@@ -331,8 +306,8 @@ public class ApkSignerTool {
                 }
                 ApkSigner.SignerConfig signerConfig =
                         new ApkSigner.SignerConfig.Builder(
-                                v1SigBasename, signer.privateKey, signer.certs)
-                        .build();
+                                v1SigBasename, signer.getPrivateKey(), signer.getCerts())
+                                .build();
                 signerConfigs.add(signerConfig);
             }
         }
@@ -508,7 +483,7 @@ public class ApkSignerTool {
         }
 
         @SuppressWarnings("resource") // false positive -- this resource is not opened here
-        PrintStream warningsOut = (warningsTreatedAsErrors) ? System.err : System.out;
+        PrintStream warningsOut = warningsTreatedAsErrors ? System.err : System.out;
         for (ApkVerifier.IssueWithParams warning : result.getWarnings()) {
             warningsEncountered = true;
             warningsOut.println("WARNING: " + warning);
@@ -643,36 +618,44 @@ public class ApkSignerTool {
 
         try (PasswordRetriever passwordRetriever = new PasswordRetriever()) {
             // populate SignerConfig for old signer
-            oldSignerParams.name = "old signer";
+            oldSignerParams.setName("old signer");
             loadPrivateKeyAndCerts(oldSignerParams, passwordRetriever);
             SigningCertificateLineage.SignerConfig oldSignerConfig =
                     new SigningCertificateLineage.SignerConfig.Builder(
-                            oldSignerParams.privateKey, oldSignerParams.certs.get(0)).build();
+                            oldSignerParams.getPrivateKey(), oldSignerParams.getCerts().get(0))
+                            .build();
 
             // TOOD: don't require private key
-            newSignerParams.name = "new signer";
+            newSignerParams.setName("new signer");
             loadPrivateKeyAndCerts(newSignerParams, passwordRetriever);
             SigningCertificateLineage.SignerConfig newSignerConfig =
                     new SigningCertificateLineage.SignerConfig.Builder(
-                            newSignerParams.privateKey, newSignerParams.certs.get(0)).build();
+                            newSignerParams.getPrivateKey(), newSignerParams.getCerts().get(0))
+                            .build();
 
             // ok we're all set up, let's rotate!
             SigningCertificateLineage lineage;
             if (inputKeyLineage != null) {
                 // we already have history, add the new key to the end of it
                 lineage = getLineageFromInputFile(inputKeyLineage);
-                lineage.updateSignerCapabilities(oldSignerConfig,
-                        oldSignerParams.signerCapabilitiesBuilder.build());
-                lineage = lineage.spawnDescendant(oldSignerConfig,
-                        newSignerConfig, newSignerParams.signerCapabilitiesBuilder.build());
+                lineage.updateSignerCapabilities(
+                        oldSignerConfig, oldSignerParams.getSignerCapabilitiesBuilder().build());
+                lineage =
+                        lineage.spawnDescendant(
+                                oldSignerConfig,
+                                newSignerConfig,
+                                newSignerParams.getSignerCapabilitiesBuilder().build());
             } else {
                 // this is the first entry in our signing history, create a new one from the old and
                 // new signer info
-                lineage = new SigningCertificateLineage.Builder(oldSignerConfig, newSignerConfig)
-                        .setMinSdkVersion(minSdkVersion)
-                        .setOriginalCapabilities(oldSignerParams.signerCapabilitiesBuilder.build())
-                        .setNewCapabilities(newSignerParams.signerCapabilitiesBuilder.build())
-                        .build();
+                lineage =
+                        new SigningCertificateLineage.Builder(oldSignerConfig, newSignerConfig)
+                                .setMinSdkVersion(minSdkVersion)
+                                .setOriginalCapabilities(
+                                        oldSignerParams.getSignerCapabilitiesBuilder().build())
+                                .setNewCapabilities(
+                                        newSignerParams.getSignerCapabilitiesBuilder().build())
+                                .build();
             }
             // and write out the result
             lineage.writeToFile(outputKeyLineage);
@@ -726,11 +709,12 @@ public class ApkSignerTool {
         try (PasswordRetriever passwordRetriever = new PasswordRetriever()) {
             for (int i = 0; i < signers.size(); i++) {
                 SignerParams signerParams = signers.get(i);
-                signerParams.name = "signer #" + (i + 1);
+                signerParams.setName("signer #" + (i + 1));
                 loadPrivateKeyAndCerts(signerParams, passwordRetriever);
                 SigningCertificateLineage.SignerConfig signerConfig =
                         new SigningCertificateLineage.SignerConfig.Builder(
-                                signerParams.privateKey, signerParams.certs.get(0)).build();
+                                signerParams.getPrivateKey(), signerParams.getCerts().get(0))
+                                .build();
                 try {
                     // since only the caller specified capabilities will be updated a direct
                     // comparison between the original capabilities of the signer and the
@@ -740,26 +724,29 @@ public class ApkSignerTool {
                     // lineage has been updated and needs to be written out to a file.
                     SignerCapabilities origCapabilities = lineage.getSignerCapabilities(
                             signerConfig);
-                    lineage.updateSignerCapabilities(signerConfig,
-                            signerParams.signerCapabilitiesBuilder.build());
+                    lineage.updateSignerCapabilities(
+                            signerConfig, signerParams.getSignerCapabilitiesBuilder().build());
                     SignerCapabilities newCapabilities = lineage.getSignerCapabilities(
                             signerConfig);
                     if (origCapabilities.equals(newCapabilities)) {
                         if (verbose) {
                             System.out.println(
-                                    "The provided signer capabilities for " + signerParams.name
+                                    "The provided signer capabilities for "
+                                            + signerParams.getName()
                                             + " are unchanged.");
                         }
                     } else {
                         lineageUpdated = true;
                         if (verbose) {
                             System.out.println(
-                                    "Updated signer capabilities for " + signerParams.name + ".");
+                                    "Updated signer capabilities for " + signerParams.getName()
+                                            + ".");
                         }
                     }
                 } catch (IllegalArgumentException e) {
-                    throw new ParameterException("The signer " + signerParams.name
-                            + " was not found in the specified lineage.");
+                    throw new ParameterException(
+                            "The signer " + signerParams.getName()
+                                    + " was not found in the specified lineage.");
                 }
             }
         }
@@ -815,56 +802,62 @@ public class ApkSignerTool {
         String optionName;
         while ((optionName = optionsParser.nextOption()) != null) {
             if ("ks".equals(optionName)) {
-                signerParams.keystoreFile = optionsParser.getRequiredValue("KeyStore file");
+                signerParams.setKeystoreFile(optionsParser.getRequiredValue("KeyStore file"));
             } else if ("ks-key-alias".equals(optionName)) {
-                signerParams.keystoreKeyAlias =
-                        optionsParser.getRequiredValue("KeyStore key alias");
+                signerParams.setKeystoreKeyAlias(
+                        optionsParser.getRequiredValue("KeyStore key alias"));
             } else if ("ks-pass".equals(optionName)) {
-                signerParams.keystorePasswordSpec =
-                        optionsParser.getRequiredValue("KeyStore password");
+                signerParams.setKeystorePasswordSpec(
+                        optionsParser.getRequiredValue("KeyStore password"));
             } else if ("key-pass".equals(optionName)) {
-                signerParams.keyPasswordSpec = optionsParser.getRequiredValue("Key password");
+                signerParams.setKeyPasswordSpec(optionsParser.getRequiredValue("Key password"));
             } else if ("pass-encoding".equals(optionName)) {
                 String charsetName =
                         optionsParser.getRequiredValue("Password character encoding");
                 try {
-                    signerParams.passwordCharset = PasswordRetriever.getCharsetByName(charsetName);
+                    signerParams.setPasswordCharset(
+                            PasswordRetriever.getCharsetByName(charsetName));
                 } catch (IllegalArgumentException e) {
                     throw new ParameterException(
                             "Unsupported password character encoding requested using"
                                     + " --pass-encoding: " + charsetName);
                 }
             } else if ("ks-type".equals(optionName)) {
-                signerParams.keystoreType = optionsParser.getRequiredValue("KeyStore type");
+                signerParams.setKeystoreType(optionsParser.getRequiredValue("KeyStore type"));
             } else if ("ks-provider-name".equals(optionName)) {
-                signerParams.keystoreProviderName =
-                        optionsParser.getRequiredValue("JCA KeyStore Provider name");
+                signerParams.setKeystoreProviderName(
+                        optionsParser.getRequiredValue("JCA KeyStore Provider name"));
             } else if ("ks-provider-class".equals(optionName)) {
-                signerParams.keystoreProviderClass =
-                        optionsParser.getRequiredValue("JCA KeyStore Provider class name");
+                signerParams.setKeystoreProviderClass(
+                        optionsParser.getRequiredValue("JCA KeyStore Provider class name"));
             } else if ("ks-provider-arg".equals(optionName)) {
-                signerParams.keystoreProviderArg =
+                signerParams.setKeystoreProviderArg(
                         optionsParser.getRequiredValue(
-                                "JCA KeyStore Provider constructor argument");
+                                "JCA KeyStore Provider constructor argument"));
             } else if ("key".equals(optionName)) {
-                signerParams.keyFile = optionsParser.getRequiredValue("Private key file");
+                signerParams.setKeyFile(optionsParser.getRequiredValue("Private key file"));
             } else if ("cert".equals(optionName)) {
-                signerParams.certFile = optionsParser.getRequiredValue("Certificate file");
+                signerParams.setCertFile(optionsParser.getRequiredValue("Certificate file"));
             } else if ("set-installed-data".equals(optionName)) {
-                signerParams.signerCapabilitiesBuilder.setInstalledData(
-                        optionsParser.getOptionalBooleanValue(true));
+                signerParams
+                        .getSignerCapabilitiesBuilder()
+                        .setInstalledData(optionsParser.getOptionalBooleanValue(true));
             } else if ("set-shared-uid".equals(optionName)) {
-                signerParams.signerCapabilitiesBuilder.setSharedUid(
-                        optionsParser.getOptionalBooleanValue(true));
+                signerParams
+                        .getSignerCapabilitiesBuilder()
+                        .setSharedUid(optionsParser.getOptionalBooleanValue(true));
             } else if ("set-permission".equals(optionName)) {
-                signerParams.signerCapabilitiesBuilder.setPermission(
-                        optionsParser.getOptionalBooleanValue(true));
+                signerParams
+                        .getSignerCapabilitiesBuilder()
+                        .setPermission(optionsParser.getOptionalBooleanValue(true));
             } else if ("set-rollback".equals(optionName)) {
-                signerParams.signerCapabilitiesBuilder.setRollback(
-                        optionsParser.getOptionalBooleanValue(true));
+                signerParams
+                        .getSignerCapabilitiesBuilder()
+                        .setRollback(optionsParser.getOptionalBooleanValue(true));
             } else if ("set-auth".equals(optionName)) {
-                signerParams.signerCapabilitiesBuilder.setAuth(
-                        optionsParser.getOptionalBooleanValue(true));
+                signerParams
+                        .getSignerCapabilitiesBuilder()
+                        .setAuth(optionsParser.getOptionalBooleanValue(true));
             } else {
                 // not a signer option, reset optionsParser and let caller deal with it
                 optionsParser.putOption();
@@ -1018,414 +1011,27 @@ public class ApkSignerTool {
             PasswordRetriever passwordRetriever) throws ParameterException {
         try {
             params.loadPrivateKeyAndCerts(passwordRetriever);
-            if (params.keystoreKeyAlias != null) {
-                params.name = params.keystoreKeyAlias;
-            } else if (params.keyFile != null) {
-                String keyFileName = new File(params.keyFile).getName();
+            if (params.getKeystoreKeyAlias() != null) {
+                params.setName(params.getKeystoreKeyAlias());
+            } else if (params.getKeyFile() != null) {
+                String keyFileName = new File(params.getKeyFile()).getName();
                 int delimiterIndex = keyFileName.indexOf('.');
                 if (delimiterIndex == -1) {
-                    params.name = keyFileName;
+                    params.setName(keyFileName);
                 } else {
-                    params.name = keyFileName.substring(0, delimiterIndex);
+                    params.setName(keyFileName.substring(0, delimiterIndex));
                 }
             } else {
                 throw new RuntimeException(
                         "Neither KeyStore key alias nor private key file available for "
-                                + params.name);
+                                + params.getName());
             }
         } catch (ParameterException e) {
             throw new ParameterException(
-                    "Failed to load signer \"" + params.name + "\":" + e.getMessage());
+                    "Failed to load signer \"" + params.getName() + "\":" + e.getMessage());
         } catch (Exception e) {
             e.printStackTrace();
-            throw new ParameterException("Failed to load signer \"" + params.name + "\"");
-        }
-    }
-
-    private static class SignerParams {
-        String name;
-
-        String keystoreFile;
-        String keystoreKeyAlias;
-        String keystorePasswordSpec;
-        String keyPasswordSpec;
-        Charset passwordCharset;
-        String keystoreType;
-        String keystoreProviderName;
-        String keystoreProviderClass;
-        String keystoreProviderArg;
-
-        String keyFile;
-        String certFile;
-
-        String v1SigFileBasename;
-
-        PrivateKey privateKey;
-        List<X509Certificate> certs;
-        SigningCertificateLineage lineage;
-        SignerCapabilities.Builder signerCapabilitiesBuilder = new
-                SignerCapabilities.Builder();
-
-        private boolean isEmpty() {
-            return (name == null)
-                    && (keystoreFile == null)
-                    && (keystoreKeyAlias == null)
-                    && (keystorePasswordSpec == null)
-                    && (keyPasswordSpec == null)
-                    && (passwordCharset == null)
-                    && (keystoreType == null)
-                    && (keystoreProviderName == null)
-                    && (keystoreProviderClass == null)
-                    && (keystoreProviderArg == null)
-                    && (keyFile == null)
-                    && (certFile == null)
-                    && (v1SigFileBasename == null)
-                    && (privateKey == null)
-                    && (certs == null);
-        }
-
-        private void loadPrivateKeyAndCerts(PasswordRetriever passwordRetriever) throws Exception {
-            if (keystoreFile != null) {
-                if (keyFile != null) {
-                    throw new ParameterException(
-                            "--ks and --key may not be specified at the same time");
-                } else if (certFile != null) {
-                    throw new ParameterException(
-                            "--ks and --cert may not be specified at the same time");
-                }
-                loadPrivateKeyAndCertsFromKeyStore(passwordRetriever);
-            } else if (keyFile != null) {
-                loadPrivateKeyAndCertsFromFiles(passwordRetriever);
-            } else {
-                throw new ParameterException(
-                        "KeyStore (--ks) or private key file (--key) must be specified");
-            }
-        }
-
-        private void loadPrivateKeyAndCertsFromKeyStore(PasswordRetriever passwordRetriever)
-                throws Exception {
-            if (keystoreFile == null) {
-                throw new ParameterException("KeyStore (--ks) must be specified");
-            }
-
-            // 1. Obtain a KeyStore implementation
-            String ksType = (keystoreType != null) ? keystoreType : KeyStore.getDefaultType();
-            KeyStore ks;
-            if (keystoreProviderName != null) {
-                // Use a named Provider (assumes the provider is already installed)
-                ks = KeyStore.getInstance(ksType, keystoreProviderName);
-            } else if (keystoreProviderClass != null) {
-                // Use a new Provider instance (does not require the provider to be installed)
-                Class<?> ksProviderClass = Class.forName(keystoreProviderClass);
-                if (!Provider.class.isAssignableFrom(ksProviderClass)) {
-                    throw new ParameterException(
-                            "Keystore Provider class " + keystoreProviderClass + " not subclass of "
-                                    + Provider.class.getName());
-                }
-                Provider ksProvider;
-                if (keystoreProviderArg != null) {
-                    // Single-arg Provider constructor
-                    ksProvider =
-                            (Provider) ksProviderClass.getConstructor(String.class)
-                                    .newInstance(keystoreProviderArg);
-                } else {
-                    // No-arg Provider constructor
-                    ksProvider = (Provider) ksProviderClass.getConstructor().newInstance();
-                }
-                ks = KeyStore.getInstance(ksType, ksProvider);
-            } else {
-                // Use the highest-priority Provider which offers the requested KeyStore type
-                ks = KeyStore.getInstance(ksType);
-            }
-
-            // 2. Load the KeyStore
-            List<char[]> keystorePasswords;
-            Charset[] additionalPasswordEncodings;
-            {
-                String keystorePasswordSpec =
-                        (this.keystorePasswordSpec != null)
-                                ?  this.keystorePasswordSpec : PasswordRetriever.SPEC_STDIN;
-                additionalPasswordEncodings =
-                        (passwordCharset != null)
-                                ? new Charset[] {passwordCharset} : new Charset[0];
-                keystorePasswords =
-                        passwordRetriever.getPasswords(
-                                keystorePasswordSpec,
-                                "Keystore password for " + name,
-                                additionalPasswordEncodings);
-                loadKeyStoreFromFile(
-                        ks,
-                        "NONE".equals(keystoreFile) ? null : keystoreFile,
-                        keystorePasswords);
-            }
-
-            // 3. Load the PrivateKey and cert chain from KeyStore
-            String keyAlias = null;
-            PrivateKey key = null;
-            try {
-                if (keystoreKeyAlias == null) {
-                    // Private key entry alias not specified. Find the key entry contained in this
-                    // KeyStore. If the KeyStore contains multiple key entries, return an error.
-                    Enumeration<String> aliases = ks.aliases();
-                    if (aliases != null) {
-                        while (aliases.hasMoreElements()) {
-                            String entryAlias = aliases.nextElement();
-                            if (ks.isKeyEntry(entryAlias)) {
-                                keyAlias = entryAlias;
-                                if (keystoreKeyAlias != null) {
-                                    throw new ParameterException(
-                                            keystoreFile + " contains multiple key entries"
-                                            + ". --ks-key-alias option must be used to specify"
-                                            + " which entry to use.");
-                                }
-                                keystoreKeyAlias = keyAlias;
-                            }
-                        }
-                    }
-                    if (keystoreKeyAlias == null) {
-                        throw new ParameterException(
-                                keystoreFile + " does not contain key entries");
-                    }
-                }
-
-                // Private key entry alias known. Load that entry's private key.
-                keyAlias = keystoreKeyAlias;
-                if (!ks.isKeyEntry(keyAlias)) {
-                    throw new ParameterException(
-                            keystoreFile + " entry \"" + keyAlias + "\" does not contain a key");
-                }
-
-                Key entryKey;
-                if (keyPasswordSpec != null) {
-                    // Key password spec is explicitly specified. Use this spec to obtain the
-                    // password and then load the key using that password.
-                    List<char[]> keyPasswords =
-                            passwordRetriever.getPasswords(
-                                    keyPasswordSpec,
-                                    "Key \"" + keyAlias + "\" password for " + name,
-                                    additionalPasswordEncodings);
-                    entryKey = getKeyStoreKey(ks, keyAlias, keyPasswords);
-                } else {
-                    // Key password spec is not specified. This means we should assume that key
-                    // password is the same as the keystore password and that, if this assumption is
-                    // wrong, we should prompt for key password and retry loading the key using that
-                    // password.
-                    try {
-                        entryKey = getKeyStoreKey(ks, keyAlias, keystorePasswords);
-                    } catch (UnrecoverableKeyException expected) {
-                        List<char[]> keyPasswords =
-                                passwordRetriever.getPasswords(
-                                        PasswordRetriever.SPEC_STDIN,
-                                        "Key \"" + keyAlias + "\" password for " + name,
-                                        additionalPasswordEncodings);
-                        entryKey = getKeyStoreKey(ks, keyAlias, keyPasswords);
-                    }
-                }
-
-                if (entryKey == null) {
-                    throw new ParameterException(
-                            keystoreFile + " entry \"" + keyAlias + "\" does not contain a key");
-                } else if (!(entryKey instanceof PrivateKey)) {
-                    throw new ParameterException(
-                            keystoreFile + " entry \"" + keyAlias + "\" does not contain a private"
-                                    + " key. It contains a key of algorithm: "
-                                    + entryKey.getAlgorithm());
-                }
-                key = (PrivateKey) entryKey;
-            } catch (UnrecoverableKeyException e) {
-                throw new IOException(
-                        "Failed to obtain key with alias \"" + keyAlias + "\" from " + keystoreFile
-                                + ". Wrong password?",
-                        e);
-            }
-            this.privateKey = key;
-            Certificate[] certChain = ks.getCertificateChain(keyAlias);
-            if ((certChain == null) || (certChain.length == 0)) {
-                throw new ParameterException(
-                        keystoreFile + " entry \"" + keyAlias + "\" does not contain certificates");
-            }
-            this.certs = new ArrayList<>(certChain.length);
-            for (Certificate cert : certChain) {
-                this.certs.add((X509Certificate) cert);
-            }
-        }
-
-        /**
-         * Loads the password-protected keystore from storage.
-         *
-         * @param file file backing the keystore or {@code null} if the keystore is not file-backed,
-         *        for example, a PKCS #11 KeyStore.
-         */
-        private static void loadKeyStoreFromFile(KeyStore ks, String file, List<char[]> passwords)
-                throws Exception {
-            Exception lastFailure = null;
-            for (char[] password : passwords) {
-                try {
-                    if (file != null) {
-                        try (FileInputStream in = new FileInputStream(file)) {
-                            ks.load(in, password);
-                        }
-                    } else {
-                        ks.load(null, password);
-                    }
-                    return;
-                } catch (Exception e) {
-                    lastFailure = e;
-                }
-            }
-            if (lastFailure == null) {
-                throw new RuntimeException("No keystore passwords");
-            } else {
-                throw lastFailure;
-            }
-        }
-
-        private static Key getKeyStoreKey(KeyStore ks, String keyAlias, List<char[]> passwords)
-                throws UnrecoverableKeyException, NoSuchAlgorithmException, KeyStoreException {
-            UnrecoverableKeyException lastFailure = null;
-            for (char[] password : passwords) {
-                try {
-                    return ks.getKey(keyAlias, password);
-                } catch (UnrecoverableKeyException e) {
-                    lastFailure = e;
-                }
-            }
-            if (lastFailure == null) {
-                throw new RuntimeException("No key passwords");
-            } else {
-                throw lastFailure;
-            }
-        }
-
-        private void loadPrivateKeyAndCertsFromFiles(PasswordRetriever passwordRetriver)
-                throws Exception {
-            if (keyFile == null) {
-                throw new ParameterException("Private key file (--key) must be specified");
-            }
-            if (certFile == null) {
-                throw new ParameterException("Certificate file (--cert) must be specified");
-            }
-            byte[] privateKeyBlob = readFully(new File(keyFile));
-
-            PKCS8EncodedKeySpec keySpec;
-            // Potentially encrypted key blob
-            try {
-                EncryptedPrivateKeyInfo encryptedPrivateKeyInfo =
-                        new EncryptedPrivateKeyInfo(privateKeyBlob);
-
-                // The blob is indeed an encrypted private key blob
-                String passwordSpec =
-                        (keyPasswordSpec != null) ? keyPasswordSpec : PasswordRetriever.SPEC_STDIN;
-                Charset[] additionalPasswordEncodings =
-                        (passwordCharset != null)
-                                ? new Charset[] {passwordCharset} : new Charset[0];
-                List<char[]> keyPasswords =
-                        passwordRetriver.getPasswords(
-                                passwordSpec,
-                                "Private key password for " + name,
-                                additionalPasswordEncodings);
-                keySpec = decryptPkcs8EncodedKey(encryptedPrivateKeyInfo, keyPasswords);
-            } catch (IOException e) {
-                // The blob is not an encrypted private key blob
-                if (keyPasswordSpec == null) {
-                    // Given that no password was specified, assume the blob is an unencrypted
-                    // private key blob
-                    keySpec = new PKCS8EncodedKeySpec(privateKeyBlob);
-                } else {
-                    throw new InvalidKeySpecException(
-                            "Failed to parse encrypted private key blob " + keyFile, e);
-                }
-            }
-
-            // Load the private key from its PKCS #8 encoded form.
-            try {
-                privateKey = loadPkcs8EncodedPrivateKey(keySpec);
-            } catch (InvalidKeySpecException e) {
-                throw new InvalidKeySpecException(
-                        "Failed to load PKCS #8 encoded private key from " + keyFile, e);
-            }
-
-            // Load certificates
-            Collection<? extends Certificate> certs;
-            try (FileInputStream in = new FileInputStream(certFile)) {
-                certs = X509CertificateUtils.generateCertificates(in);
-            }
-            List<X509Certificate> certList = new ArrayList<>(certs.size());
-            for (Certificate cert : certs) {
-                certList.add((X509Certificate) cert);
-            }
-            this.certs = certList;
-        }
-
-        private static PKCS8EncodedKeySpec decryptPkcs8EncodedKey(
-                EncryptedPrivateKeyInfo encryptedPrivateKeyInfo, List<char[]> passwords)
-                throws NoSuchAlgorithmException, InvalidKeySpecException, InvalidKeyException {
-            SecretKeyFactory keyFactory =
-                    SecretKeyFactory.getInstance(encryptedPrivateKeyInfo.getAlgName());
-            InvalidKeySpecException lastKeySpecException = null;
-            InvalidKeyException lastKeyException = null;
-            for (char[] password : passwords) {
-                PBEKeySpec decryptionKeySpec = new PBEKeySpec(password);
-                try {
-                    SecretKey decryptionKey = keyFactory.generateSecret(decryptionKeySpec);
-                    return encryptedPrivateKeyInfo.getKeySpec(decryptionKey);
-                } catch (InvalidKeySpecException e) {
-                    lastKeySpecException = e;
-                } catch (InvalidKeyException e) {
-                    lastKeyException = e;
-                }
-            }
-            if ((lastKeyException == null) && (lastKeySpecException == null)) {
-                throw new RuntimeException("No passwords");
-            } else if (lastKeyException != null) {
-                throw lastKeyException;
-            } else {
-                throw lastKeySpecException;
-            }
-        }
-
-        private static PrivateKey loadPkcs8EncodedPrivateKey(PKCS8EncodedKeySpec spec)
-                throws InvalidKeySpecException, NoSuchAlgorithmException {
-            try {
-                return KeyFactory.getInstance("RSA").generatePrivate(spec);
-            } catch (InvalidKeySpecException expected) {
-            }
-            try {
-                return KeyFactory.getInstance("EC").generatePrivate(spec);
-            } catch (InvalidKeySpecException expected) {
-            }
-            try {
-                return KeyFactory.getInstance("DSA").generatePrivate(spec);
-            } catch (InvalidKeySpecException expected) {
-            }
-            throw new InvalidKeySpecException("Not an RSA, EC, or DSA private key");
-        }
-    }
-
-    private static byte[] readFully(File file) throws IOException {
-        ByteArrayOutputStream result = new ByteArrayOutputStream();
-        try (FileInputStream in = new FileInputStream(file)) {
-            drain(in, result);
-        }
-        return result.toByteArray();
-    }
-
-    private static void drain(InputStream in, OutputStream out) throws IOException {
-        byte[] buf = new byte[65536];
-        int chunkSize;
-        while ((chunkSize = in.read(buf)) != -1) {
-            out.write(buf, 0, chunkSize);
-        }
-    }
-
-    /**
-     * Indicates that there is an issue with command-line parameters provided to this tool.
-     */
-    private static class ParameterException extends Exception {
-        private static final long serialVersionUID = 1L;
-
-        ParameterException(String message) {
-            super(message);
+            throw new ParameterException("Failed to load signer \"" + params.getName() + "\"");
         }
     }
 }
