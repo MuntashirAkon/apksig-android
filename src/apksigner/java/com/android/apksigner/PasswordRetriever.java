@@ -42,11 +42,11 @@ import java.util.Map;
  * input) which adds the need to keep some sources open across password retrievals. This class
  * addresses the need.
  *
- * <p>To use this retriever, construct a new instance, use
- * {@link #getPasswords(String, String, Charset...)} to retrieve passwords, and then invoke
- * {@link #close()} on the instance when done, enabling the instance to release any held resources.
+ * <p>To use this retriever, construct a new instance, use {@link #getPasswords(String, String,
+ * Charset...)} to retrieve passwords, and then invoke {@link #close()} on the instance when done,
+ * enabling the instance to release any held resources.
  */
-class PasswordRetriever implements AutoCloseable {
+public class PasswordRetriever implements AutoCloseable {
     public static final String SPEC_STDIN = "stdin";
 
     /** Character encoding used by the console or {@code null} if not known. */
@@ -56,7 +56,7 @@ class PasswordRetriever implements AutoCloseable {
 
     private boolean mClosed;
 
-    PasswordRetriever() {
+    public PasswordRetriever() {
         mConsoleEncoding = getConsoleEncoding();
     }
 

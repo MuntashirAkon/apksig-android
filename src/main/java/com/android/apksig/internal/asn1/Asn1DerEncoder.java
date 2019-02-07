@@ -552,6 +552,7 @@ public final class Asn1DerEncoder {
                         return createTag(BerEncoding.TAG_CLASS_UNIVERSAL, false,
                                 BerEncoding.getTagNumber(targetType), ((String) source).getBytes());
                     }
+                    break;
                 case OBJECT_IDENTIFIER:
                     if (source instanceof String) {
                         return toOid((String) source);
