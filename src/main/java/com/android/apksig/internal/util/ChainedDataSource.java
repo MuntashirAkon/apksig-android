@@ -106,7 +106,7 @@ public class ChainedDataSource implements DataSource {
         long beginLocalOffset = firstSource.getSecond();
         DataSource beginSource = mSources[beginIndex];
 
-        if (beginLocalOffset + size <= beginSource.size() || size == 0) {
+        if (beginLocalOffset + size <= beginSource.size()) {
             return beginSource.slice(beginLocalOffset, size);
         }
 
@@ -115,15 +115,15 @@ public class ChainedDataSource implements DataSource {
         sources.add(beginSource.slice(
                 beginLocalOffset, beginSource.size() - beginLocalOffset));
 
-        Pair<Integer, Long> lastSource = locateDataSource(offset + size - 1);
+        Pair<Integer, Long> lastSource = locateDataSource(offset + size);
         int endIndex = lastSource.getFirst();
         long endLocalOffset = lastSource.getSecond();
 
-        for (int i = beginIndex + 1; i < endIndex; i++) {
+        for (int i = beginIndex + 1; i < endIndex - 1; i++) {
             sources.add(mSources[i]);
         }
 
-        sources.add(mSources[endIndex].slice(0, endLocalOffset + 1));
+        sources.add(mSources[endIndex].slice(0, endLocalOffset));
         return new ChainedDataSource(sources.toArray(new DataSource[0]));
     }
 
