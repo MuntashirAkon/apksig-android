@@ -2,6 +2,8 @@
 
 licenses(["notice"])  # Apache License 2.0
 
+load("//tools/base/bazel:coverage.bzl", "coverage_java_test")
+
 # Public API of the apksig library
 java_library(
     name = "apksig",
@@ -52,7 +54,7 @@ java_binary(
     ],
 )
 
-java_test(
+coverage_java_test(
     name = "all",
     srcs = glob([
         "src/test/java/com/android/apksig/**/*.java",
