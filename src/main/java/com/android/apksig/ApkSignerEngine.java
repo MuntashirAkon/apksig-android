@@ -19,6 +19,7 @@ package com.android.apksig;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
+import com.android.apksig.util.RunnablesExecutor;
 import java.io.Closeable;
 import java.io.IOException;
 import java.lang.UnsupportedOperationException;
@@ -115,6 +116,10 @@ import java.util.Set;
  * @see <a href="https://source.android.com/security/apksigning/index.html">Application Signing</a>
  */
 public interface ApkSignerEngine extends Closeable {
+
+    default void setExecutor(RunnablesExecutor executor) {
+        throw new UnsupportedOperationException("setExecutor method is not implemented");
+    }
 
     /**
      * Initializes the signer engine with the data already present in the apk (if any). There

@@ -16,8 +16,8 @@
 
 package com.android.apksig.internal.apk;
 
-import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.ApkVerifier;
+import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkSigningBlockNotFoundException;
 import com.android.apksig.apk.ApkUtils;
@@ -31,6 +31,7 @@ import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 
+import com.android.apksig.util.RunnablesExecutor;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -153,6 +154,7 @@ public class ApkSigningBlockUtils {
      * exhibit the same behavior on all Android platform versions.
      */
     public static void verifyIntegrity(
+            RunnablesExecutor executor,
             DataSource beforeApkSigningBlock,
             DataSource centralDir,
             ByteBuffer eocd,
@@ -180,6 +182,7 @@ public class ApkSigningBlockUtils {
         try {
             actualContentDigests =
                     computeContentDigests(
+                            executor,
                             contentDigestAlgorithms,
                             beforeApkSigningBlock,
                             centralDir,
@@ -406,6 +409,7 @@ public class ApkSigningBlockUtils {
     }
 
     public static Map<ContentDigestAlgorithm, byte[]> computeContentDigests(
+            RunnablesExecutor executor,
             Set<ContentDigestAlgorithm> digestAlgorithms,
             DataSource beforeCentralDir,
             DataSource centralDir,
@@ -415,7 +419,8 @@ public class ApkSigningBlockUtils {
                 .filter(a -> a == ContentDigestAlgorithm.CHUNKED_SHA256 ||
                              a == ContentDigestAlgorithm.CHUNKED_SHA512)
                 .collect(Collectors.toSet());
-        computeOneMbChunkContentDigestsMultithread(
+        computeOneMbChunkContentDigests(
+                executor,
                 oneMbChunkBasedAlgorithm,
                 new DataSource[] { beforeCentralDir, centralDir, eocd },
                 contentDigests);
@@ -529,27 +534,11 @@ public class ApkSigningBlockUtils {
         }
     }
 
-    static void computeOneMbChunkContentDigestsMultithread(
+    static void computeOneMbChunkContentDigests(
+            RunnablesExecutor executor,
             Set<ContentDigestAlgorithm> digestAlgorithms,
             DataSource[] contents,
             Map<ContentDigestAlgorithm, byte[]> outputContentDigests)
-            throws NoSuchAlgorithmException, DigestException {
-        ForkJoinPool forkJoinPool = ForkJoinPool.commonPool();
-        computeOneMbChunkContentDigestsMultithread(
-                digestAlgorithms,
-                contents,
-                outputContentDigests,
-                forkJoinPool::submit,
-                forkJoinPool.getParallelism());
-        forkJoinPool.shutdown();
-    }
-
-    private static void computeOneMbChunkContentDigestsMultithread(
-            Set<ContentDigestAlgorithm> digestAlgorithms,
-            DataSource[] contents,
-            Map<ContentDigestAlgorithm, byte[]> outputContentDigests,
-            Function<Runnable, Future<?>> jobRunner,
-            int jobCount)
             throws NoSuchAlgorithmException, DigestException {
         long chunkCountLong = 0;
         for (DataSource input : contents) {
@@ -566,23 +555,8 @@ public class ApkSigningBlockUtils {
             chunkDigestsList.add(new ChunkDigests(algorithms, chunkCount));
         }
 
-        List<Future<?>> jobs = new ArrayList<>(jobCount);
         ChunkSupplier chunkSupplier = new ChunkSupplier(contents);
-        for (int i = 0; i < jobCount; i++) {
-            jobs.add(jobRunner.apply(new ChunkDigester(chunkSupplier, chunkDigestsList)));
-        }
-
-        try {
-            for (Future<?> future : jobs) {
-                future.get();
-            }
-        }
-        catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        }
+        executor.execute(() -> new ChunkDigester(chunkSupplier, chunkDigestsList));
 
         // Compute and write out final digest for each algorithm.
         for (ChunkDigests chunkDigests : chunkDigestsList) {
@@ -594,9 +568,9 @@ public class ApkSigningBlockUtils {
     }
 
     private static class ChunkDigests {
-        private ContentDigestAlgorithm algorithm;
-        private int digestOutputSize;
-        private byte[] concatOfDigestsOfChunks;
+        private final ContentDigestAlgorithm algorithm;
+        private final int digestOutputSize;
+        private final byte[] concatOfDigestsOfChunks;
 
         private ChunkDigests(ContentDigestAlgorithm algorithm, int chunkCount) {
             this.algorithm = algorithm;
@@ -627,13 +601,16 @@ public class ApkSigningBlockUtils {
         private final List<MessageDigest> messageDigests;
         private final DataSink mdSink;
 
-        private ChunkDigester(ChunkSupplier dataSupplier, List<ChunkDigests> chunkDigests)
-                throws NoSuchAlgorithmException {
+        private ChunkDigester(ChunkSupplier dataSupplier, List<ChunkDigests> chunkDigests) {
             this.dataSupplier = dataSupplier;
             this.chunkDigests = chunkDigests;
             messageDigests = new ArrayList<>(chunkDigests.size());
             for (ChunkDigests chunkDigest : chunkDigests) {
-                messageDigests.add(chunkDigest.createMessageDigest());
+                try {
+                    messageDigests.add(chunkDigest.createMessageDigest());
+                } catch (NoSuchAlgorithmException ex) {
+                    throw new RuntimeException(ex);
+                }
             }
             mdSink = DataSinks.asDataSink(messageDigests.toArray(new MessageDigest[0]));
         }
@@ -782,7 +759,7 @@ public class ApkSigningBlockUtils {
         outputContentDigests.put(ContentDigestAlgorithm.VERITY_CHUNKED_SHA256, encoded.array());
     }
 
-    private static final long getChunkCount(long inputSize, long chunkSize) {
+    private static long getChunkCount(long inputSize, long chunkSize) {
         return (inputSize + chunkSize - 1) / chunkSize;
     }
 
@@ -1032,6 +1009,7 @@ public class ApkSigningBlockUtils {
      */
     public static Pair<List<SignerConfig>, Map<ContentDigestAlgorithm, byte[]>>
             computeContentDigests(
+                    RunnablesExecutor executor,
                     DataSource beforeCentralDir,
                     DataSource centralDir,
                     DataSource eocd,
@@ -1055,6 +1033,7 @@ public class ApkSigningBlockUtils {
         try {
             contentDigests =
                     computeContentDigests(
+                            executor,
                             contentDigestAlgorithms,
                             beforeCentralDir,
                             centralDir,
