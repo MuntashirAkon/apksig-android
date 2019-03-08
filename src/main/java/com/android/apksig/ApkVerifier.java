@@ -29,6 +29,7 @@ import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
+import com.android.apksig.util.RunnablesExecutor;
 import com.android.apksig.zip.ZipFormatException;
 import java.io.Closeable;
 import java.io.File;
@@ -211,12 +212,13 @@ public class ApkVerifier {
         // verification. If the signature is found but does not verify, the APK is rejected.
         Set<Integer> foundApkSigSchemeIds = new HashSet<>(2);
         if (maxSdkVersion >= AndroidSdkVersion.N) {
-
+            RunnablesExecutor executor = RunnablesExecutor.SINGLE_THREADED;
             // Android P and newer attempts to verify APKs using APK Signature Scheme v3
             if (maxSdkVersion >= AndroidSdkVersion.P) {
                 try {
                     ApkSigningBlockUtils.Result v3Result =
                             V3SchemeVerifier.verify(
+                                    executor,
                                     apk,
                                     zipSections,
                                     Math.max(minSdkVersion, AndroidSdkVersion.P),
@@ -239,6 +241,7 @@ public class ApkVerifier {
                 try {
                     ApkSigningBlockUtils.Result v2Result =
                             V2SchemeVerifier.verify(
+                                    executor,
                                     apk,
                                     zipSections,
                                     supportedSchemeNames,
