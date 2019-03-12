@@ -33,6 +33,7 @@ import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
 
+import com.android.apksig.util.RunnablesExecutor;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -140,6 +141,9 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
      * been issued.
      */
     private OutputApkSigningBlockRequestImpl mAddSigningBlockRequest;
+
+
+    private RunnablesExecutor mExecutor = RunnablesExecutor.SINGLE_THREADED;
 
     private DefaultApkSignerEngine(
             List<SignerConfig> signerConfigs,
@@ -444,6 +448,11 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             }
         }
         return mOutputJarEntryDigests.keySet();
+    }
+
+    @Override
+    public void setExecutor(RunnablesExecutor executor) {
+        mExecutor = executor;
     }
 
     @Override
@@ -774,16 +783,25 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             List<ApkSigningBlockUtils.SignerConfig> v2SignerConfigs =
                     createV2SignerConfigs(apkSigningBlockPaddingSupported);
             signingSchemeBlocks.add(
-                    V2SchemeSigner.generateApkSignatureSchemeV2Block(beforeCentralDir,
-                            zipCentralDirectory, eocd, v2SignerConfigs, mV3SigningEnabled));
+                    V2SchemeSigner.generateApkSignatureSchemeV2Block(
+                            mExecutor,
+                            beforeCentralDir,
+                            zipCentralDirectory,
+                            eocd,
+                            v2SignerConfigs,
+                            mV3SigningEnabled));
         }
         if (mV3SigningEnabled) {
             invalidateV3Signature();
             List<ApkSigningBlockUtils.SignerConfig> v3SignerConfigs =
                     createV3SignerConfigs(apkSigningBlockPaddingSupported);
             signingSchemeBlocks.add(
-                    V3SchemeSigner.generateApkSignatureSchemeV3Block(beforeCentralDir,
-                            zipCentralDirectory, eocd, v3SignerConfigs));
+                    V3SchemeSigner.generateApkSignatureSchemeV3Block(
+                            mExecutor,
+                            beforeCentralDir,
+                            zipCentralDirectory,
+                            eocd,
+                            v3SignerConfigs));
         }
 
         // create APK Signing Block with v2 and/or v3 blocks
