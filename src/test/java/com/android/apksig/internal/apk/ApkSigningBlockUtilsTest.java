@@ -101,7 +101,7 @@ public class ApkSigningBlockUtilsTest {
                     List<Future<?>> jobs = new ArrayList<>(jobCount);
 
                     for (int i = 0; i < jobCount; i++) {
-                        jobs.add(forkJoinPool.submit(provider.getRunnable()));
+                        jobs.add(forkJoinPool.submit(provider.createRunnable()));
                     }
 
                     try {
