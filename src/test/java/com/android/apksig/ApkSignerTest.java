@@ -21,8 +21,16 @@ import static org.junit.Assert.fail;
 
 import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.apk.ApkFormatException;
+import com.android.apksig.apk.ApkUtils;
+import com.android.apksig.internal.apk.ApkSigningBlockUtils;
+import com.android.apksig.internal.apk.SignatureInfo;
+import com.android.apksig.internal.apk.v2.V2SchemeSigner;
+import com.android.apksig.internal.apk.v3.V3SchemeSigner;
+import com.android.apksig.internal.asn1.Asn1BerParser;
 import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.util.Resources;
+import com.android.apksig.internal.x509.RSAPublicKey;
+import com.android.apksig.internal.x509.SubjectPublicKeyInfo;
 import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
@@ -44,6 +52,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+import java.math.BigInteger;
+
 @RunWith(JUnit4.class)
 public class ApkSignerTest {
 
@@ -58,6 +68,10 @@ public class ApkSignerTest {
     private static final String FIRST_RSA_2048_SIGNER_RESOURCE_NAME = "rsa-2048";
     private static final String SECOND_RSA_2048_SIGNER_RESOURCE_NAME = "rsa-2048_2";
     private static final String THIRD_RSA_2048_SIGNER_RESOURCE_NAME = "rsa-2048_3";
+
+    // This is the same cert as above with the modulus reencoded to remove the leading 0 sign bit.
+    private static final String FIRST_RSA_2048_SIGNER_CERT_WITH_NEGATIVE_MODULUS =
+            "rsa-2048_negmod.x509.der";
 
     private static final String LINEAGE_RSA_2048_2_SIGNERS_RESOURCE_NAME =
             "rsa-2048-lineage-2-signers";
@@ -806,6 +820,83 @@ public class ApkSignerTest {
                 lineageFromApk.isSignerInLineage((secondSigner)));
     }
 
+    @Test
+    public void testPublicKeyHasPositiveModulusAfterSigning() throws Exception {
+        // The V2 and V3 signature schemes include the public key from the certificate in the
+        // signing block. If a certificate with an RSAPublicKey is improperly encoded with a
+        // negative modulus this was previously written to the signing block as is and failed on
+        // device verification since on device the public key in the certificate was reencoded with
+        // the correct encoding for the modulus. This test uses an improperly encoded certificate to
+        // sign an APK and verifies that the public key in the signing block is corrected with a
+        // positive modulus to allow on device installs / updates.
+        List<ApkSigner.SignerConfig> signersList = Collections.singletonList(
+                getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
+                        FIRST_RSA_2048_SIGNER_CERT_WITH_NEGATIVE_MODULUS));
+        DataSource signedApk = sign("original.apk", new ApkSigner.Builder(signersList)
+                .setV1SigningEnabled(true)
+                .setV2SigningEnabled(true)
+                .setV3SigningEnabled(true));
+        RSAPublicKey v2PublicKey = getRSAPublicKeyFromSigningBlock(signedApk,
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2);
+        assertTrue("The modulus in the public key in the V2 signing block must not be negative",
+                v2PublicKey.modulus.compareTo(BigInteger.ZERO) > 0);
+        RSAPublicKey v3PublicKey = getRSAPublicKeyFromSigningBlock(signedApk,
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
+        assertTrue("The modulus in the public key in the V3 signing block must not be negative",
+                v3PublicKey.modulus.compareTo(BigInteger.ZERO) > 0);
+    }
+
+    private RSAPublicKey getRSAPublicKeyFromSigningBlock(DataSource apk, int signatureVersionId)
+            throws Exception {
+        int signatureVersionBlockId;
+        switch (signatureVersionId) {
+            case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2:
+                signatureVersionBlockId = V2SchemeSigner.APK_SIGNATURE_SCHEME_V2_BLOCK_ID;
+                break;
+            case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3:
+                signatureVersionBlockId = V3SchemeSigner.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
+                break;
+            default:
+                throw new Exception(
+                        "Invalid signature version ID specified: " + signatureVersionId);
+        }
+        ApkUtils.ZipSections zipSections = ApkUtils.findZipSections(apk);
+        ApkSigningBlockUtils.Result result = new ApkSigningBlockUtils.Result(
+                signatureVersionId);
+        SignatureInfo signatureInfo = ApkSigningBlockUtils.findSignature(apk, zipSections,
+                signatureVersionBlockId, result);
+        // FORMAT:
+        // * length prefixed sequence of length prefixed signers
+        //   * length-prefixed signed data
+        //   * V3+ only - minSDK (uint32)
+        //   * V3+ only - maxSDK (uint32)
+        //   * length-prefixed sequence of length-prefixed signatures:
+        //   * length-prefixed bytes: public key (X.509 SubjectPublicKeyInfo, ASN.1 DER encoded)
+        ByteBuffer signers = ApkSigningBlockUtils.getLengthPrefixedSlice(
+                signatureInfo.signatureBlock);
+        ByteBuffer signer = ApkSigningBlockUtils.getLengthPrefixedSlice(signers);
+        // Since all the data is read from the signer block the signedData and signatures are
+        // discarded.
+        ApkSigningBlockUtils.getLengthPrefixedSlice(signer);
+        // For V3+ signature version IDs discard the min / max SDKs as well
+        if (signatureVersionId >= ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3) {
+            signer.getInt();
+            signer.getInt();
+        }
+        ApkSigningBlockUtils.getLengthPrefixedSlice(signer);
+        ByteBuffer publicKey = ApkSigningBlockUtils.getLengthPrefixedSlice(signer);
+        SubjectPublicKeyInfo subjectPublicKeyInfo = Asn1BerParser.parse(publicKey,
+                SubjectPublicKeyInfo.class);
+        ByteBuffer subjectPublicKeyBuffer = subjectPublicKeyInfo.subjectPublicKey;
+        // The SubjectPublicKey is stored as a bit string in the SubjectPublicKeyInfo with the first
+        // byte indicating the number of padding bits in the public key. Read this first byte to
+        // allow parsing the rest of the RSAPublicKey as a sequence.
+        subjectPublicKeyBuffer.get();
+        RSAPublicKey rsaPublicKey = Asn1BerParser.parse(subjectPublicKeyBuffer,
+                RSAPublicKey.class);
+        return rsaPublicKey;
+    }
+
     /**
      * Asserts that signing the specified golden input file using the provided signing
      * configuration produces output identical to the specified golden output file.
@@ -901,6 +992,15 @@ public class ApkSignerTest {
                 Resources.toPrivateKey(ApkSignerTest.class, keyNameInResources + ".pk8");
         List<X509Certificate> certs =
                 Resources.toCertificateChain(ApkSignerTest.class, keyNameInResources + ".x509.pem");
+        return new ApkSigner.SignerConfig.Builder(keyNameInResources, privateKey, certs).build();
+    }
+
+    private static ApkSigner.SignerConfig getDefaultSignerConfigFromResources(
+            String keyNameInResources, String certNameInResources) throws Exception {
+        PrivateKey privateKey = Resources.toPrivateKey(ApkSignerTest.class,
+                keyNameInResources + ".pk8");
+        List<X509Certificate> certs = Resources.toCertificateChain(ApkSignerTest.class,
+                certNameInResources);
         return new ApkSigner.SignerConfig.Builder(keyNameInResources, privateKey, certs).build();
     }
 }
