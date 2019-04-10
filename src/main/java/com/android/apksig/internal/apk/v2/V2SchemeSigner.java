@@ -70,7 +70,7 @@ public abstract class V2SchemeSigner {
      * protected by signatures inside the block.
      */
 
-    private static final int APK_SIGNATURE_SCHEME_V2_BLOCK_ID = 0x7109871a;
+    public static final int APK_SIGNATURE_SCHEME_V2_BLOCK_ID = 0x7109871a;
 
     /** Hidden constructor to prevent instantiation. */
     private V2SchemeSigner() {}

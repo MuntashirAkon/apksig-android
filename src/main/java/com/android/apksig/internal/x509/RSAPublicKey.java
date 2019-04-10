@@ -14,10 +14,22 @@
  * limitations under the License.
  */
 
-package com.android.apksig.util;
+package com.android.apksig.internal.x509;
 
-public interface RunnablesExecutor {
-    RunnablesExecutor SINGLE_THREADED = p -> p.createRunnable().run();
+import com.android.apksig.internal.asn1.Asn1Class;
+import com.android.apksig.internal.asn1.Asn1Field;
+import com.android.apksig.internal.asn1.Asn1Type;
 
-    void execute(RunnablesProvider provider);
+import java.math.BigInteger;
+
+/**
+ * {@code RSAPublicKey} as specified in RFC 3279.
+ */
+@Asn1Class(type = Asn1Type.SEQUENCE)
+public class RSAPublicKey {
+    @Asn1Field(index = 0, type = Asn1Type.INTEGER)
+    public BigInteger modulus;
+
+    @Asn1Field(index = 1, type = Asn1Type.INTEGER)
+    public BigInteger publicExponent;
 }
