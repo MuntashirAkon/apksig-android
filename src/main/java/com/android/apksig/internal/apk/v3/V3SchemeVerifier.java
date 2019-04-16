@@ -33,7 +33,7 @@ import com.android.apksig.internal.util.ByteBufferUtils;
 import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.util.DataSource;
-
+import com.android.apksig.util.RunnablesExecutor;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -94,6 +94,7 @@ public abstract class V3SchemeVerifier {
      * @throws IOException if an I/O error occurs when reading the APK
      */
     public static ApkSigningBlockUtils.Result verify(
+            RunnablesExecutor executor,
             DataSource apk,
             ApkUtils.ZipSections zipSections,
             int minSdkVersion,
@@ -118,7 +119,8 @@ public abstract class V3SchemeVerifier {
             minSdkVersion = AndroidSdkVersion.P;
         }
 
-        verify(beforeApkSigningBlock,
+        verify(executor,
+                beforeApkSigningBlock,
                 signatureInfo.signatureBlock,
                 centralDir,
                 eocd,
@@ -131,13 +133,14 @@ public abstract class V3SchemeVerifier {
     /**
      * Verifies the provided APK's v3 signatures and outputs the results into the provided
      * {@code result}. APK is considered verified only if there are no errors reported in the
-     * {@code result}. See {@link #verify(DataSource, ApkUtils.ZipSections, int, int)} for more
-     * information about the contract of this method.
+     * {@code result}. See {@link #verify(RunnablesExecutor, DataSource, ApkUtils.ZipSections, int,
+     * int)} for more information about the contract of this method.
      *
      * @param result result populated by this method with interesting information about the APK,
      *        such as information about signers, and verification errors and warnings.
      */
     private static void verify(
+            RunnablesExecutor executor,
             DataSource beforeApkSigningBlock,
             ByteBuffer apkSignatureSchemeV3Block,
             DataSource centralDir,
@@ -153,7 +156,7 @@ public abstract class V3SchemeVerifier {
             return;
         }
         ApkSigningBlockUtils.verifyIntegrity(
-                beforeApkSigningBlock, centralDir, eocd, contentDigestsToVerify, result);
+                executor, beforeApkSigningBlock, centralDir, eocd, contentDigestsToVerify, result);
 
         // make sure that the v3 signers cover the entire targeted sdk version ranges and that the
         // longest SigningCertificateHistory, if present, corresponds to the newest platform
@@ -429,7 +432,14 @@ public abstract class V3SchemeVerifier {
             return;
         }
         X509Certificate mainCertificate = result.certs.get(0);
-        byte[] certificatePublicKeyBytes = mainCertificate.getPublicKey().getEncoded();
+        byte[] certificatePublicKeyBytes;
+        try {
+            certificatePublicKeyBytes = ApkSigningBlockUtils.encodePublicKey(mainCertificate.getPublicKey());
+        } catch (InvalidKeyException e) {
+            System.out.println("Caught an exception encoding the public key: " + e);
+            e.printStackTrace();
+            certificatePublicKeyBytes = mainCertificate.getPublicKey().getEncoded();
+        }
         if (!Arrays.equals(publicKeyBytes, certificatePublicKeyBytes)) {
             result.addError(
                     Issue.V3_SIG_PUBLIC_KEY_MISMATCH_BETWEEN_CERTIFICATE_AND_SIGNATURES_RECORD,
