@@ -71,7 +71,7 @@ import java.util.stream.Collectors;
 
 public class ApkSigningBlockUtils {
 
-    private static final char[] HEX_DIGITS = "01234567890abcdef".toCharArray();
+    private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
     private static final long CONTENT_DIGESTED_CHUNK_MAX_SIZE_BYTES = 1024 * 1024;
     public static final int ANDROID_COMMON_PAGE_ALIGNMENT_BYTES = 4096;
     public static final byte[] APK_SIGNING_BLOCK_MAGIC =
