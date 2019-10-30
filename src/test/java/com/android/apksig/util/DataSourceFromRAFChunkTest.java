@@ -24,14 +24,22 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
 
 /**
  * Tests for the {@link DataSource} returned by
  * {@link DataSources#asDataSource(RandomAccessFile, long, long)}.
  */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class DataSourceFromRAFChunkTest extends DataSourceTestBase {
+
+    @Parameterized.Parameters(name = "{0}")
+    public static DataSourceFromRAFFactory[] data() {
+        return DataSourceFromRAFFactory.values();
+    }
+
+    @Parameterized.Parameter
+    public DataSourceFromRAFFactory factory;
 
     @Test
     public void testFileSizeChangesNotVisible() throws Exception {
@@ -82,7 +90,7 @@ public class DataSourceFromRAFChunkTest extends DataSourceTestBase {
         }
 
         return CloseableWithDataSource.of(
-                DataSources.asDataSource(f, 2, contents.length),
+                factory.create(f, 2, contents.length),
                 new DataSourceFromRAFTest.TmpFileCloseable(tmp, f));
     }
 }
