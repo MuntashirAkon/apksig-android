@@ -31,14 +31,14 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class RandomAccessFileDataSourceTest {
+public class FileChannelDataSourceTest {
     @Rule public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     @Test
     public void testFeedsCorrectData_whenFilePartiallyReadFromBeginning() throws Exception {
         byte[] fullFileContent = createFileContent(1024 * 1024 + 987654);
         RandomAccessFile raf = createRaf(fullFileContent);
-        DataSource rafDataSource = new RandomAccessFileDataSource(raf);
+        DataSource rafDataSource = new FileChannelDataSource(raf.getChannel());
 
         ByteArrayDataSink dataSink = new ByteArrayDataSink();
 
@@ -56,7 +56,7 @@ public class RandomAccessFileDataSourceTest {
     public void testFeedsCorrectData_whenFilePartiallyReadWithOffset() throws Exception {
         byte[] fullFileContent = createFileContent(1024 * 1024 + 987654);
         RandomAccessFile raf = createRaf(fullFileContent);
-        DataSource rafDataSource = new RandomAccessFileDataSource(raf);
+        DataSource rafDataSource = new FileChannelDataSource(raf.getChannel());
 
         ByteArrayDataSink dataSink = new ByteArrayDataSink();
 
@@ -75,7 +75,7 @@ public class RandomAccessFileDataSourceTest {
     public void testFeedsCorrectData_whenSeveralMbRead() throws Exception {
         byte[] fullFileContent = createFileContent(3 * 1024 * 1024 + 987654);
         RandomAccessFile raf = createRaf(fullFileContent);
-        DataSource rafDataSource = new RandomAccessFileDataSource(raf);
+        DataSource rafDataSource = new FileChannelDataSource(raf.getChannel());
 
         ByteArrayDataSink dataSink = new ByteArrayDataSink();
 
