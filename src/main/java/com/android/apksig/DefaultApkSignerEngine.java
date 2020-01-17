@@ -25,6 +25,7 @@ import com.android.apksig.internal.apk.v1.V1SchemeSigner;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
 import com.android.apksig.internal.apk.v3.V3SchemeSigner;
+import com.android.apksig.internal.apk.v4.V4SchemeSigner;
 import com.android.apksig.internal.jar.ManifestParser;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.Pair;
@@ -32,9 +33,10 @@ import com.android.apksig.internal.util.TeeDataSink;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
-
 import com.android.apksig.util.RunnablesExecutor;
+
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
@@ -339,6 +341,17 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         return processedConfigs;
     }
 
+    private ApkSigningBlockUtils.SignerConfig createV4SignerConfig()
+            throws InvalidKeyException, IllegalStateException {
+        List<ApkSigningBlockUtils.SignerConfig> configs = createSigningBlockSignerConfigs(true,
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4);
+        if (configs.size() != 1) {
+            throw new IllegalStateException(
+                    "Only accepting one signer config for V4 Signature Proto.");
+        }
+        return configs.get(0);
+    }
+
     private int getMinSdkFromV3SignatureAlgorithms(List<SignatureAlgorithm> algorithms) {
         int min = Integer.MAX_VALUE;
         for (SignatureAlgorithm algorithm : algorithms) {
@@ -397,6 +410,14 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     // that covers all supported platform versions.  Populate signatureAlgorithm
                     // with null, it will be cleaned-up in a later step.
                     newSignerConfig.signatureAlgorithms = null;
+                }
+                break;
+            case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4:
+                try {
+                    newSignerConfig.signatureAlgorithms = Collections.singletonList(
+                            V4SchemeSigner.getSuggestedSignatureAlgorithm(publicKey));
+                } catch (InvalidKeyException e) {
+                    newSignerConfig.signatureAlgorithms = new ArrayList<>();
                 }
                 break;
             default:
@@ -818,6 +839,19 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         checkNotClosed();
         checkV1SigningDoneIfEnabled();
         checkSigningBlockDoneIfEnabled();
+    }
+
+    @Override
+    public void signV4(DataSource dataSource, File outputFile) {
+        if (outputFile == null) {
+            return;
+        }
+        try {
+            ApkSigningBlockUtils.SignerConfig v4SignerConfig = createV4SignerConfig();
+            V4SchemeSigner.generateV4Signature(dataSource, v4SignerConfig, outputFile);
+        } catch (InvalidKeyException | IOException | NoSuchAlgorithmException  ignored) {
+            // It is okay to fail v4 signing for now.
+        }
     }
 
     @Override

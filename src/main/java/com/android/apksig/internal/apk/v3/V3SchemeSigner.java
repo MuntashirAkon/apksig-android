@@ -148,7 +148,6 @@ public abstract class V3SchemeSigner {
                     throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
         // FORMAT:
         // * length-prefixed sequence of length-prefixed signer blocks.
-
         List<byte[]> signerBlocks = new ArrayList<>(signerConfigs.size());
         int signerNumber = 0;
         for (SignerConfig signerConfig : signerConfigs) {

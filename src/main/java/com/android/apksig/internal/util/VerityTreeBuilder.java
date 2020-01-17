@@ -81,6 +81,14 @@ public class VerityTreeBuilder {
 
     /**
      * Returns the root hash of the verity tree built from the data source.
+     */
+    public byte[] generateVerityTreeRootHash(DataSource fileSource) throws IOException {
+        ByteBuffer verityBuffer = generateVerityTree(fileSource);
+        return getRootHashFromTree(verityBuffer);
+    }
+
+    /**
+     * Returns the byte buffer that contains the whole verity tree.
      *
      * The tree is built bottom up. The bottom level has 256-bit digest for each 4 KB block in the
      * input file.  If the total size is larger than 4 KB, take this level as input and repeat the
@@ -91,10 +99,8 @@ public class VerityTreeBuilder {
      *
      * The tree is currently stored only in memory and is never written out.  Nevertheless, it is
      * the actual verity tree format on disk, and is supposed to be re-generated on device.
-     *
-     * This is package-private for testing purpose.
      */
-    byte[] generateVerityTreeRootHash(DataSource fileSource) throws IOException {
+    public ByteBuffer generateVerityTree(DataSource fileSource) throws IOException {
         int digestSize = mMd.getDigestLength();
 
         // Calculate the summed area table of level size. In other word, this is the offset
@@ -113,7 +119,7 @@ public class VerityTreeBuilder {
                 digestDataByChunks(src, middleBufferSink);
             } else {
                 src = DataSources.asDataSource(slice(verityBuffer.asReadOnlyBuffer(),
-                            levelOffset[i + 1], levelOffset[i + 2]));
+                        levelOffset[i + 1], levelOffset[i + 2]));
                 digestDataByChunks(src, middleBufferSink);
             }
 
@@ -125,8 +131,13 @@ public class VerityTreeBuilder {
                 middleBufferSink.consume(padding, 0, padding.length);
             }
         }
+        return verityBuffer;
+    }
 
-        // Finally, calculate the root hash from the top level (only page).
+    /**
+     * Returns the digested root hash from the top level (only page) of a verity tree.
+     */
+    public byte[] getRootHashFromTree(ByteBuffer verityBuffer) throws IOException {
         ByteBuffer firstPage = slice(verityBuffer.asReadOnlyBuffer(), 0, CHUNK_SIZE);
         return saltedDigest(firstPage);
     }

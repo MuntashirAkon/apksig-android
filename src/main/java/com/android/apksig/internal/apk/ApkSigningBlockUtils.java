@@ -25,6 +25,15 @@ import com.android.apksig.internal.asn1.Asn1BerParser;
 import com.android.apksig.internal.asn1.Asn1DecodingException;
 import com.android.apksig.internal.asn1.Asn1DerEncoder;
 import com.android.apksig.internal.asn1.Asn1EncodingException;
+import com.android.apksig.internal.asn1.Asn1OpaqueObject;
+import com.android.apksig.internal.pkcs7.AlgorithmIdentifier;
+import com.android.apksig.internal.pkcs7.ContentInfo;
+import com.android.apksig.internal.pkcs7.EncapsulatedContentInfo;
+import com.android.apksig.internal.pkcs7.IssuerAndSerialNumber;
+import com.android.apksig.internal.pkcs7.Pkcs7Constants;
+import com.android.apksig.internal.pkcs7.SignedData;
+import com.android.apksig.internal.pkcs7.SignerIdentifier;
+import com.android.apksig.internal.pkcs7.SignerInfo;
 import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.util.ChainedDataSource;
 import com.android.apksig.internal.util.Pair;
@@ -60,6 +69,7 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -68,6 +78,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
+import javax.security.auth.x500.X500Principal;
 
 public class ApkSigningBlockUtils {
 
@@ -84,7 +96,7 @@ public class ApkSigningBlockUtils {
     public static final int VERSION_JAR_SIGNATURE_SCHEME = 1;
     public static final int VERSION_APK_SIGNATURE_SCHEME_V2 = 2;
     public static final int VERSION_APK_SIGNATURE_SCHEME_V3 = 3;
-
+    public static final int VERSION_APK_SIGNATURE_SCHEME_V4 = 4;
 
     /**
      * Returns positive number if {@code alg1} is preferred over {@code alg2}, {@code -1} if
@@ -742,24 +754,42 @@ public class ApkSigningBlockUtils {
     private static void computeApkVerityDigest(DataSource beforeCentralDir, DataSource centralDir,
             DataSource eocd, Map<ContentDigestAlgorithm, byte[]> outputContentDigests)
             throws IOException, NoSuchAlgorithmException {
-        // FORMAT:
-        // OFFSET       DATA TYPE  DESCRIPTION
-        // * @+0  bytes uint8[32]  Merkle tree root hash of SHA-256
-        // * @+32 bytes int64      Length of source data
-        int backBufferSize =
-                ContentDigestAlgorithm.VERITY_CHUNKED_SHA256.getChunkDigestOutputSizeBytes() +
-                Long.SIZE / Byte.SIZE;
-        ByteBuffer encoded = ByteBuffer.allocate(backBufferSize);
-        encoded.order(ByteOrder.LITTLE_ENDIAN);
-
+        ByteBuffer encoded = createVerityDigestBuffer();
         // Use 0s as salt for now.  This also needs to be consistent in the fsverify header for
         // kernel to use.
         VerityTreeBuilder builder = new VerityTreeBuilder(new byte[8]);
         byte[] rootHash = builder.generateVerityTreeRootHash(beforeCentralDir, centralDir, eocd);
         encoded.put(rootHash);
         encoded.putLong(beforeCentralDir.size() + centralDir.size() + eocd.size());
-
         outputContentDigests.put(ContentDigestAlgorithm.VERITY_CHUNKED_SHA256, encoded.array());
+    }
+
+    private static ByteBuffer createVerityDigestBuffer() {
+        // FORMAT:
+        // OFFSET       DATA TYPE  DESCRIPTION
+        // * @+0  bytes uint8[32]  Merkle tree root hash of SHA-256
+        // * @+32 bytes int64      Length of source data
+        int backBufferSize =
+                ContentDigestAlgorithm.VERITY_CHUNKED_SHA256.getChunkDigestOutputSizeBytes() +
+                        Long.SIZE / Byte.SIZE;
+        ByteBuffer encoded = ByteBuffer.allocate(backBufferSize);
+        encoded.order(ByteOrder.LITTLE_ENDIAN);
+        return encoded;
+    }
+
+    public static void computeChunkVerityTreeAndDigest(DataSource dataSource,
+            Map<ContentDigestAlgorithm, Pair<byte[], byte[]>> outputHashTreeAndDigests)
+            throws IOException, NoSuchAlgorithmException {
+        ByteBuffer encoded = createVerityDigestBuffer();
+        // Use 0s as salt for now.  This also needs to be consistent in the fsverify header for
+        // kernel to use.
+        VerityTreeBuilder builder = new VerityTreeBuilder(null);
+        ByteBuffer tree = builder.generateVerityTree(dataSource);
+        byte[] rootHash = builder.getRootHashFromTree(tree);
+        encoded.put(rootHash);
+        encoded.putLong(dataSource.size());
+        outputHashTreeAndDigests.put(ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
+                Pair.of(tree.array(), encoded.array()));
     }
 
     private static long getChunkCount(long inputSize, long chunkSize) {
@@ -1232,6 +1262,55 @@ public class ApkSigningBlockUtils {
             signatures.add(Pair.of(signatureAlgorithm.getId(), signatureBytes));
         }
         return signatures;
+    }
+
+    /**
+     * Wrap the signature according to CMS PKCS #7 RFC 5652.
+     * The high-level simplified structure is as follows:
+     * // ContentInfo
+     *     //   digestAlgorithm
+     *     //   SignedData
+     *     //     bag of certificates
+     *     //     SignerInfo
+     *     //       signing cert issuer and serial number (for locating the cert in the above bag)
+     *     //       digestAlgorithm
+     *     //       signatureAlgorithm
+     *     //       signature
+     *
+     * @throws Asn1EncodingException
+     */
+    public static byte[] generatePkcs7DerEncodedMessage(
+            byte[] signatureBytes, List<X509Certificate> signerCerts,
+            AlgorithmIdentifier digestAlgorithmId, AlgorithmIdentifier signatureAlgorithmId)
+            throws Asn1EncodingException, CertificateEncodingException {
+        SignerInfo signerInfo = new SignerInfo();
+        signerInfo.version = 1;
+        X509Certificate signingCert = signerCerts.get(0);
+        X500Principal signerCertIssuer = signingCert.getIssuerX500Principal();
+        signerInfo.sid =
+                new SignerIdentifier(
+                        new IssuerAndSerialNumber(
+                                new Asn1OpaqueObject(signerCertIssuer.getEncoded()),
+                                signingCert.getSerialNumber()));
+
+        signerInfo.digestAlgorithm = digestAlgorithmId;
+        signerInfo.signatureAlgorithm = signatureAlgorithmId;
+        signerInfo.signature = ByteBuffer.wrap(signatureBytes);
+
+        SignedData signedData = new SignedData();
+        signedData.certificates = new ArrayList<>(signerCerts.size());
+        for (X509Certificate cert : signerCerts) {
+            signedData.certificates.add(new Asn1OpaqueObject(cert.getEncoded()));
+        }
+        signedData.version = 1;
+        signedData.digestAlgorithms = Collections.singletonList(digestAlgorithmId);
+        signedData.encapContentInfo = new EncapsulatedContentInfo(Pkcs7Constants.OID_DATA);
+        signedData.signerInfos = Collections.singletonList(signerInfo);
+
+        ContentInfo contentInfo = new ContentInfo();
+        contentInfo.contentType = Pkcs7Constants.OID_SIGNED_DATA;
+        contentInfo.content = new Asn1OpaqueObject(Asn1DerEncoder.encode(signedData));
+        return Asn1DerEncoder.encode(contentInfo);
     }
 
     /**

@@ -20,17 +20,19 @@ import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.AndroidBinXmlParser;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
-import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
+import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.V2SchemeVerifier;
 import com.android.apksig.internal.apk.v3.V3SchemeVerifier;
+import com.android.apksig.internal.apk.v4.V4SchemeVerifier;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 import com.android.apksig.util.RunnablesExecutor;
 import com.android.apksig.zip.ZipFormatException;
+
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -75,6 +77,7 @@ public class ApkVerifier {
 
     private final File mApkFile;
     private final DataSource mApkDataSource;
+    private final File mV4SignatureFile;
 
     private final Integer mMinSdkVersion;
     private final int mMaxSdkVersion;
@@ -82,10 +85,12 @@ public class ApkVerifier {
     private ApkVerifier(
             File apkFile,
             DataSource apkDataSource,
+            File v4SignatureFile,
             Integer minSdkVersion,
             int maxSdkVersion) {
         mApkFile = apkFile;
         mApkDataSource = apkDataSource;
+        mV4SignatureFile = v4SignatureFile;
         mMinSdkVersion = minSdkVersion;
         mMaxSdkVersion = maxSdkVersion;
     }
@@ -228,6 +233,18 @@ public class ApkVerifier {
                 } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
                     // v3 signature not required
                 }
+                if (result.containsErrors()) {
+                    return result;
+                }
+            }
+
+            // If v4 file is specified, use additional verification on it
+            if (mV4SignatureFile != null) {
+                final ApkSigningBlockUtils.Result v4Result =
+                        V4SchemeVerifier.verify(apk, mV4SignatureFile);
+                foundApkSigSchemeIds.add(
+                        ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4);
+                result.mergeFrom(v4Result);
                 if (result.containsErrors()) {
                     return result;
                 }
@@ -400,13 +417,48 @@ public class ApkVerifier {
             }
         }
 
+        // If there is a v4 scheme signer, make sure that their certificates match.
+        // The v3 digest should be equal to the v3Digest field in the v4 signature protobuf.
+        if (result.isVerifiedUsingV4Scheme()) {
+            if (!result.isVerifiedUsingV3Scheme()) {
+                throw new RuntimeException(
+                        "V4 verification must be also verified with V3");
+            }
+            List<Result.V3SchemeSignerInfo> v3Signers = result.getV3SchemeSigners();
+            List<Result.V4SchemeSignerInfo> v4Signers =
+                    result.getV4SchemeSigners();
+            if (v3Signers.size() != 1 || v4Signers.size() != 1) {
+                // There should only be one signer for both v3 and v4
+                result.addError(Issue.V4_SIG_MULTIPLE_SIGNERS);
+            }
+            try {
+                byte[] v3Cert = v3Signers.get(0).mCerts.get(0).getEncoded();
+                byte[] v4Cert = v4Signers.get(0).mCerts.get(0).getEncoded();
+                if (!Arrays.equals(v3Cert, v4Cert)) {
+                    result.addError(Issue.V4_SIG_V3_SIGNERS_MISMATCH);
+                }
+            } catch(CertificateEncodingException e) {
+                throw new RuntimeException(
+                        "Failed to encode APK Signature Scheme v3 signer cert", e);
+            }
+            List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> v3DigestsFromV3 =
+                    v3Signers.get(0).getContentDigests();
+            List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> v3DigestsFromV4 =
+                    v4Signers.get(0).getContentDigests();
+            if (v3DigestsFromV3.size() != 1 || v3DigestsFromV4.size() != 1 ||
+                    !Arrays.equals(v3DigestsFromV3.get(0).getValue(),
+                            v3DigestsFromV4.get(0).getValue())) {
+                // result.addError(Issue.V4_SIG_V3_DIGESTS_MISMATCH);
+            }
+        }
+
         if (result.containsErrors()) {
             return result;
         }
 
         // Verified
         result.setVerified();
-        if (result.isVerifiedUsingV3Scheme()) {
+        if (result.isVerifiedUsingV4Scheme() || result.isVerifiedUsingV3Scheme()) {
             List<Result.V3SchemeSignerInfo> v3Signers = result.getV3SchemeSigners();
             result.addSignerCertificate(v3Signers.get(v3Signers.size() - 1).getCertificate());
         } else if (result.isVerifiedUsingV2Scheme()) {
@@ -514,11 +566,13 @@ public class ApkVerifier {
         private final List<V1SchemeSignerInfo> mV1SchemeIgnoredSigners = new ArrayList<>();
         private final List<V2SchemeSignerInfo> mV2SchemeSigners = new ArrayList<>();
         private final List<V3SchemeSignerInfo> mV3SchemeSigners = new ArrayList<>();
+        private final List<V4SchemeSignerInfo> mV4SchemeSigners = new ArrayList<>();
 
         private boolean mVerified;
         private boolean mVerifiedUsingV1Scheme;
         private boolean mVerifiedUsingV2Scheme;
         private boolean mVerifiedUsingV3Scheme;
+        private boolean mVerifiedUsingV4Scheme;
         private SigningCertificateLineage mSigningCertificateLineage;
 
         /**
@@ -551,6 +605,13 @@ public class ApkVerifier {
          */
         public boolean isVerifiedUsingV3Scheme() {
             return mVerifiedUsingV3Scheme;
+        }
+
+        /**
+         * Returns {@code true} if the APK's APK Signature Scheme v4 signature verified.
+         */
+        public boolean isVerifiedUsingV4Scheme() {
+            return mVerifiedUsingV4Scheme;
         }
 
         /**
@@ -605,6 +666,10 @@ public class ApkVerifier {
             return mV3SchemeSigners;
         }
 
+        private List<V4SchemeSignerInfo> getV4SchemeSigners() {
+            return mV4SchemeSigners;
+        }
+
         /**
          * Returns the combined SigningCertificateLineage associated with this APK's APK Signature
          * Scheme v3 signing block.
@@ -657,6 +722,12 @@ public class ApkVerifier {
                         mV3SchemeSigners.add(new V3SchemeSignerInfo(signer));
                     }
                     mSigningCertificateLineage = source.signingCertificateLineage;
+                    break;
+                case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4:
+                    mVerifiedUsingV4Scheme = source.verified;
+                    for (ApkSigningBlockUtils.Result.SignerInfo signer : source.signers) {
+                        mV4SchemeSigners.add(new V4SchemeSignerInfo(signer));
+                    }
                     break;
                 default:
                     throw new IllegalArgumentException("Unknown Signing Block Scheme Id");
@@ -861,12 +932,15 @@ public class ApkVerifier {
 
             private final List<IssueWithParams> mErrors;
             private final List<IssueWithParams> mWarnings;
+            private final List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest>
+                    mContentDigests;
 
             private V3SchemeSignerInfo(ApkSigningBlockUtils.Result.SignerInfo result) {
                 mIndex = result.index;
                 mCerts = result.certs;
                 mErrors = result.getErrors();
                 mWarnings = result.getWarnings();
+                mContentDigests = result.contentDigests;
             }
 
             /**
@@ -907,6 +981,76 @@ public class ApkVerifier {
 
             public List<IssueWithParams> getWarnings() {
                 return mWarnings;
+            }
+
+            public List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> getContentDigests() {
+                return mContentDigests;
+            }
+        }
+
+        /**
+         * Information about an APK Signature Scheme V4 signer associated with the APK's
+         * signature.
+         */
+        public static class V4SchemeSignerInfo {
+            private final int mIndex;
+            private final List<X509Certificate> mCerts;
+
+            private final List<IssueWithParams> mErrors;
+            private final List<IssueWithParams> mWarnings;
+            private final List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest>
+                    mContentDigests;
+
+            private V4SchemeSignerInfo(ApkSigningBlockUtils.Result.SignerInfo result) {
+                mIndex = result.index;
+                mCerts = result.certs;
+                mErrors = result.getErrors();
+                mWarnings = result.getWarnings();
+                mContentDigests = result.contentDigests;
+            }
+
+            /**
+             * Returns this signer's {@code 0}-based index in the list of signers contained in the
+             * APK's APK Signature Scheme v3 signature.
+             */
+            public int getIndex() {
+                return mIndex;
+            }
+
+            /**
+             * Returns this signer's signing certificate or {@code null} if not available. The
+             * certificate is guaranteed to be available if no errors were encountered during
+             * verification (see {@link #containsErrors()}.
+             *
+             * <p>This certificate contains the signer's public key.
+             */
+            public X509Certificate getCertificate() {
+                return mCerts.isEmpty() ? null : mCerts.get(0);
+            }
+
+            /**
+             * Returns this signer's certificates. The first certificate is for the signer's public
+             * key. An empty list may be returned if an error was encountered during verification
+             * (see {@link #containsErrors()}).
+             */
+            public List<X509Certificate> getCertificates() {
+                return mCerts;
+            }
+
+            public boolean containsErrors() {
+                return !mErrors.isEmpty();
+            }
+
+            public List<IssueWithParams> getErrors() {
+                return mErrors;
+            }
+
+            public List<IssueWithParams> getWarnings() {
+                return mWarnings;
+            }
+
+            public List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> getContentDigests() {
+                return mContentDigests;
             }
         }
     }
@@ -1724,7 +1868,180 @@ public class ApkVerifier {
          * <li>Parameter 1: entry ID ({@code Integer})</li>
          * </ul>
          */
-        APK_SIG_BLOCK_UNKNOWN_ENTRY_ID("APK Signing Block contains unknown entry: ID %1$#x");
+        APK_SIG_BLOCK_UNKNOWN_ENTRY_ID("APK Signing Block contains unknown entry: ID %1$#x"),
+
+        /**
+         * Failed to parse this signer's signature record contained in the APK Signature Scheme
+         * V4 signature.
+         *
+         * <ul>
+         * <li>Parameter 1: record number (first record is {@code 1}) ({@code Integer})</li>
+         * </ul>
+         */
+        V4_SIG_MALFORMED_SIGNERS(
+                "V4 signature has malformed signer block"),
+
+        /**
+         * This APK Signature Scheme V4 signer contains a signature produced using an
+         * unknown algorithm.
+         *
+         * <ul>
+         * <li>Parameter 1: algorithm ID ({@code Integer})</li>
+         * </ul>
+         */
+        V4_SIG_UNKNOWN_SIG_ALGORITHM(
+                "V4 signature has unknown signing algorithm"),
+
+        /**
+         * This APK Signature Scheme V4 signer offers no signatures.
+         */
+        V4_SIG_NO_SIGNATURES(
+                "V4 signature has no signature found"),
+
+        /**
+         * This APK Signature Scheme V4 signer offers signatures but none of them are
+         * supported.
+         */
+        V4_SIG_NO_SUPPORTED_SIGNATURES(
+                "V4 signature has no supported signature"),
+
+        /**
+         * PKCS7 signature block in the APK Signature Scheme V4 signature of this signer
+         * could not be parsed.
+         *
+         * <ul>
+         * <li>Parameter 1: error details ({@code Throwable})</li>
+         * </ul>
+         */
+        V4_SIG_MALFORMED_PKCS7(
+                "V4 signature has malformed pkcs7 signature block."),
+
+        /**
+         * APK Signature Scheme V4 signature over the signed data did not verify.
+         * The signed data includes encoded algorithm ID, hash root and certificate.
+         *
+         * <ul>
+         * <li>Parameter 1: signature algorithm ({@link SignatureAlgorithm})</li>
+         * </ul>
+         */
+        V4_SIG_DID_NOT_VERIFY(
+                "V4 signature's verity hash tree does not verify"),
+
+        /**
+         * An exception was encountered while verifying APK Signature Scheme V4 signature
+         * of this signer.
+         *
+         * <ul>
+         * <li>Parameter 1: signature algorithm ({@link SignatureAlgorithm})</li>
+         * <li>Parameter 2: exception ({@code Throwable})</li>
+         * </ul>
+         */
+        V4_SIG_VERIFY_EXCEPTION(
+                "V4 signature cannot be verified"),
+
+        /**
+         * This APK Signature Scheme V4 signer's certificate could not be parsed.
+         *
+         * <ul>
+         * <li>Parameter 1: index ({@code 0}-based) of the certificate in the signer's list of
+         *     certificates ({@code Integer})</li>
+         * <li>Parameter 2: sequence number ({@code 1}-based) of the certificate in the signer's
+         *     list of certificates ({@code Integer})</li>
+         * <li>Parameter 3: error details ({@code Throwable})</li>
+         * </ul>
+         */
+        V4_SIG_MALFORMED_CERTIFICATE(
+                "V4 signature has malformed certificate"),
+
+        /**
+         * This APK Signature Scheme V4 signer offers no certificate.
+         */
+        V4_SIG_NO_CERTIFICATE("V4 signature has no certificate"),
+
+        /**
+         * This APK Signature Scheme V4 signer's public key listed in the signer's
+         * certificate does not match the public key listed in the signature proto.
+         *
+         * <ul>
+         * <li>Parameter 1: hex-encoded public key from certificate ({@code String})</li>
+         * <li>Parameter 2: hex-encoded public key from signature proto ({@code String})</li>
+         * </ul>
+         */
+        V4_SIG_PUBLIC_KEY_MISMATCH_BETWEEN_CERTIFICATE_AND_SIGNATURES_RECORD(
+                "V4 signature has mismatched certificate and signature"),
+
+        /**
+         * Failed to parse this signer's digest record contained in the APK Signature Scheme
+         * V4 signature.
+         *
+         * <ul>
+         * <li>Parameter 1: record number (first record is {@code 1}) ({@code Integer})</li>
+         * </ul>
+         */
+        V4_SIG_MALFORMED_DIGEST(
+                "V4 signature has malformed content digest (hash tree root)"),
+
+        /**
+         * This APK Signature Scheme V4 signer's signature algorithms listed in the
+         * public key field of the signature proto do not match the signature algorithms listed in
+         * the signature field of the proto.
+         *
+         * <ul>
+         * <li>Parameter 1: signature algorithms from public key field ({@code List<Integer>})</li>
+         * <li>Parameter 2: signature algorithms from signature field ({@code List<Integer>})</li>
+         * </ul>
+         */
+        V4_SIG_SIG_ALG_MISMATCH_BETWEEN_SIGNATURES_AND_DIGESTS_RECORDS(
+                "V4 signature has mismatched signature and digest"),
+
+        /**
+         * The APK's hash root (aka digest) does not match the hash root contained in the Signature
+         * Scheme V4 signature.
+         *
+         * <ul>
+         * <li>Parameter 1: content digest algorithm ({@link ContentDigestAlgorithm})</li>
+         * <li>Parameter 2: hex-encoded expected digest of the APK ({@code String})</li>
+         * <li>Parameter 3: hex-encoded actual digest of the APK ({@code String})</li>
+         * </ul>
+         */
+        V4_SIG_APK_ROOT_DID_NOT_VERIFY(
+                "V4 signature's hash tree root (content digest) did not verity"),
+
+        /**
+         * The APK's hash tree does not match the hash tree contained in the Signature
+         * Scheme V4 signature.
+         *
+         * <ul>
+         * <li>Parameter 1: content digest algorithm ({@link ContentDigestAlgorithm})</li>
+         * <li>Parameter 2: hex-encoded expected hash tree of the APK ({@code String})</li>
+         * <li>Parameter 3: hex-encoded actual hash tree of the APK ({@code String})</li>
+         * </ul>
+         */
+        V4_SIG_APK_TREE_DID_NOT_VERIFY(
+                "V4 signature's hash tree did not verity"),
+
+        /**
+         * No signer found in v4 signature block
+         */
+        V4_SIG_NO_SIGNER(
+                "V4 signature has no signer"),
+
+        /**
+         * Using more than one Signer to sign APK Signature Scheme V4 signature.
+         */
+        V4_SIG_MULTIPLE_SIGNERS(
+                "V4 signature only supports one signer"),
+
+        /**
+         * The signer used to sign APK Signature Scheme V3 signature does not match the signer used
+         * to sign APK Signature Scheme V4 signature.
+         */
+        V4_SIG_V3_SIGNERS_MISMATCH(
+                "V4 signature and V3 signature have mismatched certificates"),
+
+        V4_SIG_V3_DIGESTS_MISMATCH(
+                "V4 signature and V3 signature have mismatched v3 digests");
+
 
         private final String mFormat;
 
@@ -1832,6 +2149,7 @@ public class ApkVerifier {
     public static class Builder {
         private final File mApkFile;
         private final DataSource mApkDataSource;
+        private File mV4SignatureFile;
 
         private Integer mMinSdkVersion;
         private int mMaxSdkVersion = Integer.MAX_VALUE;
@@ -1894,6 +2212,11 @@ public class ApkVerifier {
             return this;
         }
 
+        public Builder setV4SignatureFile(File v4SignatureFile) {
+            mV4SignatureFile = v4SignatureFile;
+            return this;
+        }
+
         /**
          * Returns an {@link ApkVerifier} initialized according to the configuration of this
          * builder.
@@ -1902,6 +2225,7 @@ public class ApkVerifier {
             return new ApkVerifier(
                     mApkFile,
                     mApkDataSource,
+                    mV4SignatureFile,
                     mMinSdkVersion,
                     mMaxSdkVersion);
         }
