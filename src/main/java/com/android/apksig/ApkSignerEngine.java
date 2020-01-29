@@ -20,9 +20,10 @@ import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.RunnablesExecutor;
+
 import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
-import java.lang.UnsupportedOperationException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SignatureException;
@@ -306,6 +307,21 @@ public interface ApkSignerEngine extends Closeable {
      *         entries or to output signatures, or if the engine is closed
      */
     void outputDone() throws IllegalStateException;
+
+    /**
+     * Generates a V4 signature proto and write to output file.
+     *
+     * @param data Input data to calculate a verity hash tree and hash root
+     * @param outputFile Serialized V4 Signature protobuf.
+     * @throws InvalidKeyException if a signature could not be generated because a signing key is
+     *         not suitable for generating the signature
+     * @throws NoSuchAlgorithmException if a signature could not be generated because a required
+     *         cryptographic algorithm implementation is missing
+     * @throws SignatureException if an error occurred while generating a signature
+     * @throws IOException if protobuf fails to be serialized and written to file
+     */
+    void signV4(DataSource data, File outputFile)
+            throws InvalidKeyException, NoSuchAlgorithmException, SignatureException, IOException;
 
     /**
      * Indicates to this engine that it will no longer be used. Invoking this on an already closed

@@ -31,9 +31,8 @@ import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 import com.android.apksig.util.ReadableDataSink;
 import com.android.apksig.zip.ZipFormatException;
-import java.io.ByteArrayOutputStream;
+
 import java.io.Closeable;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -51,7 +50,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 /**
  * APK signer.
@@ -91,6 +89,7 @@ public class ApkSigner {
     private final boolean mV1SigningEnabled;
     private final boolean mV2SigningEnabled;
     private final boolean mV3SigningEnabled;
+    private final boolean mV4SigningEnabled;
     private final boolean mDebuggableApkPermitted;
     private final boolean mOtherSignersSignaturesPreserved;
     private final String mCreatedBy;
@@ -104,6 +103,8 @@ public class ApkSigner {
     private final DataSink mOutputApkDataSink;
     private final DataSource mOutputApkDataSource;
 
+    private final File mOutputV4File;
+
     private final SigningCertificateLineage mSigningCertificateLineage;
 
     private ApkSigner(
@@ -112,6 +113,7 @@ public class ApkSigner {
             boolean v1SigningEnabled,
             boolean v2SigningEnabled,
             boolean v3SigningEnabled,
+            boolean v4SigningEnabled,
             boolean debuggableApkPermitted,
             boolean otherSignersSignaturesPreserved,
             String createdBy,
@@ -121,6 +123,7 @@ public class ApkSigner {
             File outputApkFile,
             DataSink outputApkDataSink,
             DataSource outputApkDataSource,
+            File outputV4File,
             SigningCertificateLineage signingCertificateLineage) {
 
         mSignerConfigs = signerConfigs;
@@ -128,6 +131,7 @@ public class ApkSigner {
         mV1SigningEnabled = v1SigningEnabled;
         mV2SigningEnabled = v2SigningEnabled;
         mV3SigningEnabled = v3SigningEnabled;
+        mV4SigningEnabled = v4SigningEnabled;
         mDebuggableApkPermitted = debuggableApkPermitted;
         mOtherSignersSignaturesPreserved = otherSignersSignaturesPreserved;
         mCreatedBy = createdBy;
@@ -140,6 +144,8 @@ public class ApkSigner {
         mOutputApkFile = outputApkFile;
         mOutputApkDataSink = outputApkDataSink;
         mOutputApkDataSource = outputApkDataSource;
+
+        mOutputV4File = outputV4File;
 
         mSigningCertificateLineage = signingCertificateLineage;
     }
@@ -565,6 +571,10 @@ public class ApkSigner {
         outputCentralDirDataSource.feed(0, outputCentralDirDataSource.size(), outputApkOut);
         outputApkOut.consume(outputEocd);
         signerEngine.outputDone();
+
+        if (mV4SigningEnabled) {
+            signerEngine.signV4(outputApkIn, mOutputV4File);
+        }
     }
 
     private static void fulfillInspectInputJarEntryRequest(
@@ -957,6 +967,7 @@ public class ApkSigner {
         private boolean mV1SigningEnabled = true;
         private boolean mV2SigningEnabled = true;
         private boolean mV3SigningEnabled = true;
+        private boolean mV4SigningEnabled = true;
         private boolean mDebuggableApkPermitted = true;
         private boolean mOtherSignersSignaturesPreserved;
         private String mCreatedBy;
@@ -970,6 +981,8 @@ public class ApkSigner {
         private File mOutputApkFile;
         private DataSink mOutputApkDataSink;
         private DataSource mOutputApkDataSource;
+
+        private File mOutputV4File;
 
         private SigningCertificateLineage mSigningCertificateLineage;
 
@@ -1108,6 +1121,18 @@ public class ApkSigner {
         }
 
         /**
+         * Sets the location of the V4 output file. {@code ApkSigner} will create this file
+         * if it doesn't exist.
+         */
+        public Builder setV4SignatureOutputFile(File v4SignatureOutputFile) {
+            if (v4SignatureOutputFile == null) {
+                throw new NullPointerException("v4HashRootOutputFile == null");
+            }
+            mOutputV4File = v4SignatureOutputFile;
+            return this;
+        }
+
+        /**
          * Sets the minimum Android platform version (API Level) on which APK signatures produced
          * by the signer being built must verify. This method is useful for overriding the default
          * behavior where the minimum API Level is obtained from the {@code android:minSdkVersion}
@@ -1206,6 +1231,20 @@ public class ApkSigner {
                 mV3SigningExplicitlyEnabled = true;
             } else {
                 mV3SigningExplicitlyDisabled = true;
+            }
+            return this;
+        }
+
+        /**
+         * V4 signing requires that the APK to be v3 signed.
+         * @param enabled {@code true} to require the APK to be signed using APK Signature Scheme
+         *        v3 and generate an V4 signature file.
+         */
+        public Builder setV4SigningEnabled(boolean enabled) {
+            checkInitializedWithoutEngine();
+            mV4SigningEnabled = enabled;
+            if (enabled) {
+                mV3SigningExplicitlyEnabled = true;
             }
             return this;
         }
@@ -1312,6 +1351,7 @@ public class ApkSigner {
                     mV1SigningEnabled,
                     mV2SigningEnabled,
                     mV3SigningEnabled,
+                    mV4SigningEnabled,
                     mDebuggableApkPermitted,
                     mOtherSignersSignaturesPreserved,
                     mCreatedBy,
@@ -1321,6 +1361,7 @@ public class ApkSigner {
                     mOutputApkFile,
                     mOutputApkDataSink,
                     mOutputApkDataSource,
+                    mOutputV4File,
                     mSigningCertificateLineage);
         }
     }
