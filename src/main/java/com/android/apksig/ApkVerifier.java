@@ -2040,8 +2040,15 @@ public class ApkVerifier {
                 "V4 signature and V3 signature have mismatched certificates"),
 
         V4_SIG_V3_DIGESTS_MISMATCH(
-                "V4 signature and V3 signature have mismatched v3 digests");
+                "V4 signature and V3 signature have mismatched v3 digests"),
 
+        /**
+         * The hash root value stored as one of the v4 proto fields does not match with the hash
+         * root value that is embedded as part of the pcks7's attached data.
+         */
+        V4_SIG_ROOT_HASH_MISMATCH_BETWEEN_ATTACHED_DATA_AND_PROTO(
+                "V4 signature's root hash in proto does not match with the root hash"
+                        + "embedded in the pkcs7's attached data");
 
         private final String mFormat;
 

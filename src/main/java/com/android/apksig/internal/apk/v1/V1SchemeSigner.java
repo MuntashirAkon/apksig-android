@@ -557,6 +557,7 @@ public abstract class V1SchemeSigner {
         try {
             return ApkSigningBlockUtils.generatePkcs7DerEncodedMessage(
                     signatureBytes,
+                    null,
                     signerCerts, digestAlgorithmId,
                     signatureAlgorithmId);
         } catch (Asn1EncodingException | CertificateEncodingException ex) {
