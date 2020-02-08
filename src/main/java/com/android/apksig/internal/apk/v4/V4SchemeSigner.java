@@ -30,11 +30,9 @@ import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.asn1.Asn1EncodingException;
 import com.android.apksig.internal.pkcs7.AlgorithmIdentifier;
 import com.android.apksig.internal.util.Pair;
-import com.android.apksig.proto.V4.V4Signature;
 import com.android.apksig.util.DataSource;
 
-import com.google.protobuf.ByteString;
-
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -52,19 +50,16 @@ import java.util.Map;
 
 /**
  * APK Signature Scheme V4 signer.
+ * V4 scheme file contains 3 mandatory fields - used during installation.
+ * And optional verity tree - has to be present during session commit.
  *
- * The main goal of APK Signature Scheme V4 is to generate a protobuf file that contains
- * verity root hash of a V3 signed APK. The fields of the protobuf:
- *
+ * The fields:
  * <p>
- * 1. rootHash: bytes of the hash tree root (digest of first 1-page of the tree)
- * 2. signatureAlgorithmId: integer that identifies the algorithms defined in SignatureAlgorithm
- * 3. certificate: bytes of the encoded x509 certificate
- * 4. signature: bytes of the signature over encoded signed data, which includes algorithm ID,
- * hash tree root and certificate
- * 5. publicKey: bytes of the encoded public key
- * 6. verityTree: bytes of the verity hash tree
+ * 1. verityRootHash: bytes of the hash tree root (digest of first 1-page of the tree),
+ * 2. V3Digest: digest from v2/v3 signing schema,
+ * 3. pkcs7SignatureBlock: bytes of the signature over encoded signed data, which includes 1 and 2,
  * </p>
+ * (optional) verityTree: integer size prepended bytes of the verity hash tree.
  *
  * TODO(schfan): Pass v3 digest to v4 signature proto and add verification code
  * TODO(schfan): Add v4 unit tests
@@ -116,20 +111,28 @@ public abstract class V4SchemeSigner {
         Map<ContentDigestAlgorithm, Pair<byte[], byte[]>> verityDigest = new HashMap<>();
         ApkSigningBlockUtils.computeChunkVerityTreeAndDigest(apkContent, verityDigest);
 
-        V4Signature signatureProto;
+        final Pair<V4Signature, byte[]> signaturePair;
         try {
-            signatureProto = generateSignatureProto(signerConfig, verityDigest);
+            signaturePair = generateSignatureProto(signerConfig, verityDigest);
         } catch (InvalidKeyException | SignatureException |
                 CertificateEncodingException | Asn1EncodingException e) {
             throw new InvalidKeyException("Signer failed", e);
         }
 
-        final FileOutputStream output = new FileOutputStream(outputFile);
-        signatureProto.writeTo(output);
-        output.close();
+        V4Signature signature = signaturePair.getFirst();
+        byte[] tree = signaturePair.getSecond();
+
+        try (final DataOutputStream output = new DataOutputStream(
+                new FileOutputStream(outputFile))) {
+            signature.writeTo(output);
+
+            if (tree != null && tree.length != 0) {
+                V4Signature.writeBytes(output, tree);
+            }
+        }
     }
 
-    private static V4Signature generateSignatureProto(
+    private static Pair<V4Signature, byte[]> generateSignatureProto(
             SignerConfig signerConfig,
             Map<ContentDigestAlgorithm, Pair<byte[], byte[]>> contentDigests)
             throws NoSuchAlgorithmException, InvalidKeyException, SignatureException,
@@ -172,12 +175,8 @@ public abstract class V4SchemeSigner {
                 new AlgorithmIdentifier(OID_DIGEST_SHA256, ASN1_DER_NULL), /* digest algo id */
                 getSignatureAlgorithmIdentifier(publicKey));
 
-        final V4Signature.Builder proto = V4Signature.newBuilder()
-                .setVerityRootHash(ByteString.copyFrom(rootHash))
-                .setV3Digest(ByteString.copyFrom(new byte[0]))
-                .setPkcs7SignatureBlock(ByteString.copyFrom(pkcs7SignatureBlock))
-                .setVerityTree(ByteString.copyFrom(tree));
-        return proto.build();
+        final V4Signature signature = new V4Signature(rootHash, new byte[0], pkcs7SignatureBlock);
+        return Pair.of(signature, tree);
     }
 
     /**

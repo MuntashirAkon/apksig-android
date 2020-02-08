@@ -20,12 +20,7 @@ java_library_host {
     name: "apksig",
     srcs: [
         "src/main/java/**/*.java",
-        "src/main/proto/**/*.proto",
     ],
-    proto: {
-        include_dirs: ["external/protobuf/src"],
-        type: "lite",
-    },
 }
 
 // apksigner command-line tool for signing APKs and verifying their signatures
