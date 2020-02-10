@@ -445,10 +445,10 @@ public class ApkVerifier {
                     v3Signers.get(0).getContentDigests();
             List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> v3DigestsFromV4 =
                     v4Signers.get(0).getContentDigests();
-            if (v3DigestsFromV3.size() != 1 || v3DigestsFromV4.size() != 1 ||
-                    !Arrays.equals(v3DigestsFromV3.get(0).getValue(),
-                            v3DigestsFromV4.get(0).getValue())) {
-                // result.addError(Issue.V4_SIG_V3_DIGESTS_MISMATCH);
+            if (v3DigestsFromV4.size() != 1
+                    || v3DigestsFromV3.stream().noneMatch(
+                            d -> Arrays.equals(d.getValue(), v3DigestsFromV4.get(0).getValue()))) {
+                result.addError(Issue.V4_SIG_V3_DIGESTS_MISMATCH);
             }
         }
 
@@ -1918,14 +1918,14 @@ public class ApkVerifier {
 
         /**
          * APK Signature Scheme V4 signature over the signed data did not verify.
-         * The signed data includes encoded algorithm ID, hash root and certificate.
+         * The signed data includes hash root and v3 digest.
          *
          * <ul>
          * <li>Parameter 1: signature algorithm ({@link SignatureAlgorithm})</li>
          * </ul>
          */
         V4_SIG_DID_NOT_VERIFY(
-                "V4 signature's verity hash tree does not verify"),
+                "V4 signature's pkcs7 signature does not verify"),
 
         /**
          * An exception was encountered while verifying APK Signature Scheme V4 signature
@@ -2043,12 +2043,20 @@ public class ApkVerifier {
                 "V4 signature and V3 signature have mismatched v3 digests"),
 
         /**
-         * The hash root value stored as one of the v4 proto fields does not match with the hash
+         * The hash root value stored as one of the v4 signature fields does not match with the hash
          * root value that is embedded as part of the pcks7's attached data.
          */
-        V4_SIG_ROOT_HASH_MISMATCH_BETWEEN_ATTACHED_DATA_AND_PROTO(
-                "V4 signature's root hash in proto does not match with the root hash"
-                        + "embedded in the pkcs7's attached data");
+        V4_SIG_ROOT_HASH_MISMATCH_WITH_ATTACHED_DATA(
+                "V4 signature's root hash in the signature file does not match with the "
+                        + "root hash embedded in the pkcs7's attached data"),
+
+        /**
+         * The v3 digest value stored as one of the v4 signature fields does not match with the hash
+         * v3 digest value that is embedded as part of the pcks7's attached data.
+         */
+        V4_SIG_V3_DIGEST_MISMATCH_WITH_ATTACHED_DATA(
+                "V4 signature's v3 digest in the signature file does not match with the "
+                        + "v3 digest embedded in the pkcs7's attached data");
 
         private final String mFormat;
 
