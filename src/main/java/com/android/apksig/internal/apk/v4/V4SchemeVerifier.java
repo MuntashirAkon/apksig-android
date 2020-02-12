@@ -101,10 +101,11 @@ public abstract class V4SchemeVerifier {
         final byte[] pkcs7Signature = signature.pkcs7SignatureBlock;
         final ByteBuffer pkcs7SignatureBlock =
                 ByteBuffer.wrap(pkcs7Signature).order(ByteOrder.LITTLE_ENDIAN);
-
         final ByteBuffer verityRootHash = ByteBuffer.wrap(signature.verityRootHash);
+        final ByteBuffer v3Digest = ByteBuffer.wrap(signature.v3Digest);
 
-        result.signers.add(parseAndVerifySignatureBlock(pkcs7SignatureBlock, verityRootHash));
+        result.signers.add(parseAndVerifySignatureBlock(
+                pkcs7SignatureBlock, verityRootHash, v3Digest));
         if (result.containsErrors()) {
             return result;
         }
@@ -130,7 +131,7 @@ public abstract class V4SchemeVerifier {
      */
     private static ApkSigningBlockUtils.Result.SignerInfo parseAndVerifySignatureBlock(
             ByteBuffer pkcs7SignatureBlock,
-            ByteBuffer verityRootHash) {
+            ByteBuffer verityRootHash, ByteBuffer v3Digest) {
         final ApkSigningBlockUtils.Result.SignerInfo result =
                 new ApkSigningBlockUtils.Result.SignerInfo();
         SignedData signedData;
@@ -158,15 +159,25 @@ public abstract class V4SchemeVerifier {
             result.addError(Issue.V4_SIG_MULTIPLE_SIGNERS);
             return result;
         }
+
+        ByteBuffer attachedData = signedData.encapContentInfo.content;
+        byte[] rootHashInAttachedData = new byte[verityRootHash.array().length];
+        attachedData.get(rootHashInAttachedData);
         // Embedded root hash should be equal to the external one
-        ByteBuffer embeddedRootHash = signedData.encapContentInfo.content;
-        if (!embeddedRootHash.equals(verityRootHash)) {
-            result.addError(Issue.V4_SIG_ROOT_HASH_MISMATCH_BETWEEN_ATTACHED_DATA_AND_PROTO);
+        if (!Arrays.equals(rootHashInAttachedData, verityRootHash.array())) {
+            result.addError(Issue.V4_SIG_ROOT_HASH_MISMATCH_WITH_ATTACHED_DATA);
             return result;
         }
+        byte[] v3digestInAttachedData = new byte[v3Digest.array().length];
+        attachedData.get(v3digestInAttachedData);
+        // Embedded root hash should be equal to the external one
+        if (!Arrays.equals(v3digestInAttachedData, v3Digest.array())) {
+            result.addError(Issue.V4_SIG_V3_DIGEST_MISMATCH_WITH_ATTACHED_DATA);
+            return result;
+        }
+        attachedData.flip();
 
         SignerInfo unverifiedSignerInfo = signedData.signerInfos.get(0);
-
         List<X509Certificate> signedDataCertificates;
         try {
             signedDataCertificates = parseCertificates(signedData.certificates);
@@ -176,7 +187,7 @@ public abstract class V4SchemeVerifier {
         }
 
         // Verify SignerInfo
-        verifySignerInfo(signedDataCertificates, unverifiedSignerInfo, verityRootHash, result);
+        verifySignerInfo(signedDataCertificates, unverifiedSignerInfo, attachedData, result);
         return result;
     }
 

@@ -228,7 +228,7 @@ public abstract class V3SchemeVerifier {
      * expected to be encountered on an Android platform version in the
      * {@code [minSdkVersion, maxSdkVersion]} range.
      */
-    private static void parseSigners(
+    public static void parseSigners(
             ByteBuffer apkSignatureSchemeV3Block,
             Set<ContentDigestAlgorithm> contentDigestsToVerify,
             ApkSigningBlockUtils.Result result) throws NoSuchAlgorithmException {
