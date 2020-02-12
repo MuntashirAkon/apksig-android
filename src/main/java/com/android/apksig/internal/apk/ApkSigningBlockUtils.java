@@ -786,7 +786,7 @@ public class ApkSigningBlockUtils {
         // Use 0s as salt for now.  This also needs to be consistent in the fsverify header for
         // kernel to use.
         VerityTreeBuilder builder = new VerityTreeBuilder(null);
-        ByteBuffer tree = builder.generateVerityTree(dataSource);
+        ByteBuffer tree = builder.generateVerityTree(dataSource, false /* padding */);
         byte[] rootHash = builder.getRootHashFromTree(tree);
         encoded.put(rootHash);
         outputHashTreeAndDigests.put(ContentDigestAlgorithm.VERITY_CHUNKED_SHA256,
