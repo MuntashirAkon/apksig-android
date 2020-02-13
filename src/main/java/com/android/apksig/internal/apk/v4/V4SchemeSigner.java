@@ -38,6 +38,7 @@ import com.google.protobuf.ByteString;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
@@ -66,7 +67,6 @@ import java.util.Map;
  * </p>
  *
  * TODO(schfan): Pass v3 digest to v4 signature proto and add verification code
- * TODO(schfan): Generate attached PKCS7 signature block and remove root hash from proto field
  * TODO(schfan): Add v4 unit tests
  */
 public abstract class V4SchemeSigner {
@@ -167,6 +167,7 @@ public abstract class V4SchemeSigner {
 
         byte[] pkcs7SignatureBlock = ApkSigningBlockUtils.generatePkcs7DerEncodedMessage(
                 signatures.get(0).getSecond(), /* signature bytes */
+                ByteBuffer.wrap(rootHash),
                 signerConfig.certificates,
                 new AlgorithmIdentifier(OID_DIGEST_SHA256, ASN1_DER_NULL), /* digest algo id */
                 getSignatureAlgorithmIdentifier(publicKey));

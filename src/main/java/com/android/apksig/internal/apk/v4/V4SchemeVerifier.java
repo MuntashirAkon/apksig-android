@@ -144,6 +144,13 @@ public abstract class V4SchemeVerifier {
             result.addError(Issue.V4_SIG_MULTIPLE_SIGNERS);
             return result;
         }
+        // Embedded root hash should be equal to the external one
+        ByteBuffer embeddedRootHash = signedData.encapContentInfo.content;
+        if (!embeddedRootHash.equals(verityRootHash)) {
+            result.addError(Issue.V4_SIG_ROOT_HASH_MISMATCH_BETWEEN_ATTACHED_DATA_AND_PROTO);
+            return result;
+        }
+
         SignerInfo unverifiedSignerInfo = signedData.signerInfos.get(0);
 
         List<X509Certificate> signedDataCertificates;
