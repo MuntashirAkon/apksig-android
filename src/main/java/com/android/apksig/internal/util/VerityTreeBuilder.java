@@ -82,8 +82,9 @@ public class VerityTreeBuilder {
     /**
      * Returns the root hash of the verity tree built from the data source.
      */
-    public byte[] generateVerityTreeRootHash(DataSource fileSource) throws IOException {
-        ByteBuffer verityBuffer = generateVerityTree(fileSource);
+    public byte[] generateVerityTreeRootHash(DataSource fileSource)
+            throws IOException {
+        ByteBuffer verityBuffer = generateVerityTree(fileSource, true /* addPadding */);
         return getRootHashFromTree(verityBuffer);
     }
 
@@ -100,7 +101,8 @@ public class VerityTreeBuilder {
      * The tree is currently stored only in memory and is never written out.  Nevertheless, it is
      * the actual verity tree format on disk, and is supposed to be re-generated on device.
      */
-    public ByteBuffer generateVerityTree(DataSource fileSource) throws IOException {
+    public ByteBuffer generateVerityTree(DataSource fileSource, boolean addPadding)
+            throws IOException {
         int digestSize = mMd.getDigestLength();
 
         // Calculate the summed area table of level size. In other word, this is the offset
@@ -116,11 +118,11 @@ public class VerityTreeBuilder {
             DataSource src;
             if (i == levelOffset.length - 2) {
                 src = fileSource;
-                digestDataByChunks(src, middleBufferSink);
+                digestDataByChunks(src, middleBufferSink, addPadding);
             } else {
                 src = DataSources.asDataSource(slice(verityBuffer.asReadOnlyBuffer(),
                         levelOffset[i + 1], levelOffset[i + 2]));
-                digestDataByChunks(src, middleBufferSink);
+                digestDataByChunks(src, middleBufferSink, addPadding);
             }
 
             // If the output is not full chunk, pad with 0s.
@@ -177,7 +179,8 @@ public class VerityTreeBuilder {
      * less than the chunk size and padding is desired, feed with extra padding 0 to fill up the
      * chunk before digesting.
      */
-    private void digestDataByChunks(DataSource dataSource, DataSink dataSink) throws IOException {
+    private void digestDataByChunks(DataSource dataSource, DataSink dataSink, boolean addPadding)
+            throws IOException {
         long size = dataSource.size();
         long offset = 0;
         for (; offset + CHUNK_SIZE <= size; offset += CHUNK_SIZE) {
@@ -195,7 +198,9 @@ public class VerityTreeBuilder {
             buffer = ByteBuffer.allocate(CHUNK_SIZE);  // initialized to 0.
             dataSource.copyTo(offset, remaining, buffer);
             buffer.rewind();
-
+            if (!addPadding) {
+                buffer.limit(remaining);
+            }
             byte[] hash = saltedDigest(buffer);
             dataSink.consume(hash, 0, hash.length);
         }
