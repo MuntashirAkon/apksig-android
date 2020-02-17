@@ -1484,4 +1484,16 @@ public class ApkSigningBlockUtils {
             this.signature = signature;
         }
     }
+
+    public static class SigningSchemeBlockAndDigests {
+        public final Pair<byte[], Integer> signingSchemeBlock;
+        public final Map<ContentDigestAlgorithm, byte[]> digestInfo;
+
+        public SigningSchemeBlockAndDigests(
+                Pair<byte[], Integer> signingSchemeBlock,
+                Map<ContentDigestAlgorithm, byte[]> digestInfo) {
+            this.signingSchemeBlock = signingSchemeBlock;
+            this.digestInfo = digestInfo;
+        }
+    }
 }
