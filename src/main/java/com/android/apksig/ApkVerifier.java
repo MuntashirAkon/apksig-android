@@ -2056,7 +2056,15 @@ public class ApkVerifier {
          */
         V4_SIG_V3_DIGEST_MISMATCH_WITH_ATTACHED_DATA(
                 "V4 signature's v3 digest in the signature file does not match with the "
-                        + "v3 digest embedded in the pkcs7's attached data");
+                        + "v3 digest embedded in the pkcs7's attached data"),
+
+        /**
+         * The v4 signature format version isn't the same as the tool's current version, something
+         * may go wrong.
+         */
+        V4_SIG_VERSION_NOT_CURRENT(
+                "V4 signature format version %1$d is different from the tool's current "
+                        + "version %2$d");
 
         private final String mFormat;
 

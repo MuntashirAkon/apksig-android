@@ -109,7 +109,7 @@ public abstract class V4SchemeSigner {
     }
 
     /**
-     * Compute hash tree and root for a given APK. Write the serialized protobuf to output file.
+     * Compute hash tree and root for a given APK. Write the serialized date to output file.
      */
     public static void generateV4Signature(
             DataSource apkContent,
@@ -129,7 +129,7 @@ public abstract class V4SchemeSigner {
 
         final Pair<V4Signature, byte[]> signaturePair;
         try {
-            signaturePair = generateSignatureProto(signerConfig, verityDigest, v3digest);
+            signaturePair = generateSignatureObject(signerConfig, verityDigest, v3digest);
         } catch (InvalidKeyException | SignatureException |
                 CertificateEncodingException | Asn1EncodingException e) {
             throw new InvalidKeyException("Signer failed", e);
@@ -147,7 +147,7 @@ public abstract class V4SchemeSigner {
         }
     }
 
-    private static Pair<V4Signature, byte[]> generateSignatureProto(
+    private static Pair<V4Signature, byte[]> generateSignatureObject(
             SignerConfig signerConfig,
             Map<ContentDigestAlgorithm, Pair<byte[], byte[]>> contentDigests,
             byte[] v3Digest)
@@ -193,7 +193,9 @@ public abstract class V4SchemeSigner {
                 new AlgorithmIdentifier(OID_DIGEST_SHA256, ASN1_DER_NULL), /* digest algo id */
                 getSignatureAlgorithmIdentifier(publicKey));
 
-        final V4Signature signature = new V4Signature(rootHash, v3Digest, pkcs7SignatureBlock);
+        final V4Signature signature =
+                new V4Signature(V4Signature.CURRENT_VERSION,
+                        rootHash, v3Digest, pkcs7SignatureBlock);
         return Pair.of(signature, tree);
     }
 
