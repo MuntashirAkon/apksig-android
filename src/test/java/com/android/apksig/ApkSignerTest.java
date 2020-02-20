@@ -21,6 +21,7 @@ import static com.android.apksig.apk.ApkUtils.findZipSections;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -681,29 +682,25 @@ public class ApkSignerTest {
         List<ApkSigner.SignerConfig> signers =
                 Collections.singletonList(
                         getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
-        try {
-            sign(
-                    "v1-only-with-cr-in-entry-name.apk",
-                    new ApkSigner.Builder(signers).setV1SigningEnabled(true));
-            fail();
-        } catch (ApkFormatException expected) {
-        }
 
-        try {
-            sign(
-                    "v1-only-with-lf-in-entry-name.apk",
-                    new ApkSigner.Builder(signers).setV1SigningEnabled(true));
-            fail();
-        } catch (ApkFormatException expected) {
-        }
-
-        try {
-            sign(
-                    "v1-only-with-nul-in-entry-name.apk",
-                    new ApkSigner.Builder(signers).setV1SigningEnabled(true));
-            fail();
-        } catch (ApkFormatException expected) {
-        }
+        assertThrows(
+                ApkFormatException.class,
+                () ->
+                        sign(
+                                "v1-only-with-cr-in-entry-name.apk",
+                                new ApkSigner.Builder(signers).setV1SigningEnabled(true)));
+        assertThrows(
+                ApkFormatException.class,
+                () ->
+                        sign(
+                                "v1-only-with-lf-in-entry-name.apk",
+                                new ApkSigner.Builder(signers).setV1SigningEnabled(true)));
+        assertThrows(
+                ApkFormatException.class,
+                () ->
+                        sign(
+                                "v1-only-with-nul-in-entry-name.apk",
+                                new ApkSigner.Builder(signers).setV1SigningEnabled(true)));
     }
 
     @Test
@@ -732,35 +729,38 @@ public class ApkSignerTest {
     @Test
     public void testDebuggableApk() throws Exception {
         // APK which uses a boolean value "true" in its android:debuggable
-        String apk = "debuggable-boolean.apk";
+        final String debuggableBooleanApk = "debuggable-boolean.apk";
         List<ApkSigner.SignerConfig> signers =
                 Collections.singletonList(
                         getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
         // Signing debuggable APKs is permitted by default
-        sign(apk, new ApkSigner.Builder(signers));
+        sign(debuggableBooleanApk, new ApkSigner.Builder(signers));
         // Signing debuggable APK succeeds when explicitly requested
-        sign(apk, new ApkSigner.Builder(signers).setDebuggableApkPermitted(true));
+        sign(debuggableBooleanApk, new ApkSigner.Builder(signers).setDebuggableApkPermitted(true));
+
         // Signing debuggable APK fails when requested
-        try {
-            sign(apk, new ApkSigner.Builder(signers).setDebuggableApkPermitted(false));
-            fail();
-        } catch (SignatureException expected) {
-        }
+        assertThrows(
+                SignatureException.class,
+                () ->
+                        sign(
+                                debuggableBooleanApk,
+                                new ApkSigner.Builder(signers).setDebuggableApkPermitted(false)));
 
         // APK which uses a reference value, pointing to boolean "false", in its android:debuggable
-        apk = "debuggable-resource.apk";
+        final String debuggableResourceApk = "debuggable-resource.apk";
         // When we permit signing regardless of whether the APK is debuggable, the value of
         // android:debuggable should be ignored.
-        sign(apk, new ApkSigner.Builder(signers).setDebuggableApkPermitted(true));
+        sign(debuggableResourceApk, new ApkSigner.Builder(signers).setDebuggableApkPermitted(true));
 
         // When we disallow signing debuggable APKs, APKs with android:debuggable being a resource
         // reference must be rejected, because there's no easy way to establish whether the resolved
         // boolean value is the same for all resource configurations.
-        try {
-            sign(apk, new ApkSigner.Builder(signers).setDebuggableApkPermitted(false));
-            fail();
-        } catch (SignatureException expected) {
-        }
+        assertThrows(
+                SignatureException.class,
+                () ->
+                        sign(
+                                debuggableResourceApk,
+                                new ApkSigner.Builder(signers).setDebuggableApkPermitted(false)));
     }
 
     @Test(expected = IllegalStateException.class)
