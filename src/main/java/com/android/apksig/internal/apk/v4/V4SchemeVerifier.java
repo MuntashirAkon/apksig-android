@@ -60,7 +60,7 @@ import java.util.Map;
 /**
  * APK Signature Scheme V4 verifier.
  *
- * Verifies the serialized V4Signature protobuf against an APK.
+ * Verifies the serialized V4Signature file against an APK.
  */
 public abstract class V4SchemeVerifier {
     /** Hidden constructor to prevent instantiation. */
@@ -70,10 +70,10 @@ public abstract class V4SchemeVerifier {
     /**
      * <p>
      * The main goals of the verifier are:
-     * 1) parse V4Signature protobuf fields
+     * 1) parse V4Signature file fields
      * 2) verifies the PKCS7 signature block against the raw root hash bytes in the proto field
      * 3) verifies that the raw root hash matches with the actual hash tree root of the give APK
-     * 4) if the protobuf contains a verity tree, verifies that it matches with the actual verity
+     * 4) if the file contains a verity tree, verifies that it matches with the actual verity
      * tree computed from the given APK.
      * </p>
      */
@@ -98,6 +98,11 @@ public abstract class V4SchemeVerifier {
             return result;
         }
 
+        if (signature.version != V4Signature.CURRENT_VERSION) {
+            result.addWarning(Issue.V4_SIG_VERSION_NOT_CURRENT, signature.version,
+                    V4Signature.CURRENT_VERSION);
+        }
+
         final byte[] pkcs7Signature = signature.pkcs7SignatureBlock;
         final ByteBuffer pkcs7SignatureBlock =
                 ByteBuffer.wrap(pkcs7Signature).order(ByteOrder.LITTLE_ENDIAN);
@@ -114,7 +119,7 @@ public abstract class V4SchemeVerifier {
         if (!result.containsErrors()) {
             result.verified = true;
         }
-        // Add v3Content digest from the protobuf to the result
+        // Add v3Content digest from the file to the result
         result.signers.get(0).contentDigests.add(
                 new ApkSigningBlockUtils.Result.SignerInfo.ContentDigest(
                         0 /* signature algorithm id doesn't matter here */,
