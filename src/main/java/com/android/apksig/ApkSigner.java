@@ -16,6 +16,8 @@
 
 package com.android.apksig;
 
+import static com.android.apksig.apk.ApkUtils.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME;
+
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkSigningBlockNotFoundException;
 import com.android.apksig.apk.ApkUtils;
@@ -39,7 +41,6 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.InvalidKeyException;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.SignatureException;
@@ -82,9 +83,6 @@ public class ApkSigner {
 
     /** Name of the Android manifest ZIP entry in APKs. */
     private static final String ANDROID_MANIFEST_ZIP_ENTRY_NAME = "AndroidManifest.xml";
-
-    /** Name of the SourceStamp certificate hash ZIP entry in APKs. */
-    public static final String SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME = "stamp-cert-sha256";
 
     private final List<SignerConfig> mSignerConfigs;
     private final SignerConfig mSourceStampSignerConfig;
@@ -463,12 +461,7 @@ public class ApkSigner {
         // more Local File Header + data entries and add to the list of output Central Directory
         // records.
         if (signerEngine.isEligibleForSourceStamp()) {
-            if (mSourceStampSignerConfig.getCertificates().isEmpty()) {
-                throw new SignatureException("No certificates configured for stamp");
-            }
-            byte[] uncompressedData =
-                    computeSha256DigestBytes(
-                            mSourceStampSignerConfig.getCertificates().get(0).getEncoded());
+            byte[] uncompressedData = signerEngine.generateSourceStampCertificateDigest();
             outputOffset +=
                     outputDataToOutputApk(
                             SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME,
@@ -913,17 +906,6 @@ public class ApkSigner {
                     "Failed to determine APK's minimum supported Android platform version", e);
         }
         return ApkUtils.getMinSdkVersionFromBinaryAndroidManifest(androidManifest);
-    }
-
-    private static byte[] computeSha256DigestBytes(byte[] data) {
-        MessageDigest messageDigest;
-        try {
-            messageDigest = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is not found", e);
-        }
-        messageDigest.update(data);
-        return messageDigest.digest();
     }
 
     /**

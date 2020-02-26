@@ -331,6 +331,11 @@ public interface ApkSignerEngine extends Closeable {
         return false;
     }
 
+    /** Generates the digest of the certificate used to sign the source stamp. */
+    default byte[] generateSourceStampCertificateDigest() throws SignatureException {
+        return new byte[0];
+    }
+
     /**
      * Indicates to this engine that it will no longer be used. Invoking this on an already closed
      * engine is OK.
