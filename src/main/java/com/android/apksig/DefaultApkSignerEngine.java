@@ -16,6 +16,8 @@
 
 package com.android.apksig;
 
+import static com.android.apksig.apk.ApkUtils.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME;
+
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
@@ -47,6 +49,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SignatureException;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -197,8 +200,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     if (subLineage.size() != 1) {
                         throw new IllegalArgumentException(
                                 "v1 signing enabled but the oldest signer in the"
-                                        + " SigningCertificateLineage is missing.  Please provide the"
-                                        + " oldest signer to enable v1 signing");
+                                    + " SigningCertificateLineage is missing.  Please provide the"
+                                    + " oldest signer to enable v1 signing");
                     }
                 }
                 createV1SignerConfigs(Collections.singletonList(oldestConfig), minSdkVersion);
@@ -248,7 +251,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
             } else {
                 if (DigestAlgorithm.BY_STRENGTH_COMPARATOR.compare(
-                        v1SignatureDigestAlgorithm, v1ContentDigestAlgorithm)
+                                v1SignatureDigestAlgorithm, v1ContentDigestAlgorithm)
                         > 0) {
                     v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
                 }
@@ -484,10 +487,10 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
                 Optional<V1SchemeVerifier.NamedDigest> extractedDigest =
                         V1SchemeVerifier.getDigestsToVerify(
-                                entry.getValue(),
-                                "-Digest",
-                                mMinSdkVersion,
-                                Integer.MAX_VALUE)
+                                        entry.getValue(),
+                                        "-Digest",
+                                        mMinSdkVersion,
+                                        Integer.MAX_VALUE)
                                 .stream()
                                 .filter(d -> d.jcaDigestAlgorithm == alg)
                                 .findFirst();
@@ -655,7 +658,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     @Override
     public OutputJarSignatureRequest outputJarEntries()
             throws ApkFormatException, InvalidKeyException, SignatureException,
-            NoSuchAlgorithmException {
+                    NoSuchAlgorithmException {
         checkNotClosed();
 
         if (!mV1SignaturePending) {
@@ -677,6 +680,14 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             }
             mOutputJarEntryDigests.put(entryName, digestRequest.getDigest());
         }
+        if (isEligibleForSourceStamp()) {
+            MessageDigest messageDigest =
+                    MessageDigest.getInstance(
+                            V1SchemeSigner.getJcaMessageDigestAlgorithm(mV1ContentDigestAlgorithm));
+            messageDigest.update(generateSourceStampCertificateDigest());
+            mOutputJarEntryDigests.put(
+                    SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME, messageDigest.digest());
+        }
         mOutputJarEntryDigestRequests.clear();
 
         for (GetJarEntryDataRequest dataRequest : mOutputSignatureJarEntryDataRequests.values()) {
@@ -697,6 +708,14 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 (mInputJarManifestEntryDataRequest != null)
                         ? mInputJarManifestEntryDataRequest.getData()
                         : null;
+        if (isEligibleForSourceStamp()) {
+            inputJarManifest =
+                    V1SchemeSigner.generateManifestFile(
+                                    mV1ContentDigestAlgorithm,
+                                    mOutputJarEntryDigests,
+                                    inputJarManifest)
+                            .contents;
+        }
 
         // Check whether the most recently used signature (if present) is still fine.
         checkOutputApkNotDebuggableIfDebuggableMustBeRejected();
@@ -893,6 +912,19 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     }
 
     @Override
+    public byte[] generateSourceStampCertificateDigest() throws SignatureException {
+        if (mSourceStampSignerConfig.getCertificates().isEmpty()) {
+            throw new SignatureException("No certificates configured for stamp");
+        }
+        try {
+            return computeSha256DigestBytes(
+                    mSourceStampSignerConfig.getCertificates().get(0).getEncoded());
+        } catch (CertificateEncodingException e) {
+            throw new SignatureException("Failed to encode source stamp certificate", e);
+        }
+    }
+
+    @Override
     public void close() {
         mClosed = true;
 
@@ -1049,6 +1081,17 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return InputJarEntryInstructions.OutputPolicy.OUTPUT;
         }
         return InputJarEntryInstructions.OutputPolicy.SKIP;
+    }
+
+    private static byte[] computeSha256DigestBytes(byte[] data) {
+        MessageDigest messageDigest;
+        try {
+            messageDigest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not found", e);
+        }
+        messageDigest.update(data);
+        return messageDigest.digest();
     }
 
     private static class OutputJarSignatureRequestImpl implements OutputJarSignatureRequest {

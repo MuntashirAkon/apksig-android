@@ -41,6 +41,9 @@ public abstract class ApkUtils {
      */
     public static final String ANDROID_MANIFEST_ZIP_ENTRY_NAME = "AndroidManifest.xml";
 
+    /** Name of the SourceStamp certificate hash ZIP entry in APKs. */
+    public static final String SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME = "stamp-cert-sha256";
+
     private ApkUtils() {}
 
     /**

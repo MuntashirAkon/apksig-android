@@ -16,7 +16,6 @@
 
 package com.android.apksig;
 
-import static com.android.apksig.ApkSigner.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME;
 import static com.android.apksig.apk.ApkUtils.findZipSections;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -969,7 +968,7 @@ public class ApkSignerTest {
                 cdRecords.stream()
                         .filter(
                                 cdRecord ->
-                                        SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME.equals(
+                                        ApkUtils.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME.equals(
                                                 cdRecord.getName()))
                         .findAny()
                         .orElse(null);
