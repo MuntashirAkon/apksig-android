@@ -290,6 +290,14 @@ public class ApkSigner {
             if (mCreatedBy != null) {
                 signerEngineBuilder.setCreatedBy(mCreatedBy);
             }
+            if (mSourceStampSignerConfig != null) {
+                signerEngineBuilder.setStampSignerConfig(
+                        new DefaultApkSignerEngine.SignerConfig.Builder(
+                                        mSourceStampSignerConfig.getName(),
+                                        mSourceStampSignerConfig.getPrivateKey(),
+                                        mSourceStampSignerConfig.getCertificates())
+                                .build());
+            }
             signerEngine = signerEngineBuilder.build();
         }
 
@@ -546,7 +554,8 @@ public class ApkSigner {
                         outputCentralDirDataSource.size(),
                         outputCentralDirStartOffset);
 
-        // Step 11. Generate and output APK Signature Scheme v2 and/or v3 signatures, if necessary.
+        // Step 11. Generate and output APK Signature Scheme v2 and/or v3 signatures and/or
+        // SourceStamp signatures, if necessary.
         // This may insert an APK Signing Block just before the output's ZIP Central Directory
         ApkSignerEngine.OutputApkSigningBlockRequest2 outputApkSigningBlockRequest =
                 signerEngine.outputZipSections2(
@@ -570,6 +579,7 @@ public class ApkSigner {
         outputApkOut.consume(outputEocd);
         signerEngine.outputDone();
 
+        // Step 13. Generate and output APK Signature Scheme v4 signatures, if necessary.
         if (mV4SigningEnabled) {
             signerEngine.signV4(outputApkIn, mOutputV4File);
         }
