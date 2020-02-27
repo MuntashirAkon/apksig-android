@@ -259,8 +259,8 @@ public interface ApkSignerEngine extends Closeable {
             DataSource zipEntries,
             DataSource zipCentralDirectory,
             DataSource zipEocd)
-                    throws IOException, ApkFormatException, NoSuchAlgorithmException,
-                            InvalidKeyException, SignatureException, IllegalStateException;
+            throws IOException, ApkFormatException, NoSuchAlgorithmException,
+            InvalidKeyException, SignatureException, IllegalStateException;
 
     /**
      * Indicates to this engine that the ZIP sections comprising the output APK have been output.
@@ -294,8 +294,8 @@ public interface ApkSignerEngine extends Closeable {
             DataSource zipEntries,
             DataSource zipCentralDirectory,
             DataSource zipEocd)
-                    throws IOException, ApkFormatException, NoSuchAlgorithmException,
-                            InvalidKeyException, SignatureException, IllegalStateException;
+            throws IOException, ApkFormatException, NoSuchAlgorithmException,
+            InvalidKeyException, SignatureException, IllegalStateException;
 
     /**
      * Indicates to this engine that the signed APK was output.
