@@ -454,15 +454,37 @@ public class ApkSigner {
             }
         }
 
-        // Step 7. Generate and output JAR signatures, if necessary. This may output more Local File
+        if (lastModifiedDateForNewEntries == -1) {
+            lastModifiedDateForNewEntries = 0x3a21; // Jan 1 2009 (DOS)
+            lastModifiedTimeForNewEntries = 0;
+        }
+
+        // Step 7. Generate and output SourceStamp certificate hash, if necessary. This may output
+        // more Local File Header + data entries and add to the list of output Central Directory
+        // records.
+        if (signerEngine.isEligibleForSourceStamp()) {
+            if (mSourceStampSignerConfig.getCertificates().isEmpty()) {
+                throw new SignatureException("No certificates configured for stamp");
+            }
+            byte[] uncompressedData =
+                    computeSha256DigestBytes(
+                            mSourceStampSignerConfig.getCertificates().get(0).getEncoded());
+            outputOffset +=
+                    outputDataToOutputApk(
+                            SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME,
+                            uncompressedData,
+                            outputOffset,
+                            outputCdRecords,
+                            lastModifiedTimeForNewEntries,
+                            lastModifiedDateForNewEntries,
+                            outputApkOut);
+        }
+
+        // Step 8. Generate and output JAR signatures, if necessary. This may output more Local File
         // Header + data entries and add to the list of output Central Directory records.
         ApkSignerEngine.OutputJarSignatureRequest outputJarSignatureRequest =
                 signerEngine.outputJarEntries();
         if (outputJarSignatureRequest != null) {
-            if (lastModifiedDateForNewEntries == -1) {
-                lastModifiedDateForNewEntries = 0x3a21; // Jan 1 2009 (DOS)
-                lastModifiedTimeForNewEntries = 0;
-            }
             for (ApkSignerEngine.OutputJarSignatureRequest.JarEntry entry :
                     outputJarSignatureRequest.getAdditionalJarEntries()) {
                 String entryName = entry.getName();
@@ -497,27 +519,6 @@ public class ApkSigner {
             outputOffset +=
                     outputDataToOutputApk(
                             entryName,
-                            uncompressedData,
-                            outputOffset,
-                            outputCdRecords,
-                            lastModifiedTimeForNewEntries,
-                            lastModifiedDateForNewEntries,
-                            outputApkOut);
-        }
-
-        // Step 8. Generate and output SourceStamp certificate hash, if necessary. This may output
-        // more Local File Header + data entries and add to the list of output Central Directory
-        // records.
-        if (signerEngine.isEligibleForSourceStamp()) {
-            if (mSourceStampSignerConfig.getCertificates().isEmpty()) {
-                throw new SignatureException("No certificates configured for stamp");
-            }
-            byte[] uncompressedData =
-                    computeSha256DigestBytes(
-                            mSourceStampSignerConfig.getCertificates().get(0).getEncoded());
-            outputOffset +=
-                    outputDataToOutputApk(
-                            SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME,
                             uncompressedData,
                             outputOffset,
                             outputCdRecords,
