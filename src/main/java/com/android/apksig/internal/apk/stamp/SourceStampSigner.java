@@ -29,6 +29,7 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -59,6 +60,7 @@ public abstract class SourceStampSigner {
 
         List<Pair<Integer, byte[]>> digests =
                 digestInfo.entrySet().stream()
+                        .sorted(Comparator.comparing(e -> e.getKey().getId()))
                         .map(e -> Pair.of(e.getKey().getId(), e.getValue()))
                         .collect(Collectors.toList());
 
@@ -71,12 +73,12 @@ public abstract class SourceStampSigner {
             throw new SignatureException(
                     "Retrieving the encoded form of the stamp certificate failed", e);
         }
-        // TODO: Sort digests
-        sourceStampBlock.digests =
+
+        byte[] digestBytes =
                 encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(digests);
         sourceStampBlock.signedDigests =
                 ApkSigningBlockUtils.generateSignaturesOverData(
-                        sourceStampSignerConfig, sourceStampBlock.digests);
+                        sourceStampSignerConfig, digestBytes);
 
         // FORMAT:
         // * length-prefixed bytes: X.509 certificate (ASN.1 DER encoded)
@@ -99,7 +101,6 @@ public abstract class SourceStampSigner {
 
     private static final class SourceStampBlock {
         public byte[] stampCertificate;
-        public byte[] digests;
         public List<Pair<Integer, byte[]>> signedDigests;
     }
 }
