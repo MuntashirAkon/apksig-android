@@ -172,7 +172,7 @@ public class ApkSigner {
      */
     public void sign()
             throws IOException, ApkFormatException, NoSuchAlgorithmException, InvalidKeyException,
-                    SignatureException, CertificateEncodingException, IllegalStateException {
+            SignatureException, CertificateEncodingException, IllegalStateException {
         Closeable in = null;
         DataSource inputApk;
         try {
@@ -218,7 +218,7 @@ public class ApkSigner {
 
     private void sign(DataSource inputApk, DataSink outputApkOut, DataSource outputApkIn)
             throws IOException, ApkFormatException, NoSuchAlgorithmException, InvalidKeyException,
-                    SignatureException, CertificateEncodingException {
+            SignatureException, CertificateEncodingException {
         // Step 1. Find input APK's main ZIP sections
         ApkUtils.ZipSections inputZipSections;
         try {
@@ -274,9 +274,9 @@ public class ApkSigner {
             for (SignerConfig signerConfig : mSignerConfigs) {
                 engineSignerConfigs.add(
                         new DefaultApkSignerEngine.SignerConfig.Builder(
-                                        signerConfig.getName(),
-                                        signerConfig.getPrivateKey(),
-                                        signerConfig.getCertificates())
+                                signerConfig.getName(),
+                                signerConfig.getPrivateKey(),
+                                signerConfig.getCertificates())
                                 .build());
             }
             DefaultApkSignerEngine.Builder signerEngineBuilder =
@@ -293,9 +293,9 @@ public class ApkSigner {
             if (mSourceStampSignerConfig != null) {
                 signerEngineBuilder.setStampSignerConfig(
                         new DefaultApkSignerEngine.SignerConfig.Builder(
-                                        mSourceStampSignerConfig.getName(),
-                                        mSourceStampSignerConfig.getPrivateKey(),
-                                        mSourceStampSignerConfig.getCertificates())
+                                mSourceStampSignerConfig.getName(),
+                                mSourceStampSignerConfig.getPrivateKey(),
+                                mSourceStampSignerConfig.getCertificates())
                                 .build());
             }
             signerEngine = signerEngineBuilder.build();
@@ -377,7 +377,7 @@ public class ApkSigner {
                 if ((lastModifiedDateForNewEntries == -1)
                         || (lastModifiedDate > lastModifiedDateForNewEntries)
                         || ((lastModifiedDate == lastModifiedDateForNewEntries)
-                                && (lastModifiedTime > lastModifiedTimeForNewEntries))) {
+                        && (lastModifiedTime > lastModifiedTimeForNewEntries))) {
                     lastModifiedDateForNewEntries = lastModifiedDate;
                     lastModifiedTimeForNewEntries = lastModifiedTime;
                 }
@@ -508,7 +508,7 @@ public class ApkSigner {
         // Step 8. Generate and output SourceStamp certificate hash, if necessary. This may output
         // more Local File Header + data entries and add to the list of output Central Directory
         // records.
-        if (mSourceStampSignerConfig != null) {
+        if (signerEngine.isEligibleForSourceStamp()) {
             if (mSourceStampSignerConfig.getCertificates().isEmpty()) {
                 throw new SignatureException("No certificates configured for stamp");
             }
@@ -657,7 +657,7 @@ public class ApkSigner {
         int dataAlignmentMultiple = getInputJarEntryDataAlignmentMultiple(inputRecord);
         if ((dataAlignmentMultiple <= 1)
                 || ((inputOffset % dataAlignmentMultiple)
-                        == (outputOffset % dataAlignmentMultiple))) {
+                == (outputOffset % dataAlignmentMultiple))) {
             // This record's data will be aligned same as in the input APK.
             return new OutputSizeAndDataOffset(
                     inputRecord.outputRecord(inputLfhSection, outputLfhSection),
