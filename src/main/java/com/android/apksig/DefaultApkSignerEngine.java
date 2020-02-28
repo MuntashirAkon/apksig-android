@@ -197,8 +197,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     if (subLineage.size() != 1) {
                         throw new IllegalArgumentException(
                                 "v1 signing enabled but the oldest signer in the"
-                                    + " SigningCertificateLineage is missing.  Please provide the"
-                                    + " oldest signer to enable v1 signing");
+                                        + " SigningCertificateLineage is missing.  Please provide the"
+                                        + " oldest signer to enable v1 signing");
                     }
                 }
                 createV1SignerConfigs(Collections.singletonList(oldestConfig), minSdkVersion);
@@ -248,7 +248,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
             } else {
                 if (DigestAlgorithm.BY_STRENGTH_COMPARATOR.compare(
-                                v1SignatureDigestAlgorithm, v1ContentDigestAlgorithm)
+                        v1SignatureDigestAlgorithm, v1ContentDigestAlgorithm)
                         > 0) {
                     v1ContentDigestAlgorithm = v1SignatureDigestAlgorithm;
                 }
@@ -484,10 +484,10 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
                 Optional<V1SchemeVerifier.NamedDigest> extractedDigest =
                         V1SchemeVerifier.getDigestsToVerify(
-                                        entry.getValue(),
-                                        "-Digest",
-                                        mMinSdkVersion,
-                                        Integer.MAX_VALUE)
+                                entry.getValue(),
+                                "-Digest",
+                                mMinSdkVersion,
+                                Integer.MAX_VALUE)
                                 .stream()
                                 .filter(d -> d.jcaDigestAlgorithm == alg)
                                 .findFirst();
@@ -655,7 +655,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     @Override
     public OutputJarSignatureRequest outputJarEntries()
             throws ApkFormatException, InvalidKeyException, SignatureException,
-                    NoSuchAlgorithmException {
+            NoSuchAlgorithmException {
         checkNotClosed();
 
         if (!mV1SignaturePending) {
@@ -847,7 +847,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                             v3SignerConfigs);
             signingSchemeBlocks.add(v3SigningSchemeBlockAndDigests.signingSchemeBlock);
         }
-        if (mSourceStampSignerConfig != null && (mV2SigningEnabled || mV3SigningEnabled)) {
+        if (isEligibleForSourceStamp()) {
             ApkSigningBlockUtils.SignerConfig sourceStampSignerConfig =
                     createSourceStampSignerConfig();
             Map<ContentDigestAlgorithm, byte[]> digestInfo =
@@ -885,6 +885,11 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         } catch (InvalidKeyException | IOException | NoSuchAlgorithmException ignored) {
             // It is okay to fail v4 signing for now.
         }
+    }
+
+    @Override
+    public boolean isEligibleForSourceStamp() {
+        return mSourceStampSignerConfig != null && (mV2SigningEnabled || mV3SigningEnabled);
     }
 
     @Override
