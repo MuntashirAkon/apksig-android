@@ -16,6 +16,8 @@
 
 package com.android.apksig;
 
+import static com.android.apksig.apk.ApkUtils.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME;
+
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
@@ -47,6 +49,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SignatureException;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -677,6 +680,14 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             }
             mOutputJarEntryDigests.put(entryName, digestRequest.getDigest());
         }
+        if (isEligibleForSourceStamp()) {
+            MessageDigest messageDigest =
+                    MessageDigest.getInstance(
+                            V1SchemeSigner.getJcaMessageDigestAlgorithm(mV1ContentDigestAlgorithm));
+            messageDigest.update(generateSourceStampCertificateDigest());
+            mOutputJarEntryDigests.put(
+                    SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME, messageDigest.digest());
+        }
         mOutputJarEntryDigestRequests.clear();
 
         for (GetJarEntryDataRequest dataRequest : mOutputSignatureJarEntryDataRequests.values()) {
@@ -697,6 +708,14 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 (mInputJarManifestEntryDataRequest != null)
                         ? mInputJarManifestEntryDataRequest.getData()
                         : null;
+        if (isEligibleForSourceStamp()) {
+            inputJarManifest =
+                    V1SchemeSigner.generateManifestFile(
+                                    mV1ContentDigestAlgorithm,
+                                    mOutputJarEntryDigests,
+                                    inputJarManifest)
+                            .contents;
+        }
 
         // Check whether the most recently used signature (if present) is still fine.
         checkOutputApkNotDebuggableIfDebuggableMustBeRejected();
@@ -847,7 +866,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                             v3SignerConfigs);
             signingSchemeBlocks.add(v3SigningSchemeBlockAndDigests.signingSchemeBlock);
         }
-        if (mSourceStampSignerConfig != null && (mV2SigningEnabled || mV3SigningEnabled)) {
+        if (isEligibleForSourceStamp()) {
             ApkSigningBlockUtils.SignerConfig sourceStampSignerConfig =
                     createSourceStampSignerConfig();
             Map<ContentDigestAlgorithm, byte[]> digestInfo =
@@ -884,6 +903,24 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             V4SchemeSigner.generateV4Signature(dataSource, v4SignerConfig, outputFile);
         } catch (InvalidKeyException | IOException | NoSuchAlgorithmException ignored) {
             // It is okay to fail v4 signing for now.
+        }
+    }
+
+    @Override
+    public boolean isEligibleForSourceStamp() {
+        return mSourceStampSignerConfig != null && (mV2SigningEnabled || mV3SigningEnabled);
+    }
+
+    @Override
+    public byte[] generateSourceStampCertificateDigest() throws SignatureException {
+        if (mSourceStampSignerConfig.getCertificates().isEmpty()) {
+            throw new SignatureException("No certificates configured for stamp");
+        }
+        try {
+            return computeSha256DigestBytes(
+                    mSourceStampSignerConfig.getCertificates().get(0).getEncoded());
+        } catch (CertificateEncodingException e) {
+            throw new SignatureException("Failed to encode source stamp certificate", e);
         }
     }
 
@@ -1044,6 +1081,17 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return InputJarEntryInstructions.OutputPolicy.OUTPUT;
         }
         return InputJarEntryInstructions.OutputPolicy.SKIP;
+    }
+
+    private static byte[] computeSha256DigestBytes(byte[] data) {
+        MessageDigest messageDigest;
+        try {
+            messageDigest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not found", e);
+        }
+        messageDigest.update(data);
+        return messageDigest.digest();
     }
 
     private static class OutputJarSignatureRequestImpl implements OutputJarSignatureRequest {

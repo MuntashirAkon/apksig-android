@@ -16,6 +16,8 @@
 
 package com.android.apksig;
 
+import static com.android.apksig.apk.ApkUtils.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME;
+
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkSigningBlockNotFoundException;
 import com.android.apksig.apk.ApkUtils;
@@ -39,7 +41,6 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.InvalidKeyException;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.SignatureException;
@@ -82,9 +83,6 @@ public class ApkSigner {
 
     /** Name of the Android manifest ZIP entry in APKs. */
     private static final String ANDROID_MANIFEST_ZIP_ENTRY_NAME = "AndroidManifest.xml";
-
-    /** Name of the SourceStamp certificate hash ZIP entry in APKs. */
-    public static final String SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME = "stamp-cert-sha256";
 
     private final List<SignerConfig> mSignerConfigs;
     private final SignerConfig mSourceStampSignerConfig;
@@ -172,7 +170,7 @@ public class ApkSigner {
      */
     public void sign()
             throws IOException, ApkFormatException, NoSuchAlgorithmException, InvalidKeyException,
-                    SignatureException, CertificateEncodingException, IllegalStateException {
+            SignatureException, CertificateEncodingException, IllegalStateException {
         Closeable in = null;
         DataSource inputApk;
         try {
@@ -218,7 +216,7 @@ public class ApkSigner {
 
     private void sign(DataSource inputApk, DataSink outputApkOut, DataSource outputApkIn)
             throws IOException, ApkFormatException, NoSuchAlgorithmException, InvalidKeyException,
-                    SignatureException, CertificateEncodingException {
+            SignatureException, CertificateEncodingException {
         // Step 1. Find input APK's main ZIP sections
         ApkUtils.ZipSections inputZipSections;
         try {
@@ -274,9 +272,9 @@ public class ApkSigner {
             for (SignerConfig signerConfig : mSignerConfigs) {
                 engineSignerConfigs.add(
                         new DefaultApkSignerEngine.SignerConfig.Builder(
-                                        signerConfig.getName(),
-                                        signerConfig.getPrivateKey(),
-                                        signerConfig.getCertificates())
+                                signerConfig.getName(),
+                                signerConfig.getPrivateKey(),
+                                signerConfig.getCertificates())
                                 .build());
             }
             DefaultApkSignerEngine.Builder signerEngineBuilder =
@@ -293,9 +291,9 @@ public class ApkSigner {
             if (mSourceStampSignerConfig != null) {
                 signerEngineBuilder.setStampSignerConfig(
                         new DefaultApkSignerEngine.SignerConfig.Builder(
-                                        mSourceStampSignerConfig.getName(),
-                                        mSourceStampSignerConfig.getPrivateKey(),
-                                        mSourceStampSignerConfig.getCertificates())
+                                mSourceStampSignerConfig.getName(),
+                                mSourceStampSignerConfig.getPrivateKey(),
+                                mSourceStampSignerConfig.getCertificates())
                                 .build());
             }
             signerEngine = signerEngineBuilder.build();
@@ -377,7 +375,7 @@ public class ApkSigner {
                 if ((lastModifiedDateForNewEntries == -1)
                         || (lastModifiedDate > lastModifiedDateForNewEntries)
                         || ((lastModifiedDate == lastModifiedDateForNewEntries)
-                                && (lastModifiedTime > lastModifiedTimeForNewEntries))) {
+                        && (lastModifiedTime > lastModifiedTimeForNewEntries))) {
                     lastModifiedDateForNewEntries = lastModifiedDate;
                     lastModifiedTimeForNewEntries = lastModifiedTime;
                 }
@@ -454,15 +452,32 @@ public class ApkSigner {
             }
         }
 
-        // Step 7. Generate and output JAR signatures, if necessary. This may output more Local File
+        if (lastModifiedDateForNewEntries == -1) {
+            lastModifiedDateForNewEntries = 0x3a21; // Jan 1 2009 (DOS)
+            lastModifiedTimeForNewEntries = 0;
+        }
+
+        // Step 7. Generate and output SourceStamp certificate hash, if necessary. This may output
+        // more Local File Header + data entries and add to the list of output Central Directory
+        // records.
+        if (signerEngine.isEligibleForSourceStamp()) {
+            byte[] uncompressedData = signerEngine.generateSourceStampCertificateDigest();
+            outputOffset +=
+                    outputDataToOutputApk(
+                            SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME,
+                            uncompressedData,
+                            outputOffset,
+                            outputCdRecords,
+                            lastModifiedTimeForNewEntries,
+                            lastModifiedDateForNewEntries,
+                            outputApkOut);
+        }
+
+        // Step 8. Generate and output JAR signatures, if necessary. This may output more Local File
         // Header + data entries and add to the list of output Central Directory records.
         ApkSignerEngine.OutputJarSignatureRequest outputJarSignatureRequest =
                 signerEngine.outputJarEntries();
         if (outputJarSignatureRequest != null) {
-            if (lastModifiedDateForNewEntries == -1) {
-                lastModifiedDateForNewEntries = 0x3a21; // Jan 1 2009 (DOS)
-                lastModifiedTimeForNewEntries = 0;
-            }
             for (ApkSignerEngine.OutputJarSignatureRequest.JarEntry entry :
                     outputJarSignatureRequest.getAdditionalJarEntries()) {
                 String entryName = entry.getName();
@@ -497,27 +512,6 @@ public class ApkSigner {
             outputOffset +=
                     outputDataToOutputApk(
                             entryName,
-                            uncompressedData,
-                            outputOffset,
-                            outputCdRecords,
-                            lastModifiedTimeForNewEntries,
-                            lastModifiedDateForNewEntries,
-                            outputApkOut);
-        }
-
-        // Step 8. Generate and output SourceStamp certificate hash, if necessary. This may output
-        // more Local File Header + data entries and add to the list of output Central Directory
-        // records.
-        if (mSourceStampSignerConfig != null) {
-            if (mSourceStampSignerConfig.getCertificates().isEmpty()) {
-                throw new SignatureException("No certificates configured for stamp");
-            }
-            byte[] uncompressedData =
-                    computeSha256DigestBytes(
-                            mSourceStampSignerConfig.getCertificates().get(0).getEncoded());
-            outputOffset +=
-                    outputDataToOutputApk(
-                            SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME,
                             uncompressedData,
                             outputOffset,
                             outputCdRecords,
@@ -657,7 +651,7 @@ public class ApkSigner {
         int dataAlignmentMultiple = getInputJarEntryDataAlignmentMultiple(inputRecord);
         if ((dataAlignmentMultiple <= 1)
                 || ((inputOffset % dataAlignmentMultiple)
-                        == (outputOffset % dataAlignmentMultiple))) {
+                == (outputOffset % dataAlignmentMultiple))) {
             // This record's data will be aligned same as in the input APK.
             return new OutputSizeAndDataOffset(
                     inputRecord.outputRecord(inputLfhSection, outputLfhSection),
@@ -912,17 +906,6 @@ public class ApkSigner {
                     "Failed to determine APK's minimum supported Android platform version", e);
         }
         return ApkUtils.getMinSdkVersionFromBinaryAndroidManifest(androidManifest);
-    }
-
-    private static byte[] computeSha256DigestBytes(byte[] data) {
-        MessageDigest messageDigest;
-        try {
-            messageDigest = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is not found", e);
-        }
-        messageDigest.update(data);
-        return messageDigest.digest();
     }
 
     /**
