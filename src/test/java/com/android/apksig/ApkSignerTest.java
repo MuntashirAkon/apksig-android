@@ -19,6 +19,7 @@ package com.android.apksig;
 import static com.android.apksig.apk.ApkUtils.findZipSections;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -941,6 +942,27 @@ public class ApkSignerTest {
         assertTrue(
                 "The modulus in the public key in the V3 signing block must not be negative",
                 v3PublicKey.modulus.compareTo(BigInteger.ZERO) > 0);
+    }
+
+    @Test
+    public void testV4State_disableV3EnableV4_fails() throws Exception {
+        ApkSigner.SignerConfig signer =
+                getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME);
+
+        Exception exception =
+                assertThrows(
+                        IllegalStateException.class,
+                        () ->
+                                sign(
+                                        "original.apk",
+                                        new ApkSigner.Builder(Collections.singletonList(signer))
+                                                .setV1SigningEnabled(true)
+                                                .setV2SigningEnabled(true)
+                                                .setV3SigningEnabled(false)
+                                                .setV4SigningEnabled(true)));
+        assertEquals(
+                "Builder configured to both enable and disable APK Signature Scheme v3/v4 signing",
+                exception.getMessage());
     }
 
     @Test
