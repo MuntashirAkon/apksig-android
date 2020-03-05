@@ -134,6 +134,7 @@ public class ApkSignerTool {
         OptionsParser optionsParser = new OptionsParser(params);
         String optionName;
         String optionOriginalForm = null;
+        boolean v4SigningFlagFound = false;
         while ((optionName = optionsParser.nextOption()) != null) {
             optionOriginalForm = optionsParser.getOptionOriginalForm();
             if (("help".equals(optionName)) || ("h".equals(optionName))) {
@@ -156,6 +157,7 @@ public class ApkSignerTool {
                 v3SigningEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("v4-signing-enabled".equals(optionName)) {
                 v4SigningEnabled = optionsParser.getOptionalBooleanValue(true);
+                v4SigningFlagFound = true;
             } else if ("debuggable-apk-permitted".equals(optionName)) {
                 debuggableApkPermitted = optionsParser.getOptionalBooleanValue(true);
             } else if ("next-signer".equals(optionName)) {
@@ -227,6 +229,13 @@ public class ApkSignerTool {
                         "Unsupported option: " + optionOriginalForm + ". See --help for supported"
                                 + " options.");
             }
+        }
+        // If V4 signing is not explicitly set, and V3 signing is disabled, then V4 signing is
+        // disabled as well as it is dependent on V3.
+        // If V3 signing is explicitly disabled, and V4 signing is explicitly enabled, the
+        // signing process would fail due to conflicting signing state.
+        if (!v4SigningFlagFound && !v3SigningEnabled) {
+            v4SigningEnabled = false;
         }
         if (!signerParams.isEmpty()) {
             signers.add(signerParams);
