@@ -16,37 +16,20 @@
 
 package com.android.apksig.internal.apk.v1;
 
-import static com.android.apksig.internal.asn1.Asn1DerEncoder.ASN1_DER_NULL;
-import static com.android.apksig.internal.oid.OidConstants.OID_DIGEST_SHA1;
-import static com.android.apksig.internal.oid.OidConstants.OID_DIGEST_SHA256;
-import static com.android.apksig.internal.oid.OidConstants.OID_SIG_DSA;
-import static com.android.apksig.internal.oid.OidConstants.OID_SIG_EC_PUBLIC_KEY;
-import static com.android.apksig.internal.oid.OidConstants.OID_SIG_RSA;
-import static com.android.apksig.internal.oid.OidConstants.OID_SIG_SHA256_WITH_DSA;
 import static com.android.apksig.internal.pkcs7.AlgorithmIdentifier.getSignerInfoDigestAlgorithmOid;
 import static com.android.apksig.internal.pkcs7.AlgorithmIdentifier.getSignerInfoSignatureAlgorithm;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
-import com.android.apksig.internal.asn1.Asn1DerEncoder;
 import com.android.apksig.internal.asn1.Asn1EncodingException;
-import com.android.apksig.internal.asn1.Asn1OpaqueObject;
-import com.android.apksig.internal.asn1.ber.BerEncoding;
 import com.android.apksig.internal.jar.ManifestWriter;
 import com.android.apksig.internal.jar.SignatureFileWriter;
 import com.android.apksig.internal.pkcs7.AlgorithmIdentifier;
-import com.android.apksig.internal.pkcs7.ContentInfo;
-import com.android.apksig.internal.pkcs7.EncapsulatedContentInfo;
-import com.android.apksig.internal.pkcs7.IssuerAndSerialNumber;
-import com.android.apksig.internal.pkcs7.Pkcs7Constants;
-import com.android.apksig.internal.pkcs7.SignedData;
-import com.android.apksig.internal.pkcs7.SignerIdentifier;
-import com.android.apksig.internal.pkcs7.SignerInfo;
 import com.android.apksig.internal.util.Pair;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -69,7 +52,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
-import javax.security.auth.x500.X500Principal;
 
 /**
  * APK signer which uses JAR signing (aka v1 signing scheme).

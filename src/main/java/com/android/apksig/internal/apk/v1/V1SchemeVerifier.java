@@ -16,11 +16,6 @@
 
 package com.android.apksig.internal.apk.v1;
 
-import static com.android.apksig.internal.oid.OidConstants.OID_SIG_DSA;
-import static com.android.apksig.internal.oid.OidConstants.OID_SIG_EC_PUBLIC_KEY;
-import static com.android.apksig.internal.oid.OidConstants.OID_SIG_RSA;
-import static com.android.apksig.internal.oid.OidConstants.OID_TO_JCA_DIGEST_ALG;
-import static com.android.apksig.internal.oid.OidConstants.OID_TO_JCA_SIGNATURE_ALG;
 import static com.android.apksig.internal.oid.OidConstants.getSigAlgSupportedApiLevels;
 import static com.android.apksig.internal.pkcs7.AlgorithmIdentifier.getJcaDigestAlgorithm;
 import static com.android.apksig.internal.pkcs7.AlgorithmIdentifier.getJcaSignatureAlgorithm;
@@ -41,18 +36,14 @@ import com.android.apksig.internal.jar.ManifestParser;
 import com.android.apksig.internal.oid.OidConstants;
 import com.android.apksig.internal.pkcs7.Attribute;
 import com.android.apksig.internal.pkcs7.ContentInfo;
-import com.android.apksig.internal.pkcs7.IssuerAndSerialNumber;
 import com.android.apksig.internal.pkcs7.Pkcs7Constants;
 import com.android.apksig.internal.pkcs7.Pkcs7DecodingException;
 import com.android.apksig.internal.pkcs7.SignedData;
-import com.android.apksig.internal.pkcs7.SignerIdentifier;
 import com.android.apksig.internal.pkcs7.SignerInfo;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.ByteBufferUtils;
-import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.util.InclusiveIntRange;
 import com.android.apksig.internal.util.Pair;
-import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.internal.zip.LocalFileRecord;
 import com.android.apksig.util.DataSinks;
@@ -60,7 +51,6 @@ import com.android.apksig.util.DataSource;
 import com.android.apksig.zip.ZipFormatException;
 
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.InvalidKeyException;
@@ -85,8 +75,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.jar.Attributes;
-
-import javax.security.auth.x500.X500Principal;
 
 /**
  * APK verifier which uses JAR signing (aka v1 signing scheme).
@@ -1317,13 +1305,10 @@ public abstract class V1SchemeVerifier {
         Collections.sort(
                 cdRecordsSortedByLocalFileHeaderOffset,
                 CentralDirectoryRecord.BY_LOCAL_FILE_HEADER_OFFSET_COMPARATOR);
-        Set<String> manifestEntryNamesMissingFromApk =
-                new HashSet<>(entryNameToManifestSection.keySet());
         List<Signer> firstSignedEntrySigners = null;
         String firstSignedEntryName = null;
         for (CentralDirectoryRecord cdRecord : cdRecordsSortedByLocalFileHeaderOffset) {
             String entryName = cdRecord.getName();
-            manifestEntryNamesMissingFromApk.remove(entryName);
             if (!isJarEntryDigestNeededInManifest(entryName)) {
                 continue;
             }
