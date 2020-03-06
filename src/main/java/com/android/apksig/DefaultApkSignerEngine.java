@@ -54,6 +54,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -485,18 +486,19 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             if (V1SchemeSigner.isJarEntryDigestNeededInManifest(entry.getKey())
                     && isDebuggable(entryName)) {
 
-                Optional<V1SchemeVerifier.NamedDigest> extractedDigest =
+                V1SchemeVerifier.NamedDigest extractedDigest = null;
+                Collection<V1SchemeVerifier.NamedDigest> digestsToVerify =
                         V1SchemeVerifier.getDigestsToVerify(
-                                        entry.getValue(),
-                                        "-Digest",
-                                        mMinSdkVersion,
-                                        Integer.MAX_VALUE)
-                                .stream()
-                                .filter(d -> d.jcaDigestAlgorithm == alg)
-                                .findFirst();
-
-                extractedDigest.ifPresent(
-                        namedDigest -> mOutputJarEntryDigests.put(entryName, namedDigest.digest));
+                                entry.getValue(), "-Digest", mMinSdkVersion, Integer.MAX_VALUE);
+                for (V1SchemeVerifier.NamedDigest digestToVerify : digestsToVerify) {
+                    if (digestToVerify.jcaDigestAlgorithm.equals(alg)) {
+                        extractedDigest = digestToVerify;
+                        break;
+                    }
+                }
+                if (extractedDigest != null) {
+                    mOutputJarEntryDigests.put(entryName, extractedDigest.digest);
+                }
             }
         }
         return mOutputJarEntryDigests.keySet();
