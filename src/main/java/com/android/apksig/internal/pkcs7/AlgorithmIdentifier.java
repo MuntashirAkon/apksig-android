@@ -68,9 +68,8 @@ public class AlgorithmIdentifier {
                 return new AlgorithmIdentifier(OID_DIGEST_SHA1, ASN1_DER_NULL);
             case SHA256:
                 return new AlgorithmIdentifier(OID_DIGEST_SHA256, ASN1_DER_NULL);
-            default:
-                throw new RuntimeException("Unsupported digest algorithm: " + digestAlgorithm);
         }
+        throw new IllegalArgumentException("Unsupported digest algorithm: " + digestAlgorithm);
     }
 
     /**
