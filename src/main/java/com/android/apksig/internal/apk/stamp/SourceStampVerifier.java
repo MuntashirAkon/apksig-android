@@ -36,7 +36,6 @@ import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
-import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
@@ -46,9 +45,10 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.AlgorithmParameterSpec;
-import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -136,7 +136,7 @@ public abstract class SourceStampVerifier {
                     maxSdkVersion);
             result.verified = !result.containsErrors() && !result.containsWarnings();
         } catch (CertificateException e) {
-            throw new RuntimeException("Failed to obtain X.509 CertificateFactory", e);
+            throw new IllegalStateException("Failed to obtain X.509 CertificateFactory", e);
         } catch (ApkFormatException | BufferUnderflowException e) {
             signerInfo.addWarning(ApkVerifier.Issue.SOURCE_STAMP_MALFORMED_SIGNATURE);
         }
@@ -160,11 +160,12 @@ public abstract class SourceStampVerifier {
             int minSdkVersion,
             int maxSdkVersion)
             throws ApkFormatException, NoSuchAlgorithmException {
-        List<Pair<Integer, byte[]>> digests =
-                apkContentDigests.entrySet().stream()
-                        .sorted(Comparator.comparing(e -> e.getKey().getId()))
-                        .map(e -> Pair.of(e.getKey().getId(), e.getValue()))
-                        .collect(Collectors.toList());
+        List<Pair<Integer, byte[]>> digests = new ArrayList<>();
+        for (Map.Entry<ContentDigestAlgorithm, byte[]> apkContentDigest :
+                apkContentDigests.entrySet()) {
+            digests.add(Pair.of(apkContentDigest.getKey().getId(), apkContentDigest.getValue()));
+        }
+        Collections.sort(digests, Comparator.comparing(Pair::getFirst));
         byte[] digestBytes =
                 encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(digests);
 

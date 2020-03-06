@@ -215,7 +215,7 @@ public class ApkVerifier {
                     SUPPORTED_APK_SIG_SCHEME_NAMES.get(
                             ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2));
         } else {
-            supportedSchemeNames = Collections.EMPTY_MAP;
+            supportedSchemeNames = Collections.emptyMap();
         }
         // Android N and newer attempts to verify APKs using the APK Signing Block, which can
         // include v2 and/or v3 signatures.  If none is found, it falls back to JAR signature
@@ -292,14 +292,14 @@ public class ApkVerifier {
                 try {
                     List<CentralDirectoryRecord> cdRecords =
                             V1SchemeVerifier.parseZipCentralDirectory(apk, zipSections);
-                    CentralDirectoryRecord sourceStampCdRecord =
-                            cdRecords.stream()
-                                    .filter(
-                                            cdRecord ->
-                                                    SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME
-                                                            .equals(cdRecord.getName()))
-                                    .findAny()
-                                    .orElse(null);
+                    CentralDirectoryRecord sourceStampCdRecord = null;
+                    for (CentralDirectoryRecord cdRecord : cdRecords) {
+                        if (SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME.equals(
+                                cdRecord.getName())) {
+                            sourceStampCdRecord = cdRecord;
+                            break;
+                        }
+                    }
                     // If SourceStamp file is found inside the APK, there must be a SourceStamp
                     // block in the APK signing block as well.
                     if (sourceStampCdRecord != null) {
@@ -378,7 +378,7 @@ public class ApkVerifier {
                 try {
                     v1SignerCerts.add(new ByteArray(signer.getCertificate().getEncoded()));
                 } catch (CertificateEncodingException e) {
-                    throw new RuntimeException(
+                    throw new IllegalStateException(
                             "Failed to encode JAR signer " + signer.getName() + " certs", e);
                 }
             }
@@ -386,7 +386,7 @@ public class ApkVerifier {
                 try {
                     v2SignerCerts.add(new ByteArray(signer.getCertificate().getEncoded()));
                 } catch (CertificateEncodingException e) {
-                    throw new RuntimeException(
+                    throw new IllegalStateException(
                             "Failed to encode APK Signature Scheme v2 signer (index: "
                                     + signer.getIndex() + ") certs",
                             e);
@@ -498,9 +498,18 @@ public class ApkVerifier {
                     v3Signers.get(0).getContentDigests();
             List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> v3DigestsFromV4 =
                     v4Signers.get(0).getContentDigests();
-            if (v3DigestsFromV4.size() != 1
-                    || v3DigestsFromV3.stream().noneMatch(
-                            d -> Arrays.equals(d.getValue(), v3DigestsFromV4.get(0).getValue()))) {
+            if (v3DigestsFromV4.size() != 1) {
+                result.addError(Issue.V4_SIG_V3_DIGESTS_MISMATCH);
+            }
+            boolean foundV3DigestMatch = false;
+            for (ApkSigningBlockUtils.Result.SignerInfo.ContentDigest v3DigestFromV3 :
+                    v3DigestsFromV3) {
+                if (Arrays.equals(v3DigestFromV3.getValue(), v3DigestsFromV4.get(0).getValue())) {
+                    foundV3DigestMatch = true;
+                    break;
+                }
+            }
+            if (!foundV3DigestMatch) {
                 result.addError(Issue.V4_SIG_V3_DIGESTS_MISMATCH);
             }
         }
@@ -1179,10 +1188,6 @@ public class ApkVerifier {
              */
             public X509Certificate getCertificate() {
                 return mCertificates.isEmpty() ? null : mCertificates.get(0);
-            }
-
-            private void addError(Issue msg, Object... parameters) {
-                mErrors.add(new IssueWithParams(msg, parameters));
             }
 
             public boolean containsErrors() {
@@ -2352,10 +2357,7 @@ public class ApkVerifier {
             if (this == obj) {
                 return true;
             }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (!(obj instanceof ByteArray)) {
                 return false;
             }
             ByteArray other = (ByteArray) obj;
