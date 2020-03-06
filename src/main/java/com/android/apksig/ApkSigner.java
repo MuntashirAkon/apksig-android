@@ -44,7 +44,6 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.SignatureException;
-import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -163,14 +162,12 @@ public class ApkSigner {
      * @throws InvalidKeyException if a signature could not be generated because a signing key is
      *     not suitable for generating the signature
      * @throws SignatureException if an error occurred while generating or verifying a signature
-     * @throws CertificateEncodingException if the certificate of the source stamp to be embedded in
-     *     the APK is invalid.
      * @throws IllegalStateException if this signer's configuration is missing required information
      *     or if the signing engine is in an invalid state.
      */
     public void sign()
             throws IOException, ApkFormatException, NoSuchAlgorithmException, InvalidKeyException,
-            SignatureException, CertificateEncodingException, IllegalStateException {
+            SignatureException, IllegalStateException {
         Closeable in = null;
         DataSource inputApk;
         try {
@@ -216,7 +213,7 @@ public class ApkSigner {
 
     private void sign(DataSource inputApk, DataSink outputApkOut, DataSource outputApkIn)
             throws IOException, ApkFormatException, NoSuchAlgorithmException, InvalidKeyException,
-            SignatureException, CertificateEncodingException {
+            SignatureException {
         // Step 1. Find input APK's main ZIP sections
         ApkUtils.ZipSections inputZipSections;
         try {
@@ -1365,7 +1362,7 @@ public class ApkSigner {
             if (mV3SigningExplicitlyDisabled && mV3SigningExplicitlyEnabled) {
                 throw new IllegalStateException(
                         "Builder configured to both enable and disable APK "
-                                + "Signature Scheme v3 signing");
+                                + "Signature Scheme v3/v4 signing");
             }
 
             if (mV3SigningExplicitlyDisabled) {
@@ -1374,6 +1371,14 @@ public class ApkSigner {
 
             if (mV3SigningExplicitlyEnabled) {
                 mV3SigningEnabled = true;
+            }
+
+            // If V4 signing is not explicitly set, and V3 signing is disabled, then V4 signing is
+            // disabled as well as it is dependent on V3.
+            // If V3 signing is explicitly disabled, and V4 signing is explicitly enabled, the
+            // signing process would fail due to conflicting signing state.
+            if (!mV3SigningEnabled) {
+                mV4SigningEnabled = false;
             }
 
             // TODO - if v3 signing is enabled, check provided signers and history to see if valid
