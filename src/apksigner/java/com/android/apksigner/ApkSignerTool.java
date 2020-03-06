@@ -713,7 +713,6 @@ public class ApkSignerTool {
         File outputKeyLineage = null;
         String optionName;
         OptionsParser optionsParser = new OptionsParser(params);
-        SigningCertificateLineage lineage = null;
         List<SignerParams> signers = new ArrayList<>(1);
         while ((optionName = optionsParser.nextOption()) != null) {
             if (("help".equals(optionName)) || ("h".equals(optionName))) {
@@ -739,7 +738,7 @@ public class ApkSignerTool {
         if (inputKeyLineage == null) {
             throw new ParameterException("Input lineage file parameter not present");
         }
-        lineage = getLineageFromInputFile(inputKeyLineage);
+        SigningCertificateLineage lineage = getLineageFromInputFile(inputKeyLineage);
 
         try (PasswordRetriever passwordRetriever = new PasswordRetriever()) {
             for (int i = 0; i < signers.size(); i++) {

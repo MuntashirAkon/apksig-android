@@ -17,9 +17,6 @@
 package com.android.apksig.internal.apk.v4;
 
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.toHex;
-import static com.android.apksig.internal.apk.SignatureAlgorithm.VERITY_DSA_WITH_SHA256;
-import static com.android.apksig.internal.apk.SignatureAlgorithm.VERITY_ECDSA_WITH_SHA256;
-import static com.android.apksig.internal.apk.SignatureAlgorithm.VERITY_RSA_PKCS1_V1_5_WITH_SHA256;
 import static com.android.apksig.internal.pkcs7.AlgorithmIdentifier.getJcaSignatureAlgorithm;
 import static com.android.apksig.internal.x509.Certificate.findCertificate;
 import static com.android.apksig.internal.x509.Certificate.parseCertificates;
@@ -150,7 +147,6 @@ public abstract class V4SchemeVerifier {
             }
             signedData = Asn1BerParser.parse(contentInfo.content.getEncoded(), SignedData.class);
         } catch (Asn1DecodingException e) {
-            e.printStackTrace();
             result.addError(Issue.V4_SIG_MALFORMED_PKCS7, e);
             return result;
         }
@@ -219,11 +215,9 @@ public abstract class V4SchemeVerifier {
         }
         final boolean[] keyUsageExtension = signingCertificate.getKeyUsage();
         if (keyUsageExtension != null) {
-            boolean digitalSignature =
-                    (keyUsageExtension.length >= 1) && (keyUsageExtension[0]);
-            boolean nonRepudiation =
-                    (keyUsageExtension.length >= 2) && (keyUsageExtension[1]);
-            if ((!digitalSignature) && (!nonRepudiation)) {
+            boolean digitalSignature = (keyUsageExtension.length >= 1) && keyUsageExtension[0];
+            boolean nonRepudiation = (keyUsageExtension.length >= 2) && keyUsageExtension[1];
+            if (!digitalSignature && !nonRepudiation) {
                 result.addError(Issue.V4_SIG_MALFORMED_CERTIFICATE,
                         "Signing certificate not authorized for use in digital signatures"
                                 + ": keyUsage extension missing digitalSignature and"
@@ -232,15 +226,12 @@ public abstract class V4SchemeVerifier {
             }
         }
 
-        Signature s = null;
+        Signature s;
         try {
             final String jcaSignatureAlgorithm = getJcaSignatureAlgorithm(
                     digestAlgorithmOid, signatureAlgorithmOid);
             s = Signature.getInstance(jcaSignatureAlgorithm);
         } catch (SignatureException | NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
-        if (s == null) {
             result.addError(Issue.V4_SIG_UNKNOWN_SIG_ALGORITHM);
             return;
         }
@@ -266,7 +257,7 @@ public abstract class V4SchemeVerifier {
                 new HashMap<>();
         ApkSigningBlockUtils.computeChunkVerityTreeAndDigest(apkContent, actualContentDigests);
         if (result.signers.size() != 1) {
-            throw new RuntimeException("There should only be one signer for V4");
+            throw new IllegalStateException("There should only be one signer for V4");
         }
         final ApkSigningBlockUtils.Result.SignerInfo signerInfo = result.signers.get(0);
         for (ApkSigningBlockUtils.Result.SignerInfo.ContentDigest expected
