@@ -576,7 +576,7 @@ public class ApkSigner {
         }
     }
 
-    private long outputDataToOutputApk(
+    private static long outputDataToOutputApk(
             String entryName,
             byte[] uncompressedData,
             long localFileHeaderOffset,
@@ -672,7 +672,7 @@ public class ApkSigner {
                         outputOffset + inputRecord.getExtraFieldStartOffsetInsideRecord(),
                         dataAlignmentMultiple);
         long dataOffset =
-                inputRecord.getDataStartOffsetInRecord()
+                (long) inputRecord.getDataStartOffsetInRecord()
                         + aligningExtra.remaining()
                         - inputRecord.getExtra().remaining();
         return new OutputSizeAndDataOffset(
