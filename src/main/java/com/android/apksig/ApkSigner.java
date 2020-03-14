@@ -90,6 +90,7 @@ public class ApkSigner {
     private final boolean mV2SigningEnabled;
     private final boolean mV3SigningEnabled;
     private final boolean mV4SigningEnabled;
+    private final boolean mV4SigningRequested;
     private final boolean mDebuggableApkPermitted;
     private final boolean mOtherSignersSignaturesPreserved;
     private final String mCreatedBy;
@@ -115,6 +116,7 @@ public class ApkSigner {
             boolean v2SigningEnabled,
             boolean v3SigningEnabled,
             boolean v4SigningEnabled,
+            boolean v4SigningRequested,
             boolean debuggableApkPermitted,
             boolean otherSignersSignaturesPreserved,
             String createdBy,
@@ -134,6 +136,7 @@ public class ApkSigner {
         mV2SigningEnabled = v2SigningEnabled;
         mV3SigningEnabled = v3SigningEnabled;
         mV4SigningEnabled = v4SigningEnabled;
+        mV4SigningRequested = v4SigningRequested;
         mDebuggableApkPermitted = debuggableApkPermitted;
         mOtherSignersSignaturesPreserved = otherSignersSignaturesPreserved;
         mCreatedBy = createdBy;
@@ -572,7 +575,7 @@ public class ApkSigner {
 
         // Step 13. Generate and output APK Signature Scheme v4 signatures, if necessary.
         if (mV4SigningEnabled) {
-            signerEngine.signV4(outputApkIn, mOutputV4File);
+            signerEngine.signV4(outputApkIn, mOutputV4File, !mV4SigningRequested);
         }
     }
 
@@ -993,6 +996,7 @@ public class ApkSigner {
         private boolean mV2SigningEnabled = true;
         private boolean mV3SigningEnabled = true;
         private boolean mV4SigningEnabled = true;
+        private boolean mV4SigningRequested = false;
         private boolean mDebuggableApkPermitted = true;
         private boolean mOtherSignersSignaturesPreserved;
         private String mCreatedBy;
@@ -1279,6 +1283,15 @@ public class ApkSigner {
         }
 
         /**
+         * Explicitly request V4 signing. The tool will fail if V4 signing fails.
+         */
+        public Builder setV4SigningRequested(boolean enabled) {
+            checkInitializedWithoutEngine();
+            mV4SigningRequested = enabled;
+            return this;
+        }
+
+        /**
          * Sets whether the APK should be signed even if it is marked as debuggable ({@code
          * android:debuggable="true"} in its {@code AndroidManifest.xml}). For backward
          * compatibility reasons, the default value of this setting is {@code true}.
@@ -1391,6 +1404,7 @@ public class ApkSigner {
                     mV2SigningEnabled,
                     mV3SigningEnabled,
                     mV4SigningEnabled,
+                    mV4SigningRequested,
                     mDebuggableApkPermitted,
                     mOtherSignersSignaturesPreserved,
                     mCreatedBy,
