@@ -312,7 +312,8 @@ public interface ApkSignerEngine extends Closeable {
      * Generates a V4 signature proto and write to output file.
      *
      * @param data Input data to calculate a verity hash tree and hash root
-     * @param outputFile Serialized V4 Signature protobuf.
+     * @param outputFile To store the serialized V4 Signature.
+     * @param ignoreFailures Whether any failures will be silently ignored.
      * @throws InvalidKeyException if a signature could not be generated because a signing key is
      *         not suitable for generating the signature
      * @throws NoSuchAlgorithmException if a signature could not be generated because a required
@@ -320,7 +321,7 @@ public interface ApkSignerEngine extends Closeable {
      * @throws SignatureException if an error occurred while generating a signature
      * @throws IOException if protobuf fails to be serialized and written to file
      */
-    void signV4(DataSource data, File outputFile)
+    void signV4(DataSource data, File outputFile, boolean ignoreFailures)
             throws InvalidKeyException, NoSuchAlgorithmException, SignatureException, IOException;
 
     /**
