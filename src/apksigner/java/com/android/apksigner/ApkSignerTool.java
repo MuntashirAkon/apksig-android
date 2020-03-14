@@ -327,6 +327,7 @@ public class ApkSignerTool {
                         .setV2SigningEnabled(v2SigningEnabled)
                         .setV3SigningEnabled(v3SigningEnabled)
                         .setV4SigningEnabled(v4SigningEnabled)
+                        .setV4SigningRequested(v4SigningEnabled && v4SigningFlagFound)
                         .setDebuggableApkPermitted(debuggableApkPermitted)
                         .setSigningCertificateLineage(lineage);
         if (minSdkVersionSpecified) {
