@@ -91,6 +91,9 @@ options of different signers, use --next-signer.
                       (aka v1 scheme) signature of this signer. By default,
                       KeyStore key alias or basename of key file is used.
 
+--stamp-signer        The signing information for the signer of the source stamp
+                      to be included in the APK.
+
         PER-SIGNER SIGNING KEY & CERTIFICATE OPTIONS
 There are two ways to provide the signer's private key and certificate: (1) Java
 KeyStore (see --ks), or (2) private key file in PKCS #8 format and certificate
