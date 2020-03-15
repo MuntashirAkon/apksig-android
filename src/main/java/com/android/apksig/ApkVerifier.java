@@ -2039,7 +2039,7 @@ public class ApkVerifier {
          * </ul>
          */
         V4_SIG_UNKNOWN_SIG_ALGORITHM(
-                "V4 signature has unknown signing algorithm"),
+                "V4 signature has unknown signing algorithm: %1$#x"),
 
         /**
          * This APK Signature Scheme V4 signer offers no signatures.
@@ -2055,38 +2055,34 @@ public class ApkVerifier {
                 "V4 signature has no supported signature"),
 
         /**
-         * PKCS7 signature block in the APK Signature Scheme V4 signature of this signer
-         * could not be parsed.
-         *
-         * <ul>
-         * <li>Parameter 1: error details ({@code Throwable})</li>
-         * </ul>
-         */
-        V4_SIG_MALFORMED_PKCS7(
-                "V4 signature has malformed pkcs7 signature block."),
-
-        /**
-         * APK Signature Scheme V4 signature over the signed data did not verify.
-         * The signed data includes hash root and v3 digest.
+         * APK Signature Scheme v3 signature over this signer's signed-data block did not verify.
          *
          * <ul>
          * <li>Parameter 1: signature algorithm ({@link SignatureAlgorithm})</li>
          * </ul>
          */
-        V4_SIG_DID_NOT_VERIFY(
-                "V4 signature's pkcs7 signature does not verify"),
+        V4_SIG_DID_NOT_VERIFY("%1$s signature over signed-data did not verify"),
 
         /**
-         * An exception was encountered while verifying APK Signature Scheme V4 signature
-         * of this signer.
+         * An exception was encountered while verifying APK Signature Scheme v3 signature of this
+         * signer.
          *
          * <ul>
          * <li>Parameter 1: signature algorithm ({@link SignatureAlgorithm})</li>
          * <li>Parameter 2: exception ({@code Throwable})</li>
          * </ul>
          */
-        V4_SIG_VERIFY_EXCEPTION(
-                "V4 signature cannot be verified"),
+        V4_SIG_VERIFY_EXCEPTION("Failed to verify %1$s signature: %2$s"),
+
+        /**
+         * Public key embedded in the APK Signature Scheme v4 signature of this signer could not be
+         * parsed.
+         *
+         * <ul>
+         * <li>Parameter 1: error details ({@code Throwable})</li>
+         * </ul>
+         */
+        V4_SIG_MALFORMED_PUBLIC_KEY("Malformed public key: %1$s"),
 
         /**
          * This APK Signature Scheme V4 signer's certificate could not be parsed.
@@ -2117,31 +2113,7 @@ public class ApkVerifier {
          * </ul>
          */
         V4_SIG_PUBLIC_KEY_MISMATCH_BETWEEN_CERTIFICATE_AND_SIGNATURES_RECORD(
-                "V4 signature has mismatched certificate and signature"),
-
-        /**
-         * Failed to parse this signer's digest record contained in the APK Signature Scheme
-         * V4 signature.
-         *
-         * <ul>
-         * <li>Parameter 1: record number (first record is {@code 1}) ({@code Integer})</li>
-         * </ul>
-         */
-        V4_SIG_MALFORMED_DIGEST(
-                "V4 signature has malformed content digest (hash tree root)"),
-
-        /**
-         * This APK Signature Scheme V4 signer's signature algorithms listed in the
-         * public key field of the signature proto do not match the signature algorithms listed in
-         * the signature field of the proto.
-         *
-         * <ul>
-         * <li>Parameter 1: signature algorithms from public key field ({@code List<Integer>})</li>
-         * <li>Parameter 2: signature algorithms from signature field ({@code List<Integer>})</li>
-         * </ul>
-         */
-        V4_SIG_SIG_ALG_MISMATCH_BETWEEN_SIGNATURES_AND_DIGESTS_RECORDS(
-                "V4 signature has mismatched signature and digest"),
+                "V4 signature has mismatched certificate and signature: <%1$s> vs <%2$s>"),
 
         /**
          * The APK's hash root (aka digest) does not match the hash root contained in the Signature
@@ -2170,12 +2142,6 @@ public class ApkVerifier {
                 "V4 signature's hash tree did not verity"),
 
         /**
-         * No signer found in v4 signature block
-         */
-        V4_SIG_NO_SIGNER(
-                "V4 signature has no signer"),
-
-        /**
          * Using more than one Signer to sign APK Signature Scheme V4 signature.
          */
         V4_SIG_MULTIPLE_SIGNERS(
@@ -2190,22 +2156,6 @@ public class ApkVerifier {
 
         V4_SIG_V3_DIGESTS_MISMATCH(
                 "V4 signature and V3 signature have mismatched v3 digests"),
-
-        /**
-         * The hash root value stored as one of the v4 signature fields does not match with the hash
-         * root value that is embedded as part of the pcks7's attached data.
-         */
-        V4_SIG_ROOT_HASH_MISMATCH_WITH_ATTACHED_DATA(
-                "V4 signature's root hash in the signature file does not match with the "
-                        + "root hash embedded in the pkcs7's attached data"),
-
-        /**
-         * The v3 digest value stored as one of the v4 signature fields does not match with the hash
-         * v3 digest value that is embedded as part of the pcks7's attached data.
-         */
-        V4_SIG_V3_DIGEST_MISMATCH_WITH_ATTACHED_DATA(
-                "V4 signature's v3 digest in the signature file does not match with the "
-                        + "v3 digest embedded in the pkcs7's attached data"),
 
         /**
          * The v4 signature format version isn't the same as the tool's current version, something
