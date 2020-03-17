@@ -585,11 +585,13 @@ public class ApkSignerTool {
         }
 
         ApkVerifier.Result.SourceStampInfo sourceStampInfo = result.getSourceStampInfo();
-        for (ApkVerifier.IssueWithParams error : sourceStampInfo.getErrors()) {
-            System.err.println("ERROR: SourceStamp: " + error);
-        }
-        for (ApkVerifier.IssueWithParams warning : sourceStampInfo.getWarnings()) {
-            warningsOut.println("WARNING: SourceStamp: " + warning);
+        if (sourceStampInfo != null) {
+            for (ApkVerifier.IssueWithParams error : sourceStampInfo.getErrors()) {
+                System.err.println("ERROR: SourceStamp: " + error);
+            }
+            for (ApkVerifier.IssueWithParams warning : sourceStampInfo.getWarnings()) {
+                warningsOut.println("WARNING: SourceStamp: " + warning);
+            }
         }
 
         if (!verified) {
