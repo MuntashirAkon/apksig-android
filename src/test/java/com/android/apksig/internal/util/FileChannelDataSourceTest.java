@@ -31,14 +31,14 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class RandomAccessFileDataSourceTest {
+public class FileChannelDataSourceTest {
     @Rule public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     @Test
     public void testFeedsCorrectData_whenFilePartiallyReadFromBeginning() throws Exception {
         byte[] fullFileContent = createFileContent(1024 * 1024 + 987654);
         RandomAccessFile raf = createRaf(fullFileContent);
-        DataSource rafDataSource = new RandomAccessFileDataSource(raf);
+        DataSource rafDataSource = new FileChannelDataSource(raf.getChannel());
 
         ByteArrayDataSink dataSink = new ByteArrayDataSink();
 
@@ -56,7 +56,7 @@ public class RandomAccessFileDataSourceTest {
     public void testFeedsCorrectData_whenFilePartiallyReadWithOffset() throws Exception {
         byte[] fullFileContent = createFileContent(1024 * 1024 + 987654);
         RandomAccessFile raf = createRaf(fullFileContent);
-        DataSource rafDataSource = new RandomAccessFileDataSource(raf);
+        DataSource rafDataSource = new FileChannelDataSource(raf.getChannel());
 
         ByteArrayDataSink dataSink = new ByteArrayDataSink();
 
@@ -75,7 +75,7 @@ public class RandomAccessFileDataSourceTest {
     public void testFeedsCorrectData_whenSeveralMbRead() throws Exception {
         byte[] fullFileContent = createFileContent(3 * 1024 * 1024 + 987654);
         RandomAccessFile raf = createRaf(fullFileContent);
-        DataSource rafDataSource = new RandomAccessFileDataSource(raf);
+        DataSource rafDataSource = new FileChannelDataSource(raf.getChannel());
 
         ByteArrayDataSink dataSink = new ByteArrayDataSink();
 
@@ -90,14 +90,14 @@ public class RandomAccessFileDataSourceTest {
         assertArrayEquals(expectedBytes, resultBytes);
     }
 
-    private byte[] getDataSinkBytes(ByteArrayDataSink dataSink) {
+    private static byte[] getDataSinkBytes(ByteArrayDataSink dataSink) {
         ByteBuffer result = dataSink.getByteBuffer(0, (int)dataSink.size());
         byte[] resultBytes = new byte[result.limit()];
         result.get(resultBytes);
         return resultBytes;
     }
 
-    private byte[] createFileContent(int fileSize) {
+    private static byte[] createFileContent(int fileSize) {
         byte[] fullFileContent = new byte[fileSize];
         for (int i = 0; i < fileSize; ++i) {
             fullFileContent[i] = (byte) (i % 255);
