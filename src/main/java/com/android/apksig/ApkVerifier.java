@@ -501,15 +501,18 @@ public class ApkVerifier {
             if (v3DigestsFromV4.size() != 1) {
                 result.addError(Issue.V4_SIG_V3_DIGESTS_MISMATCH);
             }
-            boolean foundV3DigestMatch = false;
+            final byte[] v3DigestFromV4 = v3DigestsFromV4.get(0).getValue();
+
+            Map<ContentDigestAlgorithm, byte[]> contentDigests = new HashMap<>();
             for (ApkSigningBlockUtils.Result.SignerInfo.ContentDigest v3DigestFromV3 :
                     v3DigestsFromV3) {
-                if (Arrays.equals(v3DigestFromV3.getValue(), v3DigestsFromV4.get(0).getValue())) {
-                    foundV3DigestMatch = true;
-                    break;
-                }
+                final SignatureAlgorithm signatureAlgorithm =
+                        SignatureAlgorithm.findById(v3DigestFromV3.getSignatureAlgorithmId());
+                contentDigests.put(signatureAlgorithm.getContentDigestAlgorithm(),
+                        v3DigestFromV3.getValue());
             }
-            if (!foundV3DigestMatch) {
+            final byte[] v3DigestFromV3 = V3SchemeVerifier.pickBestV3DigestForV4(contentDigests);
+            if (!Arrays.equals(v3DigestFromV4, v3DigestFromV3)) {
                 result.addError(Issue.V4_SIG_V3_DIGESTS_MISMATCH);
             }
         }
