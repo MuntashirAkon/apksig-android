@@ -81,7 +81,7 @@ public abstract class V4SchemeSigner {
         // Keeping only supported algorithms.
         for (Iterator<SignatureAlgorithm> iter = algorithms.listIterator(); iter.hasNext(); ) {
             final SignatureAlgorithm algorithm = iter.next();
-            if (!isSupported(algorithm.getContentDigestAlgorithm())) {
+            if (!isSupported(algorithm.getContentDigestAlgorithm(), false)) {
                 iter.remove();
             }
         }
@@ -217,19 +217,19 @@ public abstract class V4SchemeSigner {
             throw new SignatureException("Should have at least one digest");
         }
 
-        int bestAlgorithm = -1;
+        int bestAlgorithmOrder = -1;
         byte[] bestDigest = null;
         for (ApkSigningBlockUtils.Result.SignerInfo.ContentDigest contentDigest : contentDigests) {
             final SignatureAlgorithm signatureAlgorithm =
                     SignatureAlgorithm.findById(contentDigest.getSignatureAlgorithmId());
             final ContentDigestAlgorithm contentDigestAlgorithm =
                     signatureAlgorithm.getContentDigestAlgorithm();
-            if (!isSupported(contentDigestAlgorithm)) {
+            if (!isSupported(contentDigestAlgorithm, true)) {
                 continue;
             }
-            // Prefer SHA512 over SHA256, if both are available.
-            if (bestAlgorithm < contentDigestAlgorithm.getId()) {
-                bestAlgorithm = contentDigestAlgorithm.getId();
+            final int algorithmOrder = digestAlgorithmSortingOrder(contentDigestAlgorithm);
+            if (bestAlgorithmOrder < algorithmOrder) {
+                bestAlgorithmOrder = algorithmOrder;
                 bestDigest = contentDigest.getValue();
             }
         }
@@ -239,12 +239,29 @@ public abstract class V4SchemeSigner {
         return bestDigest;
     }
 
-    private static boolean isSupported(final ContentDigestAlgorithm contentDigestAlgorithm) {
+    // Use the same order as in the ApkSignatureSchemeV3Verifier to make sure the digest
+    // verification in framework works.
+    public static int digestAlgorithmSortingOrder(ContentDigestAlgorithm contentDigestAlgorithm) {
+        switch (contentDigestAlgorithm) {
+            case CHUNKED_SHA256:
+                return 0;
+            case VERITY_CHUNKED_SHA256:
+                return 1;
+            case CHUNKED_SHA512:
+                return 2;
+        }
+        return -1;
+    }
+
+    private static boolean isSupported(final ContentDigestAlgorithm contentDigestAlgorithm,
+            boolean forV3Digest) {
         if (contentDigestAlgorithm == null) {
             return false;
         }
         if (contentDigestAlgorithm == ContentDigestAlgorithm.CHUNKED_SHA256
-                || contentDigestAlgorithm == ContentDigestAlgorithm.CHUNKED_SHA512) {
+                || contentDigestAlgorithm == ContentDigestAlgorithm.CHUNKED_SHA512
+                || (forV3Digest
+                     && contentDigestAlgorithm == ContentDigestAlgorithm.VERITY_CHUNKED_SHA256)) {
             return true;
         }
         return false;

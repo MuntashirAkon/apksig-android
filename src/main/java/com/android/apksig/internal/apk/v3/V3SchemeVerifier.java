@@ -18,6 +18,9 @@ package com.android.apksig.internal.apk.v3;
 
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.getLengthPrefixedSlice;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.readLengthPrefixedByteArray;
+import static com.android.apksig.internal.apk.ContentDigestAlgorithm.CHUNKED_SHA256;
+import static com.android.apksig.internal.apk.ContentDigestAlgorithm.CHUNKED_SHA512;
+import static com.android.apksig.internal.apk.ContentDigestAlgorithm.VERITY_CHUNKED_SHA256;
 
 import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.SigningCertificateLineage;
@@ -53,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -522,4 +526,19 @@ public abstract class V3SchemeVerifier {
         }
     }
 
+    /**
+     * Picks the correct v3 digest for v4 signature verification.
+     *
+     * Keep in sync with pickBestV3DigestForV4 in ApkSignatureSchemeV3Verifier.
+     */
+    public static byte[] pickBestV3DigestForV4(Map<ContentDigestAlgorithm, byte[]> contentDigests) {
+        final ContentDigestAlgorithm[] orderedContentDigestTypes =
+                {CHUNKED_SHA512, VERITY_CHUNKED_SHA256, CHUNKED_SHA256};
+        for (ContentDigestAlgorithm contentDigestType : orderedContentDigestTypes) {
+            if (contentDigests.containsKey(contentDigestType)) {
+                return contentDigests.get(contentDigestType);
+            }
+        }
+        return null;
+    }
 }
