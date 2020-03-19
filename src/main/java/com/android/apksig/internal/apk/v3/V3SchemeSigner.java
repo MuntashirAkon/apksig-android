@@ -87,9 +87,6 @@ public abstract class V3SchemeSigner {
                 // 3072-bit RSA is roughly 128-bit strong, meaning SHA-256 is a good fit.
                 List<SignatureAlgorithm> algorithms = new ArrayList<>();
                 algorithms.add(SignatureAlgorithm.RSA_PKCS1_V1_5_WITH_SHA256);
-                if (apkSigningBlockPaddingSupported) {
-                    algorithms.add(SignatureAlgorithm.VERITY_RSA_PKCS1_V1_5_WITH_SHA256);
-                }
                 return algorithms;
             } else {
                 // Keys longer than 3072 bit need to be paired with a stronger digest to avoid the
@@ -100,9 +97,6 @@ public abstract class V3SchemeSigner {
             // DSA is supported only with SHA-256.
             List<SignatureAlgorithm> algorithms = new ArrayList<>();
             algorithms.add(SignatureAlgorithm.DSA_WITH_SHA256);
-            if (apkSigningBlockPaddingSupported) {
-                algorithms.add(SignatureAlgorithm.VERITY_DSA_WITH_SHA256);
-            }
             return algorithms;
         } else if ("EC".equalsIgnoreCase(keyAlgorithm)) {
             // Pick a digest which is no weaker than the key.
@@ -111,9 +105,6 @@ public abstract class V3SchemeSigner {
                 // 256-bit Elliptic Curve is roughly 128-bit strong, meaning SHA-256 is a good fit.
                 List<SignatureAlgorithm> algorithms = new ArrayList<>();
                 algorithms.add(SignatureAlgorithm.ECDSA_WITH_SHA256);
-                if (apkSigningBlockPaddingSupported) {
-                    algorithms.add(SignatureAlgorithm.VERITY_ECDSA_WITH_SHA256);
-                }
                 return algorithms;
             } else {
                 // Keys longer than 256 bit need to be paired with a stronger digest to avoid the
