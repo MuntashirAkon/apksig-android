@@ -17,6 +17,7 @@
 package com.android.apksig.internal.apk.v4;
 
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeCertificates;
+import static com.android.apksig.internal.apk.v2.V2SchemeSigner.APK_SIGNATURE_SCHEME_V2_BLOCK_ID;
 import static com.android.apksig.internal.apk.v3.V3SchemeSigner.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
 
 import com.android.apksig.apk.ApkFormatException;
@@ -26,6 +27,7 @@ import com.android.apksig.internal.apk.ApkSigningBlockUtils.SignerConfig;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.SignatureInfo;
+import com.android.apksig.internal.apk.v2.V2SchemeVerifier;
 import com.android.apksig.internal.apk.v3.V3SchemeSigner;
 import com.android.apksig.internal.apk.v3.V3SchemeVerifier;
 import com.android.apksig.internal.util.Pair;
@@ -42,6 +44,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -59,8 +62,7 @@ import java.util.Set;
  * </p>
  * (optional) verityTree: integer size prepended bytes of the verity hash tree.
  * <p>
- * TODO(schfan): Pass v3 digest to v4 signature proto and add verification code TODO(schfan): Add v4
- * unit tests
+ * TODO(schfan): Add v4 unit tests
  */
 public abstract class V4SchemeSigner {
     /**
@@ -103,14 +105,8 @@ public abstract class V4SchemeSigner {
 
         final long fileSize = apkContent.size();
 
-        // Obtaining first supported digest from v3 block (SHA256 or SHA512).
-        byte[] v3digest;
-        try {
-            v3digest = getV3Digest(apkContent);
-        } catch (ApkFormatException | SignatureException
-                | ApkSigningBlockUtils.SignatureNotFoundException e) {
-            throw new IOException("Failed to parse V3-signed apk to read its V3 digest");
-        }
+        // Obtaining first supported digest from v2/v3 blocks (SHA256 or SHA512).
+        final byte[] apkDigest = getApkDigest(apkContent);
 
         // Obtaining the merkle tree and the root hash in verity format.
         ApkSigningBlockUtils.VerityTreeAndDigest verityContentDigestInfo =
@@ -130,7 +126,7 @@ public abstract class V4SchemeSigner {
         // Generating SigningInfo and combining everything into V4Signature.
         final V4Signature signature;
         try {
-            signature = generateSignature(signerConfig, hashingInfo, v3digest, additionalData,
+            signature = generateSignature(signerConfig, hashingInfo, apkDigest, additionalData,
                     fileSize);
         } catch (InvalidKeyException | SignatureException | CertificateEncodingException e) {
             throw new InvalidKeyException("Signer failed", e);
@@ -148,7 +144,7 @@ public abstract class V4SchemeSigner {
     private static V4Signature generateSignature(
             SignerConfig signerConfig,
             V4Signature.HashingInfo hashingInfo,
-            byte[] v3Digest, byte[] additionaData, long fileSize)
+            byte[] apkDigest, byte[] additionaData, long fileSize)
             throws NoSuchAlgorithmException, InvalidKeyException, SignatureException,
             CertificateEncodingException {
         if (signerConfig.certificates.isEmpty()) {
@@ -164,7 +160,7 @@ public abstract class V4SchemeSigner {
         final List<byte[]> encodedCertificates = encodeCertificates(signerConfig.certificates);
         final byte[] encodedCertificate = encodedCertificates.get(0);
 
-        final V4Signature.SigningInfo signingInfoNoSignature = new V4Signature.SigningInfo(v3Digest,
+        final V4Signature.SigningInfo signingInfoNoSignature = new V4Signature.SigningInfo(apkDigest,
                 encodedCertificate, additionaData, publicKey.getEncoded(), -1, null);
 
         final byte[] data = V4Signature.getSigningData(fileSize, hashingInfo,
@@ -180,7 +176,7 @@ public abstract class V4SchemeSigner {
         final int signatureAlgorithmId = signatures.get(0).getFirst();
         final byte[] signature = signatures.get(0).getSecond();
 
-        final V4Signature.SigningInfo signingInfo = new V4Signature.SigningInfo(v3Digest,
+        final V4Signature.SigningInfo signingInfo = new V4Signature.SigningInfo(apkDigest,
                 encodedCertificate, additionaData, publicKey.getEncoded(), signatureAlgorithmId,
                 signature);
 
@@ -188,32 +184,103 @@ public abstract class V4SchemeSigner {
                 signingInfo.toByteArray());
     }
 
-    // Get V3 digest by parsing the V3-signed apk and choosing the first digest of supported type.
-    private static byte[] getV3Digest(DataSource apk) throws ApkFormatException, IOException,
-            ApkSigningBlockUtils.SignatureNotFoundException, NoSuchAlgorithmException,
-            SignatureException {
-        final Set<ContentDigestAlgorithm> contentDigestsToVerify = new HashSet<>(1);
-        final ApkSigningBlockUtils.Result result = new ApkSigningBlockUtils.Result(
-                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
+    // Get digest by parsing the V2/V3-signed apk and choosing the first digest of supported type.
+    private static byte[] getApkDigest(DataSource apk) throws IOException {
         ApkUtils.ZipSections zipSections;
         try {
             zipSections = ApkUtils.findZipSections(apk);
         } catch (ZipFormatException e) {
-            throw new ApkFormatException("Malformed APK: not a ZIP archive", e);
+            throw new IOException("Malformed APK: not a ZIP archive", e);
         }
 
-        final SignatureInfo signatureInfo =
-                ApkSigningBlockUtils.findSignature(apk, zipSections,
-                        APK_SIGNATURE_SCHEME_V3_BLOCK_ID, result);
-        final ByteBuffer apkSignatureSchemeV3Block = signatureInfo.signatureBlock;
-        V3SchemeVerifier.parseSigners(apkSignatureSchemeV3Block, contentDigestsToVerify, result);
+        final SignatureException v3Exception;
+        try {
+            return getBestV3Digest(apk, zipSections);
+        } catch (SignatureException e) {
+            v3Exception = e;
+        }
+
+        final SignatureException v2Exception;
+        try {
+            return getBestV2Digest(apk, zipSections);
+        } catch (SignatureException e) {
+            v2Exception = e;
+        }
+
+        throw new IOException(
+                "Failed to obtain v2/v3 digest, v3 exception: " + v3Exception + ", v2 exception: "
+                        + v2Exception);
+    }
+
+    private static byte[] getBestV3Digest(DataSource apk, ApkUtils.ZipSections zipSections)
+            throws SignatureException {
+        final Set<ContentDigestAlgorithm> contentDigestsToVerify = new HashSet<>(1);
+        final ApkSigningBlockUtils.Result result = new ApkSigningBlockUtils.Result(
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
+        try {
+            final SignatureInfo signatureInfo =
+                    ApkSigningBlockUtils.findSignature(apk, zipSections,
+                            APK_SIGNATURE_SCHEME_V3_BLOCK_ID, result);
+            final ByteBuffer apkSignatureSchemeV3Block = signatureInfo.signatureBlock;
+            V3SchemeVerifier.parseSigners(apkSignatureSchemeV3Block, contentDigestsToVerify,
+                    result);
+        } catch (Exception e) {
+            throw new SignatureException("Failed to extract and parse v3 block", e);
+        }
+
         if (result.signers.size() != 1) {
-            throw new SignatureException("Should only have one signer");
+            throw new SignatureException("Should only have one signer, errors: " + result.getErrors());
+        }
+
+        ApkSigningBlockUtils.Result.SignerInfo signer = result.signers.get(0);
+        if (signer.containsErrors()) {
+            throw new SignatureException("Parsing failed: " + signer.getErrors());
         }
 
         final List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> contentDigests =
                 result.signers.get(0).contentDigests;
-        if (contentDigests.isEmpty()) {
+        return pickBestDigest(contentDigests);
+    }
+
+    private static byte[] getBestV2Digest(DataSource apk, ApkUtils.ZipSections zipSections)
+            throws SignatureException {
+        final Set<ContentDigestAlgorithm> contentDigestsToVerify = new HashSet<>(1);
+        final Set<Integer> foundApkSigSchemeIds = new HashSet<>(1);
+        final ApkSigningBlockUtils.Result result = new ApkSigningBlockUtils.Result(
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2);
+        try {
+            final SignatureInfo signatureInfo =
+                    ApkSigningBlockUtils.findSignature(apk, zipSections,
+                            APK_SIGNATURE_SCHEME_V2_BLOCK_ID, result);
+            final ByteBuffer apkSignatureSchemeV2Block = signatureInfo.signatureBlock;
+            V2SchemeVerifier.parseSigners(
+                    apkSignatureSchemeV2Block,
+                    contentDigestsToVerify,
+                    Collections.emptyMap(),
+                    foundApkSigSchemeIds,
+                    Integer.MAX_VALUE,
+                    Integer.MAX_VALUE,
+                    result);
+        } catch (Exception e) {
+            throw new SignatureException("Failed to extract and parse v2 block", e);
+        }
+
+        if (result.signers.size() != 1) {
+            throw new SignatureException("Should only have one signer, errors: " + result.getErrors());
+        }
+
+        ApkSigningBlockUtils.Result.SignerInfo signer = result.signers.get(0);
+        if (signer.containsErrors()) {
+            throw new SignatureException("Parsing failed: " + signer.getErrors());
+        }
+
+        final List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> contentDigests =
+                signer.contentDigests;
+        return pickBestDigest(contentDigests);
+    }
+
+    private static byte[] pickBestDigest(List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> contentDigests) throws SignatureException {
+        if (contentDigests == null || contentDigests.isEmpty()) {
             throw new SignatureException("Should have at least one digest");
         }
 
@@ -234,7 +301,7 @@ public abstract class V4SchemeSigner {
             }
         }
         if (bestDigest == null) {
-            throw new SignatureException("Failed to find a supported V3 digest in the source APK");
+            throw new SignatureException("Failed to find a supported digest in the source APK");
         }
         return bestDigest;
     }

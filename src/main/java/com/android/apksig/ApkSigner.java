@@ -1276,9 +1276,6 @@ public class ApkSigner {
         public Builder setV4SigningEnabled(boolean enabled) {
             checkInitializedWithoutEngine();
             mV4SigningEnabled = enabled;
-            if (enabled) {
-                mV3SigningExplicitlyEnabled = true;
-            }
             return this;
         }
 
@@ -1371,11 +1368,10 @@ public class ApkSigner {
          * this builder.
          */
         public ApkSigner build() {
-
             if (mV3SigningExplicitlyDisabled && mV3SigningExplicitlyEnabled) {
                 throw new IllegalStateException(
                         "Builder configured to both enable and disable APK "
-                                + "Signature Scheme v3/v4 signing");
+                                + "Signature Scheme v3 signing");
             }
 
             if (mV3SigningExplicitlyDisabled) {
@@ -1386,11 +1382,9 @@ public class ApkSigner {
                 mV3SigningEnabled = true;
             }
 
-            // If V4 signing is not explicitly set, and V3 signing is disabled, then V4 signing is
-            // disabled as well as it is dependent on V3.
-            // If V3 signing is explicitly disabled, and V4 signing is explicitly enabled, the
-            // signing process would fail due to conflicting signing state.
-            if (!mV3SigningEnabled) {
+            // If V4 signing is not explicitly set, and V2/V3 signing is disabled, then V4 signing is
+            // disabled as well as it is dependent on V2/V3.
+            if (!mV4SigningRequested && !mV2SigningEnabled && !mV3SigningEnabled) {
                 mV4SigningEnabled = false;
             }
 
