@@ -208,10 +208,10 @@ public abstract class V4SchemeVerifier {
             return result;
         }
 
-        // Add v3Content digest from the file to the result.
+        // Add apk digest from the file to the result.
         ApkSigningBlockUtils.Result.SignerInfo.ContentDigest contentDigest =
                 new ApkSigningBlockUtils.Result.SignerInfo.ContentDigest(
-                        0 /* signature algorithm id doesn't matter here */, signingInfo.v3Digest);
+                        0 /* signature algorithm id doesn't matter here */, signingInfo.apkDigest);
         result.contentDigests.add(contentDigest);
 
         return result;

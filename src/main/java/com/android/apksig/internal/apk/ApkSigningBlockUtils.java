@@ -16,6 +16,8 @@
 
 package com.android.apksig.internal.apk;
 
+import static com.android.apksig.internal.apk.ContentDigestAlgorithm.CHUNKED_SHA256;
+import static com.android.apksig.internal.apk.ContentDigestAlgorithm.CHUNKED_SHA512;
 import static com.android.apksig.internal.apk.ContentDigestAlgorithm.VERITY_CHUNKED_SHA256;
 
 import com.android.apksig.ApkVerifier;
@@ -79,7 +81,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 import javax.security.auth.x500.X500Principal;
 
@@ -94,6 +95,9 @@ public class ApkSigningBlockUtils {
               0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x20, 0x34, 0x32,
           };
     private static final int VERITY_PADDING_BLOCK_ID = 0x42726577;
+
+    private static final ContentDigestAlgorithm[] V4_CONTENT_DIGEST_ALGORITHMS =
+            {CHUNKED_SHA512, VERITY_CHUNKED_SHA256, CHUNKED_SHA256};
 
     public static final int VERSION_SOURCE_STAMP = 0;
     public static final int VERSION_JAR_SIGNATURE_SCHEME = 1;
@@ -1193,7 +1197,7 @@ public class ApkSigningBlockUtils {
         if (minSdkVersion < minProvidedSignaturesVersion) {
             throw new NoSupportedSignaturesException(
                     "Minimum provided signature version " + minProvidedSignaturesVersion +
-                    " < minSdkVersion " + minSdkVersion);
+                    " > minSdkVersion " + minSdkVersion);
         }
         if (bestSigAlgorithmOnSdkVersion.isEmpty()) {
             throw new NoSupportedSignaturesException("No supported signature");
@@ -1332,6 +1336,20 @@ public class ApkSigningBlockUtils {
         contentInfo.contentType = Pkcs7Constants.OID_SIGNED_DATA;
         contentInfo.content = new Asn1OpaqueObject(Asn1DerEncoder.encode(signedData));
         return Asn1DerEncoder.encode(contentInfo);
+    }
+
+    /**
+     * Picks the correct v2/v3 digest for v4 signature verification.
+     *
+     * Keep in sync with pickBestDigestForV4 in framework's ApkSigningBlockUtils.
+     */
+    public static byte[] pickBestDigestForV4(Map<ContentDigestAlgorithm, byte[]> contentDigests) {
+        for (ContentDigestAlgorithm algo : V4_CONTENT_DIGEST_ALGORITHMS) {
+            if (contentDigests.containsKey(algo)) {
+                return contentDigests.get(algo);
+            }
+        }
+        return null;
     }
 
     /**
