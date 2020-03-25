@@ -235,13 +235,6 @@ public class ApkSignerTool {
                                 + " options.");
             }
         }
-        // If V4 signing is not explicitly set, and V3 signing is disabled, then V4 signing is
-        // disabled as well as it is dependent on V3.
-        // If V3 signing is explicitly disabled, and V4 signing is explicitly enabled, the
-        // signing process would fail due to conflicting signing state.
-        if (!v4SigningFlagFound && !v3SigningEnabled) {
-            v4SigningEnabled = false;
-        }
         if (!signerParams.isEmpty()) {
             signers.add(signerParams);
         }
