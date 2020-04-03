@@ -90,7 +90,7 @@ public class ApkSigner {
     private final boolean mV2SigningEnabled;
     private final boolean mV3SigningEnabled;
     private final boolean mV4SigningEnabled;
-    private final boolean mV4SigningRequested;
+    private final boolean mV4ErrorReportingEnabled;
     private final boolean mDebuggableApkPermitted;
     private final boolean mOtherSignersSignaturesPreserved;
     private final String mCreatedBy;
@@ -116,7 +116,7 @@ public class ApkSigner {
             boolean v2SigningEnabled,
             boolean v3SigningEnabled,
             boolean v4SigningEnabled,
-            boolean v4SigningRequested,
+            boolean v4ErrorReportingEnabled,
             boolean debuggableApkPermitted,
             boolean otherSignersSignaturesPreserved,
             String createdBy,
@@ -136,7 +136,7 @@ public class ApkSigner {
         mV2SigningEnabled = v2SigningEnabled;
         mV3SigningEnabled = v3SigningEnabled;
         mV4SigningEnabled = v4SigningEnabled;
-        mV4SigningRequested = v4SigningRequested;
+        mV4ErrorReportingEnabled = v4ErrorReportingEnabled;
         mDebuggableApkPermitted = debuggableApkPermitted;
         mOtherSignersSignaturesPreserved = otherSignersSignaturesPreserved;
         mCreatedBy = createdBy;
@@ -575,7 +575,7 @@ public class ApkSigner {
 
         // Step 13. Generate and output APK Signature Scheme v4 signatures, if necessary.
         if (mV4SigningEnabled) {
-            signerEngine.signV4(outputApkIn, mOutputV4File, !mV4SigningRequested);
+            signerEngine.signV4(outputApkIn, mOutputV4File, !mV4ErrorReportingEnabled);
         }
     }
 
@@ -996,7 +996,7 @@ public class ApkSigner {
         private boolean mV2SigningEnabled = true;
         private boolean mV3SigningEnabled = true;
         private boolean mV4SigningEnabled = true;
-        private boolean mV4SigningRequested = false;
+        private boolean mV4ErrorReportingEnabled = false;
         private boolean mDebuggableApkPermitted = true;
         private boolean mOtherSignersSignaturesPreserved;
         private String mCreatedBy;
@@ -1268,23 +1268,34 @@ public class ApkSigner {
         }
 
         /**
-         * V4 signing requires that the APK to be v3 signed.
+         * Sets whether the APK should be signed using APK Signature Scheme v4.
          *
-         * @param enabled {@code true} to require the APK to be signed using APK Signature Scheme v3
-         *     and generate an V4 signature file.
+         * <p>V4 signing requires that the APK be v2 or v3 signed.
+         *
+         * @param enabled {@code true} to require the APK to be signed using APK Signature Scheme v2
+         * or v3 and generate an v4 signature file
          */
         public Builder setV4SigningEnabled(boolean enabled) {
             checkInitializedWithoutEngine();
             mV4SigningEnabled = enabled;
+            mV4ErrorReportingEnabled = enabled;
             return this;
         }
 
         /**
-         * Explicitly request V4 signing. The tool will fail if V4 signing fails.
+         * Sets whether errors during v4 signing should be reported and halt the signing process.
+         *
+         * <p>Error reporting for v4 signing is disabled by default, but will be enabled if the
+         * caller invokes {@link #setV4SigningEnabled} with a value of true. This method is useful
+         * for tools that enable v4 signing by default but don't want to fail the signing process if
+         * the user did not explicitly request the v4 signing.
+         *
+         * @param enabled {@code false} to prevent errors encountered during the V4 signing from
+         * halting the signing process
          */
-        public Builder setV4SigningRequested(boolean enabled) {
+        public Builder setV4ErrorReportingEnabled(boolean enabled) {
             checkInitializedWithoutEngine();
-            mV4SigningRequested = enabled;
+            mV4ErrorReportingEnabled = enabled;
             return this;
         }
 
@@ -1382,10 +1393,16 @@ public class ApkSigner {
                 mV3SigningEnabled = true;
             }
 
-            // If V4 signing is not explicitly set, and V2/V3 signing is disabled, then V4 signing is
-            // disabled as well as it is dependent on V2/V3.
-            if (!mV4SigningRequested && !mV2SigningEnabled && !mV3SigningEnabled) {
-                mV4SigningEnabled = false;
+            // If V4 signing is not explicitly set, and V2/V3 signing is disabled, then V4 signing
+            // must be disabled as well as it is dependent on V2/V3.
+            if (mV4SigningEnabled && !mV2SigningEnabled && !mV3SigningEnabled) {
+                if (!mV4ErrorReportingEnabled) {
+                    mV4SigningEnabled = false;
+                } else {
+                    throw new IllegalStateException(
+                        "APK Signature Scheme v4 signing requires at least "
+                            + "v2 or v3 signing to be enabled");
+                }
             }
 
             // TODO - if v3 signing is enabled, check provided signers and history to see if valid
@@ -1398,7 +1415,7 @@ public class ApkSigner {
                     mV2SigningEnabled,
                     mV3SigningEnabled,
                     mV4SigningEnabled,
-                    mV4SigningRequested,
+                    mV4ErrorReportingEnabled,
                     mDebuggableApkPermitted,
                     mOtherSignersSignaturesPreserved,
                     mCreatedBy,
