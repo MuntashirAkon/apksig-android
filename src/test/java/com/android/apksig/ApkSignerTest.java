@@ -955,24 +955,18 @@ public class ApkSignerTest {
     }
 
     @Test
-    public void testV4State_disableV3EnableV4_fails() throws Exception {
+    public void testV4State_disableV2V3EnableV4_fails() throws Exception {
         ApkSigner.SignerConfig signer =
                 getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME);
 
-        Exception exception =
-                assertThrows(
-                        IllegalStateException.class,
-                        () ->
-                                sign(
-                                        "original.apk",
-                                        new ApkSigner.Builder(Collections.singletonList(signer))
-                                                .setV1SigningEnabled(true)
-                                                .setV2SigningEnabled(true)
-                                                .setV3SigningEnabled(false)
-                                                .setV4SigningEnabled(true)));
-        assertEquals(
-                "Builder configured to both enable and disable APK Signature Scheme v3/v4 signing",
-                exception.getMessage());
+        assertThrows(
+            IllegalStateException.class,
+            () -> sign("original.apk",
+                new ApkSigner.Builder(Collections.singletonList(signer))
+                    .setV1SigningEnabled(true)
+                    .setV2SigningEnabled(false)
+                    .setV3SigningEnabled(false)
+                    .setV4SigningEnabled(true)));
     }
 
     @Test
