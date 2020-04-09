@@ -91,12 +91,26 @@ public abstract class V4SchemeSigner {
     }
 
     /**
-     * Compute hash tree and root for a given APK. Write the serialized date to output file.
+     * Compute hash tree and generate v4 signature for a given APK. Write the serialized data to
+     * output file.
      */
     public static void generateV4Signature(
+        DataSource apkContent, SignerConfig signerConfig, File outputFile)
+        throws IOException, InvalidKeyException, NoSuchAlgorithmException {
+      Pair<V4Signature, byte[]> pair = generateV4Signature(apkContent, signerConfig);
+      try (final OutputStream output = new FileOutputStream(outputFile)) {
+        pair.getFirst().writeTo(output);
+        V4Signature.writeBytes(output, pair.getSecond());
+      } catch (IOException e) {
+        outputFile.delete();
+        throw e;
+      }
+    }
+
+    /** Generate v4 signature and hash tree for a given APK. */
+    public static Pair<V4Signature, byte[]> generateV4Signature(
             DataSource apkContent,
-            SignerConfig signerConfig,
-            File outputFile)
+            SignerConfig signerConfig)
             throws IOException, InvalidKeyException, NoSuchAlgorithmException {
         // Salt has to stay empty for fs-verity compatibility.
         final byte[] salt = null;
@@ -132,13 +146,7 @@ public abstract class V4SchemeSigner {
             throw new InvalidKeyException("Signer failed", e);
         }
 
-        try (final OutputStream output = new FileOutputStream(outputFile)) {
-            signature.writeTo(output);
-            V4Signature.writeBytes(output, tree);
-        } catch (IOException e) {
-            outputFile.delete();
-            throw e;
-        }
+        return Pair.of(signature, tree);
     }
 
     private static V4Signature generateSignature(
