@@ -128,7 +128,7 @@ public class V4Signature {
         return new V4Signature(version, hashingInfo, signingInfo);
     }
 
-    void writeTo(OutputStream stream) throws IOException {
+    public void writeTo(OutputStream stream) throws IOException {
         writeIntLE(stream, this.version);
         writeBytes(stream, this.hashingInfo);
         writeBytes(stream, this.signingInfo);
