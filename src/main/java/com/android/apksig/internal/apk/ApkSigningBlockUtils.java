@@ -767,11 +767,13 @@ public class ApkSigningBlockUtils {
         ByteBuffer encoded = createVerityDigestBuffer(true);
         // Use 0s as salt for now.  This also needs to be consistent in the fsverify header for
         // kernel to use.
-        VerityTreeBuilder builder = new VerityTreeBuilder(new byte[8]);
-        byte[] rootHash = builder.generateVerityTreeRootHash(beforeCentralDir, centralDir, eocd);
-        encoded.put(rootHash);
-        encoded.putLong(beforeCentralDir.size() + centralDir.size() + eocd.size());
-        outputContentDigests.put(VERITY_CHUNKED_SHA256, encoded.array());
+        try (VerityTreeBuilder builder = new VerityTreeBuilder(new byte[8])) {
+            byte[] rootHash = builder.generateVerityTreeRootHash(beforeCentralDir, centralDir,
+                    eocd);
+            encoded.put(rootHash);
+            encoded.putLong(beforeCentralDir.size() + centralDir.size() + eocd.size());
+            outputContentDigests.put(VERITY_CHUNKED_SHA256, encoded.array());
+        }
     }
 
     private static ByteBuffer createVerityDigestBuffer(boolean includeSourceDataSize) {
@@ -807,11 +809,12 @@ public class ApkSigningBlockUtils {
         ByteBuffer encoded = createVerityDigestBuffer(false);
         // Use 0s as salt for now.  This also needs to be consistent in the fsverify header for
         // kernel to use.
-        VerityTreeBuilder builder = new VerityTreeBuilder(null);
-        ByteBuffer tree = builder.generateVerityTree(dataSource);
-        byte[] rootHash = builder.getRootHashFromTree(tree);
-        encoded.put(rootHash);
-        return new VerityTreeAndDigest(VERITY_CHUNKED_SHA256, encoded.array(), tree.array());
+        try (VerityTreeBuilder builder = new VerityTreeBuilder(null)) {
+            ByteBuffer tree = builder.generateVerityTree(dataSource);
+            byte[] rootHash = builder.getRootHashFromTree(tree);
+            encoded.put(rootHash);
+            return new VerityTreeAndDigest(VERITY_CHUNKED_SHA256, encoded.array(), tree.array());
+        }
     }
 
     private static long getChunkCount(long inputSize, long chunkSize) {
