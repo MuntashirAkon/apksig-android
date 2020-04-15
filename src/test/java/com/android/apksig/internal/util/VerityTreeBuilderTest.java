@@ -66,8 +66,7 @@ public final class VerityTreeBuilderTest {
     private static String generateRootHash(String inputResource, byte[] salt) throws IOException {
         byte[] input = Resources.toByteArray(VerityTreeBuilderTest.class, inputResource);
         assertNotNull(input);
-        try {
-            VerityTreeBuilder builder = new VerityTreeBuilder(salt);
+        try (VerityTreeBuilder builder = new VerityTreeBuilder(salt)) {
             return HexEncoding.encode(builder.generateVerityTreeRootHash(
                     DataSources.asDataSource(ByteBuffer.wrap(input))));
         } catch (NoSuchAlgorithmException e) {
@@ -88,8 +87,7 @@ public final class VerityTreeBuilderTest {
         };
         String expectedRootHash =
                 "7694e72c242107a5b4ce6091faf867e2f13c033b6b64faddcb13b3d698a8495a";
-        {
-            VerityTreeBuilder builder = new VerityTreeBuilder(null);
+        try (VerityTreeBuilder builder = new VerityTreeBuilder(null)) {
             byte[] rootHash = builder.generateVerityTreeRootHash(
                     DataSources.asDataSource(ByteBuffer.allocate(4096)),  // before Signing Block
                     makeStringDataSource("this is central directory (fake data)"),
@@ -100,13 +98,12 @@ public final class VerityTreeBuilderTest {
         // File ending with different length of zeros get the same hash.  This is to match the
         // behavior of fs-verity, where it expects the client to add salt for the same level of
         // protection.
-        {
+        try (VerityTreeBuilder builder = new VerityTreeBuilder(null)) {
             ByteBuffer fileTailWithDifferentLengthOfZeros = ByteBuffer.allocate(
                     sampleEoCDFromDisk.length + 1);
             fileTailWithDifferentLengthOfZeros.put(sampleEoCDFromDisk);
             fileTailWithDifferentLengthOfZeros.rewind();
 
-            VerityTreeBuilder builder = new VerityTreeBuilder(null);
             byte[] rootHash = builder.generateVerityTreeRootHash(
                     DataSources.asDataSource(ByteBuffer.allocate(4096)),  // before Signing Block
                     makeStringDataSource("this is central directory (fake data)"),
