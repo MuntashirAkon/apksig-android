@@ -24,6 +24,7 @@ import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.MinSdkVersionException;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -120,6 +121,7 @@ public class ApkSignerTool {
         boolean v1SigningEnabled = true;
         boolean v2SigningEnabled = true;
         boolean v3SigningEnabled = true;
+        boolean v4SigningEnabled = false;
         boolean debuggableApkPermitted = true;
         int minSdkVersion = 1;
         boolean minSdkVersionSpecified = false;
@@ -132,6 +134,7 @@ public class ApkSignerTool {
         OptionsParser optionsParser = new OptionsParser(params);
         String optionName;
         String optionOriginalForm = null;
+        boolean v4SigningFlagFound = false;
         while ((optionName = optionsParser.nextOption()) != null) {
             optionOriginalForm = optionsParser.getOptionOriginalForm();
             if (("help".equals(optionName)) || ("h".equals(optionName))) {
@@ -152,6 +155,9 @@ public class ApkSignerTool {
                 v2SigningEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("v3-signing-enabled".equals(optionName)) {
                 v3SigningEnabled = optionsParser.getOptionalBooleanValue(true);
+            } else if ("v4-signing-enabled".equals(optionName)) {
+                v4SigningEnabled = optionsParser.getOptionalBooleanValue(true);
+                v4SigningFlagFound = true;
             } else if ("debuggable-apk-permitted".equals(optionName)) {
                 debuggableApkPermitted = optionsParser.getOptionalBooleanValue(true);
             } else if ("next-signer".equals(optionName)) {
@@ -223,6 +229,13 @@ public class ApkSignerTool {
                         "Unsupported option: " + optionOriginalForm + ". See --help for supported"
                                 + " options.");
             }
+        }
+        // If V4 signing is not explicitly set, and V3 signing is disabled, then V4 signing is
+        // disabled as well as it is dependent on V3.
+        // If V3 signing is explicitly disabled, and V4 signing is explicitly enabled, the
+        // signing process would fail due to conflicting signing state.
+        if (!v4SigningFlagFound && !v3SigningEnabled) {
+            v4SigningEnabled = false;
         }
         if (!signerParams.isEmpty()) {
             signers.add(signerParams);
@@ -330,10 +343,17 @@ public class ApkSignerTool {
                         .setV1SigningEnabled(v1SigningEnabled)
                         .setV2SigningEnabled(v2SigningEnabled)
                         .setV3SigningEnabled(v3SigningEnabled)
+                        .setV4SigningEnabled(v4SigningEnabled)
                         .setDebuggableApkPermitted(debuggableApkPermitted)
                         .setSigningCertificateLineage(lineage);
         if (minSdkVersionSpecified) {
             apkSignerBuilder.setMinSdkVersion(minSdkVersion);
+        }
+        if (v4SigningEnabled) {
+            final File outputV4SignatureFile =
+                    new File(outputApk.getCanonicalPath() + ".idsig");
+            Files.deleteIfExists(outputV4SignatureFile.toPath());
+            apkSignerBuilder.setV4SignatureOutputFile(outputV4SignatureFile);
         }
         ApkSigner apkSigner = apkSignerBuilder.build();
         try {
@@ -372,6 +392,7 @@ public class ApkSignerTool {
         boolean printCerts = false;
         boolean verbose = false;
         boolean warningsTreatedAsErrors = false;
+        File v4SignatureFile = null;
         OptionsParser optionsParser = new OptionsParser(params);
         String optionName;
         String optionOriginalForm = null;
@@ -392,6 +413,9 @@ public class ApkSignerTool {
             } else if (("help".equals(optionName)) || ("h".equals(optionName))) {
                 printUsage(HELP_PAGE_VERIFY);
                 return;
+            } else if ("v4-signature-file".equals(optionName)) {
+                v4SignatureFile = new File(optionsParser.getRequiredValue(
+                        "Input V4 Signature File"));
             } else if ("in".equals(optionName)) {
                 inputApk = new File(optionsParser.getRequiredValue("Input APK file"));
             } else {
@@ -435,6 +459,14 @@ public class ApkSignerTool {
         if (maxSdkVersionSpecified) {
             apkVerifierBuilder.setMaxCheckedPlatformVersion(maxSdkVersion);
         }
+        if (v4SignatureFile != null) {
+            if (!v4SignatureFile.exists()) {
+                throw new ParameterException("V4 signature file does not exist: "
+                        + v4SignatureFile.getCanonicalPath());
+            }
+            apkVerifierBuilder.setV4SignatureFile(v4SignatureFile);
+        }
+
         ApkVerifier apkVerifier = apkVerifierBuilder.build();
         ApkVerifier.Result result;
         try {
@@ -465,6 +497,9 @@ public class ApkSignerTool {
                 System.out.println(
                         "Verified using v3 scheme (APK Signature Scheme v3): "
                                 + result.isVerifiedUsingV3Scheme());
+                System.out.println(
+                        "Verified using v4 scheme (APK Signature Scheme v4): "
+                                + result.isVerifiedUsingV4Scheme());
                 System.out.println("Number of signers: " + signerCerts.size());
             }
             if (printCerts) {
@@ -678,7 +713,6 @@ public class ApkSignerTool {
         File outputKeyLineage = null;
         String optionName;
         OptionsParser optionsParser = new OptionsParser(params);
-        SigningCertificateLineage lineage = null;
         List<SignerParams> signers = new ArrayList<>(1);
         while ((optionName = optionsParser.nextOption()) != null) {
             if (("help".equals(optionName)) || ("h".equals(optionName))) {
@@ -704,7 +738,7 @@ public class ApkSignerTool {
         if (inputKeyLineage == null) {
             throw new ParameterException("Input lineage file parameter not present");
         }
-        lineage = getLineageFromInputFile(inputKeyLineage);
+        SigningCertificateLineage lineage = getLineageFromInputFile(inputKeyLineage);
 
         try (PasswordRetriever passwordRetriever = new PasswordRetriever()) {
             for (int i = 0; i < signers.size(); i++) {
