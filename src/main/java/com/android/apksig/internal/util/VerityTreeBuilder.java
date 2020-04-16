@@ -77,7 +77,8 @@ public class VerityTreeBuilder implements AutoCloseable {
     private final ExecutorService mExecutor =
             new ThreadPoolExecutor(DIGEST_PARALLELISM, DIGEST_PARALLELISM,
                     0L, TimeUnit.MILLISECONDS,
-                    new ArrayBlockingQueue<>(MAX_OUTSTANDING_CHUNKS));
+                    new ArrayBlockingQueue<>(MAX_OUTSTANDING_CHUNKS),
+                    new ThreadPoolExecutor.CallerRunsPolicy());
 
     public VerityTreeBuilder(byte[] salt) throws NoSuchAlgorithmException {
         mSalt = salt;
