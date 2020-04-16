@@ -151,7 +151,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
      */
     private OutputApkSigningBlockRequestImpl mAddSigningBlockRequest;
 
-    private RunnablesExecutor mExecutor = RunnablesExecutor.SINGLE_THREADED;
+    private RunnablesExecutor mExecutor = RunnablesExecutor.MULTI_THREADED;
 
     private DefaultApkSignerEngine(
             List<SignerConfig> signerConfigs,
