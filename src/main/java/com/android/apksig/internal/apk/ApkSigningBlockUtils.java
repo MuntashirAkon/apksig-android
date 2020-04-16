@@ -649,17 +649,17 @@ public class ApkSigningBlockUtils {
                 for (ChunkSupplier.Chunk chunk = dataSupplier.get();
                      chunk != null;
                      chunk = dataSupplier.get()) {
-                    long size = chunk.dataSource.size();
+                    int size = chunk.size;
                     if (size > CONTENT_DIGESTED_CHUNK_MAX_SIZE_BYTES) {
                         throw new RuntimeException("Chunk size greater than expected: " + size);
                     }
 
                     // First update with the chunk prefix.
-                    setUnsignedInt32LittleEndian((int)size, chunkContentPrefix, 1);
+                    setUnsignedInt32LittleEndian(size, chunkContentPrefix, 1);
                     mdSink.consume(chunkContentPrefix, 0, chunkContentPrefix.length);
 
                     // Then update with the chunk data.
-                    chunk.dataSource.feed(0, size, mdSink);
+                    mdSink.consume(chunk.data);
 
                     // Now finalize chunk for all algorithms.
                     for (int i = 0; i < chunkDigests.size(); i++) {
@@ -727,7 +727,7 @@ public class ApkSigningBlockUtils {
             }
 
             int dataSourceIndex = 0;
-            int dataSourceChunkOffset = index;
+            long dataSourceChunkOffset = index;
             for (; dataSourceIndex < dataSources.length; dataSourceIndex++) {
                 if (dataSourceChunkOffset < chunkCounts[dataSourceIndex]) {
                     break;
@@ -739,24 +739,30 @@ public class ApkSigningBlockUtils {
                     dataSources[dataSourceIndex].size() -
                             dataSourceChunkOffset * CONTENT_DIGESTED_CHUNK_MAX_SIZE_BYTES,
                     CONTENT_DIGESTED_CHUNK_MAX_SIZE_BYTES);
-            // Note that slicing may involve its own locking. We may wish to reimplement the
-            // underlying mechanism to get rid of that lock (e.g. ByteBufferDataSource should
-            // probably get reimplemented to a delegate model, such that grabbing a slice
-            // doesn't incur a lock).
-            return new Chunk(
-                    dataSources[dataSourceIndex].slice(
-                            dataSourceChunkOffset * CONTENT_DIGESTED_CHUNK_MAX_SIZE_BYTES,
-                            remainingSize),
-                    index);
+
+            final int size = (int)remainingSize;
+            final ByteBuffer buffer = ByteBuffer.allocate(size);
+            try {
+                dataSources[dataSourceIndex].copyTo(
+                        dataSourceChunkOffset * CONTENT_DIGESTED_CHUNK_MAX_SIZE_BYTES, size,
+                        buffer);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to read chunk", e);
+            }
+            buffer.rewind();
+
+            return new Chunk(index, buffer, size);
         }
 
         static class Chunk {
             private final int chunkIndex;
-            private final DataSource dataSource;
+            private final ByteBuffer data;
+            private final int size;
 
-            private Chunk(DataSource parentSource, int chunkIndex) {
+            private Chunk(int chunkIndex, ByteBuffer data, int size) {
                 this.chunkIndex = chunkIndex;
-                dataSource = parentSource;
+                this.data = data;
+                this.size = size;
             }
         }
     }
