@@ -27,28 +27,67 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Phaser;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * VerityTreeBuilder is used to generate the root hash of verity tree built from the input file.
  * The root hash can be used on device for on-access verification.  The tree itself is reproducible
  * on device, and is not shipped with the APK.
  */
-public class VerityTreeBuilder {
+public class VerityTreeBuilder implements AutoCloseable {
 
-    /** Maximum size (in bytes) of each node of the tree. */
+    /**
+     * Maximum size (in bytes) of each node of the tree.
+     */
     private final static int CHUNK_SIZE = 4096;
+    /**
+     * Maximum parallelism while calculating digests.
+     */
+    private final static int DIGEST_PARALLELISM = Math.min(32,
+            Runtime.getRuntime().availableProcessors());
+    /**
+     * Queue size.
+     */
+    private final static int MAX_OUTSTANDING_CHUNKS = 4;
+    /**
+     * Typical prefetch size.
+     */
+    private final static int MAX_PREFETCH_CHUNKS = 1024;
+    /**
+     * Minimum chunks to be processed by a single worker task.
+     */
+    private final static int MIN_CHUNKS_PER_WORKER = 8;
 
-    /** Digest algorithm (JCA Digest algorithm name) used in the tree. */
+    /**
+     * Digest algorithm (JCA Digest algorithm name) used in the tree.
+     */
     private final static String JCA_ALGORITHM = "SHA-256";
 
-    /** Optional salt to apply before each digestion. */
+    /**
+     * Optional salt to apply before each digestion.
+     */
     private final byte[] mSalt;
 
     private final MessageDigest mMd;
 
+    private final ExecutorService mExecutor =
+            new ThreadPoolExecutor(DIGEST_PARALLELISM, DIGEST_PARALLELISM,
+                    0L, TimeUnit.MILLISECONDS,
+                    new ArrayBlockingQueue<>(MAX_OUTSTANDING_CHUNKS),
+                    new ThreadPoolExecutor.CallerRunsPolicy());
+
     public VerityTreeBuilder(byte[] salt) throws NoSuchAlgorithmException {
         mSalt = salt;
-        mMd = MessageDigest.getInstance(JCA_ALGORITHM);
+        mMd = getNewMessageDigest();
+    }
+
+    @Override
+    public void close() {
+        mExecutor.shutdownNow();
     }
 
     /**
@@ -178,36 +217,73 @@ public class VerityTreeBuilder {
      * chunk before digesting.
      */
     private void digestDataByChunks(DataSource dataSource, DataSink dataSink) throws IOException {
-        long size = dataSource.size();
-        long offset = 0;
-        for (; offset + CHUNK_SIZE <= size; offset += CHUNK_SIZE) {
-            ByteBuffer buffer = ByteBuffer.allocate(CHUNK_SIZE);
-            dataSource.copyTo(offset, CHUNK_SIZE, buffer);
+        final long size = dataSource.size();
+        final int chunks = (int) divideRoundup(size, CHUNK_SIZE);
+
+        /** Actual number of workers. */
+        final int parallelism = Math.max(
+                Math.min(chunks / MIN_CHUNKS_PER_WORKER, DIGEST_PARALLELISM), 1);
+        /** Single IO operation size, in chunks. */
+        final int ioSizeChunks = MAX_PREFETCH_CHUNKS;
+
+        final byte[][] hashes = new byte[chunks][];
+
+        Phaser tasks = new Phaser(1);
+
+        // Reading the input file as fast as we can.
+        final long maxReadSize = ioSizeChunks * CHUNK_SIZE;
+
+        long readOffset = 0;
+        int startChunkIndex = 0;
+        while (readOffset < size) {
+            final long readLimit = Math.min(readOffset + maxReadSize, size);
+            final int readSize = (int) (readLimit - readOffset);
+            final int bufferSizeChunks = (int) divideRoundup(readSize, CHUNK_SIZE);
+
+            // Overllocating to zero-pad last chunk.
+            // With 4MiB block size, 32 threads and 4 queue size we might allocate up to 144MiB.
+            final ByteBuffer buffer = ByteBuffer.allocate(bufferSizeChunks * CHUNK_SIZE);
+            dataSource.copyTo(readOffset, readSize, buffer);
             buffer.rewind();
-            byte[] hash = saltedDigest(buffer);
-            dataSink.consume(hash, 0, hash.length);
+
+            final int readChunkIndex = startChunkIndex;
+            Runnable task = () -> {
+                final MessageDigest md = cloneMessageDigest();
+                for (int offset = 0, finish = buffer.capacity(), chunkIndex = readChunkIndex;
+                        offset < finish; offset += CHUNK_SIZE, ++chunkIndex) {
+                    ByteBuffer chunk = slice(buffer, offset, offset + CHUNK_SIZE);
+                    hashes[chunkIndex] = saltedDigest(md, chunk);
+                }
+                tasks.arriveAndDeregister();
+            };
+            tasks.register();
+            mExecutor.execute(task);
+
+            startChunkIndex += bufferSizeChunks;
+            readOffset += readSize;
         }
 
-        // Send the last incomplete chunk with 0 padding to the sink at once.
-        int remaining = (int) (size % CHUNK_SIZE);
-        if (remaining > 0) {
-            ByteBuffer buffer;
-            buffer = ByteBuffer.allocate(CHUNK_SIZE);  // initialized to 0.
-            dataSource.copyTo(offset, remaining, buffer);
-            buffer.rewind();
-            byte[] hash = saltedDigest(buffer);
+        // Waiting for the tasks to complete.
+        tasks.arriveAndAwaitAdvance();
+
+        // Streaming hashes back.
+        for (byte[] hash : hashes) {
             dataSink.consume(hash, 0, hash.length);
         }
     }
 
-    /** Returns the digest of data with salt prepanded. */
+    /** Returns the digest of data with salt prepended. */
     private byte[] saltedDigest(ByteBuffer data) {
-        mMd.reset();
+        return saltedDigest(mMd, data);
+    }
+
+    private byte[] saltedDigest(MessageDigest md, ByteBuffer data) {
+        md.reset();
         if (mSalt != null) {
-            mMd.update(mSalt);
+            md.update(mSalt);
         }
-        mMd.update(data);
-        return mMd.digest();
+        md.update(data);
+        return md.digest();
     }
 
     /** Divides a number and round up to the closest integer. */
@@ -222,5 +298,28 @@ public class VerityTreeBuilder {
         b.limit(end);
         b.position(begin);
         return b.slice();
+    }
+
+    /**
+     * Obtains a new instance of the message digest algorithm.
+     */
+    private static MessageDigest getNewMessageDigest() throws NoSuchAlgorithmException {
+        return MessageDigest.getInstance(JCA_ALGORITHM);
+    }
+
+    /**
+     * Clones the existing message digest, or creates a new instance if clone is unavailable.
+     */
+    private MessageDigest cloneMessageDigest() {
+        try {
+            return (MessageDigest) mMd.clone();
+        } catch (CloneNotSupportedException ignored) {
+            try {
+                return getNewMessageDigest();
+            } catch (NoSuchAlgorithmException e) {
+                throw new IllegalStateException(
+                        "Failed to obtain an instance of a previously available message digest", e);
+            }
+        }
     }
 }
