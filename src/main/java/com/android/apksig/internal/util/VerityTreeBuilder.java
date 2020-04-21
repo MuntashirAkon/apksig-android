@@ -16,6 +16,8 @@
 
 package com.android.apksig.internal.util;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
@@ -24,9 +26,10 @@ import com.android.apksig.util.DataSources;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.ArrayList;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+
+import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Phaser;
@@ -76,7 +79,7 @@ public class VerityTreeBuilder implements AutoCloseable {
 
     private final ExecutorService mExecutor =
             new ThreadPoolExecutor(DIGEST_PARALLELISM, DIGEST_PARALLELISM,
-                    0L, TimeUnit.MILLISECONDS,
+                    0L, MILLISECONDS,
                     new ArrayBlockingQueue<>(MAX_OUTSTANDING_CHUNKS),
                     new ThreadPoolExecutor.CallerRunsPolicy());
 
@@ -220,9 +223,6 @@ public class VerityTreeBuilder implements AutoCloseable {
         final long size = dataSource.size();
         final int chunks = (int) divideRoundup(size, CHUNK_SIZE);
 
-        /** Actual number of workers. */
-        final int parallelism = Math.max(
-                Math.min(chunks / MIN_CHUNKS_PER_WORKER, DIGEST_PARALLELISM), 1);
         /** Single IO operation size, in chunks. */
         final int ioSizeChunks = MAX_PREFETCH_CHUNKS;
 
