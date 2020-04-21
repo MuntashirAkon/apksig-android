@@ -89,7 +89,7 @@ public class ApkSigningBlockUtils {
     private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
     private static final long CONTENT_DIGESTED_CHUNK_MAX_SIZE_BYTES = 1024 * 1024;
     public static final int ANDROID_COMMON_PAGE_ALIGNMENT_BYTES = 4096;
-    public static final byte[] APK_SIGNING_BLOCK_MAGIC =
+    private static final byte[] APK_SIGNING_BLOCK_MAGIC =
           new byte[] {
               0x41, 0x50, 0x4b, 0x20, 0x53, 0x69, 0x67, 0x20,
               0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x20, 0x34, 0x32,
@@ -767,6 +767,7 @@ public class ApkSigningBlockUtils {
         }
     }
 
+    @SuppressWarnings("ByteBufferBackingArray")
     private static void computeApkVerityDigest(DataSource beforeCentralDir, DataSource centralDir,
             DataSource eocd, Map<ContentDigestAlgorithm, byte[]> outputContentDigests)
             throws IOException, NoSuchAlgorithmException {
@@ -810,6 +811,7 @@ public class ApkSigningBlockUtils {
         }
     }
 
+    @SuppressWarnings("ByteBufferBackingArray")
     public static VerityTreeAndDigest computeChunkVerityTreeAndDigest(DataSource dataSource)
             throws IOException, NoSuchAlgorithmException {
         ByteBuffer encoded = createVerityDigestBuffer(false);

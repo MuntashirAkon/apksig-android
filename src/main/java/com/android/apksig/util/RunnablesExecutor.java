@@ -16,16 +16,17 @@
 
 package com.android.apksig.util;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Phaser;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 public interface RunnablesExecutor {
-    RunnablesExecutor SINGLE_THREADED = p -> p.createRunnable().run();
+    static final RunnablesExecutor SINGLE_THREADED = p -> p.createRunnable().run();
 
-    RunnablesExecutor MULTI_THREADED = new RunnablesExecutor() {
+    static final RunnablesExecutor MULTI_THREADED = new RunnablesExecutor() {
         private final int PARALLELISM = Math.min(32, Runtime.getRuntime().availableProcessors());
         private final int QUEUE_SIZE = 4;
 
@@ -33,7 +34,7 @@ public interface RunnablesExecutor {
         public void execute(RunnablesProvider provider) {
             final ExecutorService mExecutor =
                     new ThreadPoolExecutor(PARALLELISM, PARALLELISM,
-                            0L, TimeUnit.MILLISECONDS,
+                            0L, MILLISECONDS,
                             new ArrayBlockingQueue<>(QUEUE_SIZE),
                             new ThreadPoolExecutor.CallerRunsPolicy());
 
