@@ -30,6 +30,7 @@ import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
 import com.android.apksig.internal.apk.v3.V3SchemeSigner;
 import com.android.apksig.internal.apk.v4.V4SchemeSigner;
+import com.android.apksig.internal.apk.v4.V4Signature;
 import com.android.apksig.internal.jar.ManifestParser;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.Pair;
@@ -42,6 +43,7 @@ import com.android.apksig.util.RunnablesExecutor;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -59,6 +61,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -148,7 +151,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
      */
     private OutputApkSigningBlockRequestImpl mAddSigningBlockRequest;
 
-    private RunnablesExecutor mExecutor = RunnablesExecutor.SINGLE_THREADED;
+    private RunnablesExecutor mExecutor = RunnablesExecutor.MULTI_THREADED;
 
     private DefaultApkSignerEngine(
             List<SignerConfig> signerConfigs,
@@ -361,8 +364,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 createSigningBlockSignerConfigs(
                         true, ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4);
         if (configs.size() != 1) {
-            throw new IllegalStateException(
-                    "Only accepting one signer config for V4 Signature Proto.");
+            throw new IllegalStateException("Only accepting one signer config for V4 Signature.");
         }
         return configs.get(0);
     }
@@ -437,10 +439,11 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4:
                 try {
                     newSignerConfig.signatureAlgorithms =
-                            Collections.singletonList(
-                                    V4SchemeSigner.getSuggestedSignatureAlgorithm(publicKey));
+                            V4SchemeSigner.getSuggestedSignatureAlgorithms(publicKey,
+                                    mMinSdkVersion, apkSigningBlockPaddingSupported);
                 } catch (InvalidKeyException e) {
-                    newSignerConfig.signatureAlgorithms = new ArrayList<>();
+                    // V4 is an optional signing schema, ok to proceed without.
+                    newSignerConfig.signatureAlgorithms = null;
                 }
                 break;
             case ApkSigningBlockUtils.VERSION_SOURCE_STAMP:
@@ -895,16 +898,42 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     }
 
     @Override
-    public void signV4(DataSource dataSource, File outputFile) {
+    public void signV4(DataSource dataSource, File outputFile, boolean ignoreFailures)
+            throws SignatureException {
         if (outputFile == null) {
-            return;
+            if (ignoreFailures) {
+                return;
+            }
+            throw new SignatureException("Missing V4 output file.");
         }
         try {
             ApkSigningBlockUtils.SignerConfig v4SignerConfig = createV4SignerConfig();
             V4SchemeSigner.generateV4Signature(dataSource, v4SignerConfig, outputFile);
-        } catch (InvalidKeyException | IOException | NoSuchAlgorithmException ignored) {
-            // It is okay to fail v4 signing for now.
+        } catch (InvalidKeyException | IOException | NoSuchAlgorithmException e) {
+            if (ignoreFailures) {
+                return;
+            }
+            throw new SignatureException("V4 signing failed", e);
         }
+    }
+
+    /** For external use only to generate V4 & tree separately. */
+    public byte[] produceV4Signature(
+        DataSource dataSource,
+        OutputStream sigOutput)
+        throws SignatureException {
+      if (sigOutput == null) {
+          throw new SignatureException("Missing V4 output streams.");
+      }
+      try {
+          ApkSigningBlockUtils.SignerConfig v4SignerConfig = createV4SignerConfig();
+          Pair<V4Signature, byte[]> pair =
+              V4SchemeSigner.generateV4Signature(dataSource, v4SignerConfig);
+          pair.getFirst().writeTo(sigOutput);
+          return pair.getSecond();
+      } catch (InvalidKeyException | IOException | NoSuchAlgorithmException e) {
+        throw new SignatureException("V4 signing failed", e);
+      }
     }
 
     @Override

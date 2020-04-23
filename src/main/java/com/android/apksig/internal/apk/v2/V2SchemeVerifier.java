@@ -175,7 +175,7 @@ public abstract class V2SchemeVerifier {
      * expected to be encountered on an Android platform version in the
      * {@code [minSdkVersion, maxSdkVersion]} range.
      */
-    private static void parseSigners(
+    public static void parseSigners(
             ByteBuffer apkSignatureSchemeV2Block,
             Set<ContentDigestAlgorithm> contentDigestsToVerify,
             Map<Integer, String> supportedApkSigSchemeNames,
@@ -294,7 +294,7 @@ public abstract class V2SchemeVerifier {
                     ApkSigningBlockUtils.getSignaturesToVerify(
                             supportedSignatures, minSdkVersion, maxSdkVersion);
         } catch (ApkSigningBlockUtils.NoSupportedSignaturesException e) {
-            result.addError(Issue.V2_SIG_NO_SUPPORTED_SIGNATURES);
+            result.addError(Issue.V2_SIG_NO_SUPPORTED_SIGNATURES, e);
             return;
         }
         for (ApkSigningBlockUtils.SupportedSignature signature : signaturesToVerify) {
