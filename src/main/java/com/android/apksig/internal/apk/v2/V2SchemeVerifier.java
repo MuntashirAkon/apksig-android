@@ -370,15 +370,7 @@ public abstract class V2SchemeVerifier {
             return;
         }
         X509Certificate mainCertificate = result.certs.get(0);
-        byte[] certificatePublicKeyBytes;
-        try {
-            certificatePublicKeyBytes = ApkSigningBlockUtils.encodePublicKey(
-                    mainCertificate.getPublicKey());
-        } catch (InvalidKeyException e) {
-            System.out.println("Caught an exception encoding the public key: " + e);
-            e.printStackTrace();
-            certificatePublicKeyBytes = mainCertificate.getPublicKey().getEncoded();
-        }
+        byte[] certificatePublicKeyBytes = mainCertificate.getPublicKey().getEncoded();
         if (!Arrays.equals(publicKeyBytes, certificatePublicKeyBytes)) {
             result.addError(
                     Issue.V2_SIG_PUBLIC_KEY_MISMATCH_BETWEEN_CERTIFICATE_AND_SIGNATURES_RECORD,

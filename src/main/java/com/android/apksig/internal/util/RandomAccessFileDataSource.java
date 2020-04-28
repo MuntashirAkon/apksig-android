@@ -27,7 +27,7 @@ import java.nio.channels.FileChannel;
 /**
  * {@link DataSource} backed by a {@link FileChannel} for {@link RandomAccessFile} access.
  */
-public class FileChannelDataSource implements DataSource {
+public class RandomAccessFileDataSource implements DataSource {
 
     private static final int MAX_READ_CHUNK_SIZE = 1024 * 1024;
 
@@ -36,24 +36,28 @@ public class FileChannelDataSource implements DataSource {
     private final long mSize;
 
     /**
-     * Constructs a new {@code FileChannelDataSource} based on the data contained in the
+     * Constructs a new {@code RandomAccessFileDataSource} based on the data contained in the
      * whole file. Changes to the contents of the file, including the size of the file,
      * will be visible in this data source.
      */
-    public FileChannelDataSource(FileChannel channel) {
-        mChannel = channel;
+    public RandomAccessFileDataSource(RandomAccessFile file) {
+        mChannel = file.getChannel();
         mOffset = 0;
         mSize = -1;
     }
 
     /**
-     * Constructs a new {@code FileChannelDataSource} based on the data contained in the
+     * Constructs a new {@code RandomAccessFileDataSource} based on the data contained in the
      * specified region of the provided file. Changes to the contents of the file will be visible in
      * this data source.
      *
      * @throws IndexOutOfBoundsException if {@code offset} or {@code size} is negative.
      */
-    public FileChannelDataSource(FileChannel channel, long offset, long size) {
+    public RandomAccessFileDataSource(RandomAccessFile file, long offset, long size) {
+        this(file.getChannel(), offset, size);
+    }
+
+    private RandomAccessFileDataSource(FileChannel channel, long offset, long size) {
         if (offset < 0) {
             throw new IndexOutOfBoundsException("offset: " + size);
         }
@@ -79,14 +83,14 @@ public class FileChannelDataSource implements DataSource {
     }
 
     @Override
-    public FileChannelDataSource slice(long offset, long size) {
+    public RandomAccessFileDataSource slice(long offset, long size) {
         long sourceSize = size();
         checkChunkValid(offset, size, sourceSize);
         if ((offset == 0) && (size == sourceSize)) {
             return this;
         }
 
-        return new FileChannelDataSource(mChannel, mOffset + offset, size);
+        return new RandomAccessFileDataSource(mChannel, mOffset + offset, size);
     }
 
     @Override

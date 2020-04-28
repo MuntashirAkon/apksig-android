@@ -17,7 +17,7 @@
 package com.android.apksig.util;
 
 public interface RunnablesExecutor {
-    RunnablesExecutor SINGLE_THREADED = p -> p.createRunnable().run();
+    RunnablesExecutor SINGLE_THREADED = p -> p.getRunnable().run();
 
     void execute(RunnablesProvider provider);
 }
