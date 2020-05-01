@@ -90,6 +90,7 @@ public class ApkSigner {
     private final boolean mV2SigningEnabled;
     private final boolean mV3SigningEnabled;
     private final boolean mV4SigningEnabled;
+    private final boolean mVerityEnabled;
     private final boolean mV4ErrorReportingEnabled;
     private final boolean mDebuggableApkPermitted;
     private final boolean mOtherSignersSignaturesPreserved;
@@ -116,6 +117,7 @@ public class ApkSigner {
             boolean v2SigningEnabled,
             boolean v3SigningEnabled,
             boolean v4SigningEnabled,
+            boolean verityEnabled,
             boolean v4ErrorReportingEnabled,
             boolean debuggableApkPermitted,
             boolean otherSignersSignaturesPreserved,
@@ -136,6 +138,7 @@ public class ApkSigner {
         mV2SigningEnabled = v2SigningEnabled;
         mV3SigningEnabled = v3SigningEnabled;
         mV4SigningEnabled = v4SigningEnabled;
+        mVerityEnabled = verityEnabled;
         mV4ErrorReportingEnabled = v4ErrorReportingEnabled;
         mDebuggableApkPermitted = debuggableApkPermitted;
         mOtherSignersSignaturesPreserved = otherSignersSignaturesPreserved;
@@ -282,6 +285,7 @@ public class ApkSigner {
                             .setV1SigningEnabled(mV1SigningEnabled)
                             .setV2SigningEnabled(mV2SigningEnabled)
                             .setV3SigningEnabled(mV3SigningEnabled)
+                            .setVerityEnabled(mVerityEnabled)
                             .setDebuggableApkPermitted(mDebuggableApkPermitted)
                             .setOtherSignersSignaturesPreserved(mOtherSignersSignaturesPreserved)
                             .setSigningCertificateLineage(mSigningCertificateLineage);
@@ -996,6 +1000,7 @@ public class ApkSigner {
         private boolean mV2SigningEnabled = true;
         private boolean mV3SigningEnabled = true;
         private boolean mV4SigningEnabled = true;
+        private boolean mVerityEnabled = false;
         private boolean mV4ErrorReportingEnabled = false;
         private boolean mDebuggableApkPermitted = true;
         private boolean mOtherSignersSignaturesPreserved;
@@ -1300,6 +1305,19 @@ public class ApkSigner {
         }
 
         /**
+         * Sets whether to enable the verity signature algorithm for the v2 and v3 signature
+         * schemes.
+         *
+         * @param enabled {@code true} to enable the verity signature algorithm for inclusion in the
+         *                            v2 and v3 signature blocks.
+         */
+        public Builder setVerityEnabled(boolean enabled) {
+            checkInitializedWithoutEngine();
+            mVerityEnabled = enabled;
+            return this;
+        }
+
+        /**
          * Sets whether the APK should be signed even if it is marked as debuggable ({@code
          * android:debuggable="true"} in its {@code AndroidManifest.xml}). For backward
          * compatibility reasons, the default value of this setting is {@code true}.
@@ -1415,6 +1433,7 @@ public class ApkSigner {
                     mV2SigningEnabled,
                     mV3SigningEnabled,
                     mV4SigningEnabled,
+                    mVerityEnabled,
                     mV4ErrorReportingEnabled,
                     mDebuggableApkPermitted,
                     mOtherSignersSignaturesPreserved,
