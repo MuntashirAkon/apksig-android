@@ -100,8 +100,10 @@ public class ApkSignerTest {
                         + ApkSignerTest.class.getSimpleName()
                         + " into "
                         + outDir);
-        if (!outDir.mkdirs()) {
-            throw new IOException("Failed to create directory: " + outDir);
+        if (!outDir.exists()) {
+            if (!outDir.mkdirs()) {
+                throw new IOException("Failed to create directory: " + outDir);
+            }
         }
         List<ApkSigner.SignerConfig> rsa2048SignerConfig =
                 Collections.singletonList(
@@ -348,6 +350,14 @@ public class ApkSignerTest {
                 "original.apk",
                 new File(outDir, "golden-rsa-minSdkVersion-24-out.apk"),
                 new ApkSigner.Builder(rsa2048SignerConfig).setMinSdkVersion(24));
+        signGolden(
+                "original.apk",
+                new File(outDir, "golden-rsa-verity-out.apk"),
+                new ApkSigner.Builder(rsa2048SignerConfig)
+                        .setV1SigningEnabled(true)
+                        .setV2SigningEnabled(true)
+                        .setV3SigningEnabled(true)
+                        .setVerityEnabled(true));
     }
 
     private static void signGolden(
@@ -624,6 +634,22 @@ public class ApkSignerTest {
         // TODO: Add tests for DSA and ECDSA. This is non-trivial because the default
         // implementations of these signature algorithms are non-deterministic which means output
         // files always differ from golden files.
+    }
+
+    @Test
+    public void testVerityEnabled_Golden() throws Exception {
+        List<ApkSigner.SignerConfig> rsaSignerConfig =
+                Collections.singletonList(
+                        getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
+
+        assertGolden(
+                "original.apk",
+                "golden-rsa-verity-out.apk",
+                new ApkSigner.Builder(rsaSignerConfig)
+                        .setV1SigningEnabled(true)
+                        .setV2SigningEnabled(true)
+                        .setV3SigningEnabled(true)
+                        .setVerityEnabled(true));
     }
 
     @Test
