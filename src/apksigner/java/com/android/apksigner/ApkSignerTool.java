@@ -122,6 +122,7 @@ public class ApkSignerTool {
         boolean v2SigningEnabled = true;
         boolean v3SigningEnabled = true;
         boolean v4SigningEnabled = true;
+        boolean verityEnabled = false;
         boolean debuggableApkPermitted = true;
         int minSdkVersion = 1;
         boolean minSdkVersionSpecified = false;
@@ -160,6 +161,8 @@ public class ApkSignerTool {
             } else if ("v4-signing-enabled".equals(optionName)) {
                 v4SigningEnabled = optionsParser.getOptionalBooleanValue(true);
                 v4SigningFlagFound = true;
+            } else if ("verity-enabled".equals(optionName)) {
+                verityEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("debuggable-apk-permitted".equals(optionName)) {
                 debuggableApkPermitted = optionsParser.getOptionalBooleanValue(true);
             } else if ("next-signer".equals(optionName)) {
@@ -320,6 +323,7 @@ public class ApkSignerTool {
                         .setV2SigningEnabled(v2SigningEnabled)
                         .setV3SigningEnabled(v3SigningEnabled)
                         .setV4SigningEnabled(v4SigningEnabled)
+                        .setVerityEnabled(verityEnabled)
                         .setV4ErrorReportingEnabled(v4SigningEnabled && v4SigningFlagFound)
                         .setDebuggableApkPermitted(debuggableApkPermitted)
                         .setSigningCertificateLineage(lineage);
