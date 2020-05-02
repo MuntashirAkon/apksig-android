@@ -89,6 +89,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     private final boolean mV1SigningEnabled;
     private final boolean mV2SigningEnabled;
     private final boolean mV3SigningEnabled;
+    private final boolean mVerityEnabled;
     private final boolean mDebuggableApkPermitted;
     private final boolean mOtherSignersSignaturesPreserved;
     private final String mCreatedBy;
@@ -160,6 +161,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             boolean v1SigningEnabled,
             boolean v2SigningEnabled,
             boolean v3SigningEnabled,
+            boolean verityEnabled,
             boolean debuggableApkPermitted,
             boolean otherSignersSignaturesPreserved,
             String createdBy,
@@ -176,6 +178,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         mV1SigningEnabled = v1SigningEnabled;
         mV2SigningEnabled = v2SigningEnabled;
         mV3SigningEnabled = v3SigningEnabled;
+        mVerityEnabled = verityEnabled;
         mV1SignaturePending = v1SigningEnabled;
         mV2SignaturePending = v2SigningEnabled;
         mV3SignaturePending = v3SigningEnabled;
@@ -419,14 +422,15 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         switch (schemeId) {
             case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2:
                 newSignerConfig.signatureAlgorithms =
-                        V2SchemeSigner.getSuggestedSignatureAlgorithms(
-                                publicKey, mMinSdkVersion, apkSigningBlockPaddingSupported);
+                        V2SchemeSigner.getSuggestedSignatureAlgorithms(publicKey, mMinSdkVersion,
+                                apkSigningBlockPaddingSupported && mVerityEnabled);
                 break;
             case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3:
                 try {
                     newSignerConfig.signatureAlgorithms =
-                            V3SchemeSigner.getSuggestedSignatureAlgorithms(
-                                    publicKey, mMinSdkVersion, apkSigningBlockPaddingSupported);
+                            V3SchemeSigner.getSuggestedSignatureAlgorithms(publicKey,
+                                    mMinSdkVersion,
+                                    apkSigningBlockPaddingSupported && mVerityEnabled);
                 } catch (InvalidKeyException e) {
 
                     // It is possible for a signer used for v1/v2 signing to not be allowed for use
@@ -1448,6 +1452,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         private boolean mV1SigningEnabled = true;
         private boolean mV2SigningEnabled = true;
         private boolean mV3SigningEnabled = true;
+        private boolean mVerityEnabled = false;
         private boolean mDebuggableApkPermitted = true;
         private boolean mOtherSignersSignaturesPreserved;
         private String mCreatedBy = "1.0 (Android)";
@@ -1537,6 +1542,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     mV1SigningEnabled,
                     mV2SigningEnabled,
                     mV3SigningEnabled,
+                    mVerityEnabled,
                     mDebuggableApkPermitted,
                     mOtherSignersSignaturesPreserved,
                     mCreatedBy,
@@ -1583,6 +1589,18 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             } else {
                 mV3SigningExplicitlyDisabled = true;
             }
+            return this;
+        }
+
+        /**
+         * Sets whether the APK should be signed using the verity signature algorithm in the v2 and
+         * v3 signature blocks.
+         *
+         * <p>By default, the APK will be signed using the verity signature algorithm for the v2 and
+         * v3 signature schemes.
+         */
+        public Builder setVerityEnabled(boolean enabled) {
+            mVerityEnabled = enabled;
             return this;
         }
 
