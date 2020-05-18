@@ -2,10 +2,10 @@
 
 licenses(["notice"])  # Apache License 2.0
 
-load("//tools/base/bazel:coverage.bzl", "coverage_java_test")
+load("//tools/base/bazel:coverage.bzl", "coverage_java_test", "coverage_java_library")
 
 # Public API of the apksig library
-java_library(
+coverage_java_library(
     name = "apksig",
     srcs = glob(
         ["src/main/java/**/*.java"],
@@ -17,7 +17,7 @@ java_library(
 
 # All of apksig library, including private API which clients must not directly depend on. Private
 # API may change without regard to its clients outside of the apksig project.
-java_library(
+coverage_java_library(
     name = "apksig-all",
     srcs = glob(["src/main/java/**/*.java"]),
     resource_strip_prefix = "tools/apksig",
