@@ -31,7 +31,7 @@ import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.SignatureInfo;
-import com.android.apksig.internal.apk.stamp.SourceStampSigner;
+import com.android.apksig.internal.apk.stamp.V2SourceStampSigner;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
 import com.android.apksig.internal.apk.v3.V3SchemeSigner;
@@ -1105,7 +1105,7 @@ public class ApkSignerTest {
                 getSignatureInfoFromApk(
                         signedApk,
                         ApkSigningBlockUtils.VERSION_SOURCE_STAMP,
-                        SourceStampSigner.SOURCE_STAMP_BLOCK_ID);
+                        V2SourceStampSigner.V2_SOURCE_STAMP_BLOCK_ID);
         assertNotNull(signatureInfo.signatureBlock);
     }
 
@@ -1129,7 +1129,7 @@ public class ApkSignerTest {
                 getSignatureInfoFromApk(
                         signedApk,
                         ApkSigningBlockUtils.VERSION_SOURCE_STAMP,
-                        SourceStampSigner.SOURCE_STAMP_BLOCK_ID);
+                        V2SourceStampSigner.V2_SOURCE_STAMP_BLOCK_ID);
         assertNotNull(signatureInfo.signatureBlock);
     }
 

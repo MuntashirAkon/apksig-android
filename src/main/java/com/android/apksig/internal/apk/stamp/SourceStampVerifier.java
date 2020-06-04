@@ -17,7 +17,7 @@
 package com.android.apksig.internal.apk.stamp;
 
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes;
-import static com.android.apksig.internal.apk.stamp.SourceStampSigner.SOURCE_STAMP_BLOCK_ID;
+import static com.android.apksig.internal.apk.stamp.V1SourceStampSigner.V1_SOURCE_STAMP_BLOCK_ID;
 
 import com.android.apksig.ApkVerifier;
 import com.android.apksig.apk.ApkFormatException;
@@ -47,12 +47,10 @@ import java.security.cert.X509Certificate;
 import java.security.spec.AlgorithmParameterSpec;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Source Stamp verifier.
@@ -93,7 +91,7 @@ public abstract class SourceStampVerifier {
         ApkSigningBlockUtils.Result result =
                 new ApkSigningBlockUtils.Result(ApkSigningBlockUtils.VERSION_SOURCE_STAMP);
         SignatureInfo signatureInfo =
-                ApkSigningBlockUtils.findSignature(apk, zipSections, SOURCE_STAMP_BLOCK_ID, result);
+                ApkSigningBlockUtils.findSignature(apk, zipSections, V1_SOURCE_STAMP_BLOCK_ID, result);
 
         verify(
                 signatureInfo.signatureBlock,

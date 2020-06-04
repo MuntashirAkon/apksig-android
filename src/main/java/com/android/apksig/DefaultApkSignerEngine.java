@@ -17,13 +17,15 @@
 package com.android.apksig;
 
 import static com.android.apksig.apk.ApkUtils.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME;
+import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2;
+import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
-import com.android.apksig.internal.apk.stamp.SourceStampSigner;
+import com.android.apksig.internal.apk.stamp.V2SourceStampSigner;
 import com.android.apksig.internal.apk.v1.DigestAlgorithm;
 import com.android.apksig.internal.apk.v1.V1SchemeSigner;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
@@ -61,7 +63,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -422,13 +423,16 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         switch (schemeId) {
             case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2:
                 newSignerConfig.signatureAlgorithms =
-                        V2SchemeSigner.getSuggestedSignatureAlgorithms(publicKey, mMinSdkVersion,
+                        V2SchemeSigner.getSuggestedSignatureAlgorithms(
+                                publicKey,
+                                mMinSdkVersion,
                                 apkSigningBlockPaddingSupported && mVerityEnabled);
                 break;
             case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3:
                 try {
                     newSignerConfig.signatureAlgorithms =
-                            V3SchemeSigner.getSuggestedSignatureAlgorithms(publicKey,
+                            V3SchemeSigner.getSuggestedSignatureAlgorithms(
+                                    publicKey,
                                     mMinSdkVersion,
                                     apkSigningBlockPaddingSupported && mVerityEnabled);
                 } catch (InvalidKeyException e) {
@@ -443,8 +447,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4:
                 try {
                     newSignerConfig.signatureAlgorithms =
-                            V4SchemeSigner.getSuggestedSignatureAlgorithms(publicKey,
-                                    mMinSdkVersion, apkSigningBlockPaddingSupported);
+                            V4SchemeSigner.getSuggestedSignatureAlgorithms(
+                                    publicKey, mMinSdkVersion, apkSigningBlockPaddingSupported);
                 } catch (InvalidKeyException e) {
                     // V4 is an optional signing schema, ok to proceed without.
                     newSignerConfig.signatureAlgorithms = null;
@@ -877,13 +881,20 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         if (isEligibleForSourceStamp()) {
             ApkSigningBlockUtils.SignerConfig sourceStampSignerConfig =
                     createSourceStampSignerConfig();
-            Map<ContentDigestAlgorithm, byte[]> digestInfo =
-                    mV3SigningEnabled
-                            ? v3SigningSchemeBlockAndDigests.digestInfo
-                            : v2SigningSchemeBlockAndDigests.digestInfo;
+            Map<Integer, Map<ContentDigestAlgorithm, byte[]>> signatureSchemeDigestInfos =
+                    new HashMap<>();
+            if (mV3SigningEnabled) {
+                signatureSchemeDigestInfos.put(
+                        VERSION_APK_SIGNATURE_SCHEME_V3, v3SigningSchemeBlockAndDigests.digestInfo);
+            }
+            if (mV2SigningEnabled) {
+                signatureSchemeDigestInfos.put(
+                        VERSION_APK_SIGNATURE_SCHEME_V2, v2SigningSchemeBlockAndDigests.digestInfo);
+            }
+            // TODO(b/158196850): Add V1 digest.
             signingSchemeBlocks.add(
-                    SourceStampSigner.generateSourceStampBlock(
-                            sourceStampSignerConfig, digestInfo));
+                    V2SourceStampSigner.generateSourceStampBlock(
+                            sourceStampSignerConfig, signatureSchemeDigestInfos));
         }
 
         // create APK Signing Block with v2 and/or v3 and/or SourceStamp blocks
@@ -922,22 +933,20 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     }
 
     /** For external use only to generate V4 & tree separately. */
-    public byte[] produceV4Signature(
-        DataSource dataSource,
-        OutputStream sigOutput)
-        throws SignatureException {
-      if (sigOutput == null) {
-          throw new SignatureException("Missing V4 output streams.");
-      }
-      try {
-          ApkSigningBlockUtils.SignerConfig v4SignerConfig = createV4SignerConfig();
-          Pair<V4Signature, byte[]> pair =
-              V4SchemeSigner.generateV4Signature(dataSource, v4SignerConfig);
-          pair.getFirst().writeTo(sigOutput);
-          return pair.getSecond();
-      } catch (InvalidKeyException | IOException | NoSuchAlgorithmException e) {
-        throw new SignatureException("V4 signing failed", e);
-      }
+    public byte[] produceV4Signature(DataSource dataSource, OutputStream sigOutput)
+            throws SignatureException {
+        if (sigOutput == null) {
+            throw new SignatureException("Missing V4 output streams.");
+        }
+        try {
+            ApkSigningBlockUtils.SignerConfig v4SignerConfig = createV4SignerConfig();
+            Pair<V4Signature, byte[]> pair =
+                    V4SchemeSigner.generateV4Signature(dataSource, v4SignerConfig);
+            pair.getFirst().writeTo(sigOutput);
+            return pair.getSecond();
+        } catch (InvalidKeyException | IOException | NoSuchAlgorithmException e) {
+            throw new SignatureException("V4 signing failed", e);
+        }
     }
 
     @Override
