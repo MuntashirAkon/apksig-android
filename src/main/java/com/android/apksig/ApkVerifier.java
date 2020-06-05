@@ -17,9 +17,11 @@
 package com.android.apksig;
 
 import static com.android.apksig.apk.ApkUtils.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME;
-import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_JAR_SIGNATURE_SCHEME;
+import static com.android.apksig.apk.ApkUtils.computeSha256DigestBytes;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3;
+import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_JAR_SIGNATURE_SCHEME;
+import static com.android.apksig.internal.apk.v1.V1SchemeSigner.MANIFEST_ENTRY_NAME;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
@@ -27,7 +29,7 @@ import com.android.apksig.internal.apk.AndroidBinXmlParser;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
-import com.android.apksig.internal.apk.stamp.SourceStampVerifier;
+import com.android.apksig.internal.apk.stamp.V2SourceStampVerifier;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.V2SchemeVerifier;
 import com.android.apksig.internal.apk.v3.V3SchemeVerifier;
@@ -198,7 +200,8 @@ public class ApkVerifier {
         }
 
         Result result = new Result();
-        Map<ContentDigestAlgorithm, byte[]> apkContentDigests = new HashMap<>();
+        Map<Integer, Map<ContentDigestAlgorithm, byte[]>> signatureSchemeApkContentDigests =
+                new HashMap<>();
 
         // The SUPPORTED_APK_SIG_SCHEME_NAMES contains the mapping from version number to scheme
         // name, but the verifiers use this parameter as the schemes supported by the target SDK
@@ -238,10 +241,9 @@ public class ApkVerifier {
                                     maxSdkVersion);
                     foundApkSigSchemeIds.add(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
                     result.mergeFrom(v3Result);
-                    if (apkContentDigests.isEmpty()) {
-                        apkContentDigests.putAll(
-                                getApkContentDigestsFromSigningSchemeResult(v3Result));
-                    }
+                    signatureSchemeApkContentDigests.put(
+                            ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3,
+                            getApkContentDigestsFromSigningSchemeResult(v3Result));
                 } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
                     // v3 signature not required
                 }
@@ -267,52 +269,11 @@ public class ApkVerifier {
                                     maxSdkVersion);
                     foundApkSigSchemeIds.add(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2);
                     result.mergeFrom(v2Result);
-                    if (apkContentDigests.isEmpty()) {
-                        apkContentDigests.putAll(
-                                getApkContentDigestsFromSigningSchemeResult(v2Result));
-                    }
+                    signatureSchemeApkContentDigests.put(
+                            ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2,
+                            getApkContentDigestsFromSigningSchemeResult(v2Result));
                 } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
                     // v2 signature not required
-                }
-                if (result.containsErrors()) {
-                    return result;
-                }
-            }
-
-            if (maxSdkVersion >= AndroidSdkVersion.R) {
-                try {
-                    List<CentralDirectoryRecord> cdRecords =
-                            V1SchemeVerifier.parseZipCentralDirectory(apk, zipSections);
-                    CentralDirectoryRecord sourceStampCdRecord = null;
-                    for (CentralDirectoryRecord cdRecord : cdRecords) {
-                        if (SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME.equals(
-                                cdRecord.getName())) {
-                            sourceStampCdRecord = cdRecord;
-                            break;
-                        }
-                    }
-                    // If SourceStamp file is found inside the APK, there must be a SourceStamp
-                    // block in the APK signing block as well.
-                    if (sourceStampCdRecord != null) {
-                        byte[] sourceStampCertificateDigest =
-                                LocalFileRecord.getUncompressedData(
-                                        apk,
-                                        sourceStampCdRecord,
-                                        zipSections.getZipCentralDirectoryOffset());
-                        ApkSigningBlockUtils.Result sourceStampResult =
-                                SourceStampVerifier.verify(
-                                        apk,
-                                        zipSections,
-                                        sourceStampCertificateDigest,
-                                        apkContentDigests,
-                                        Math.max(minSdkVersion, AndroidSdkVersion.R),
-                                        maxSdkVersion);
-                        result.mergeFrom(sourceStampResult);
-                    }
-                } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
-                    result.addWarning(Issue.SOURCE_STAMP_SIG_MISSING);
-                } catch (ZipFormatException e) {
-                    throw new ApkFormatException("Failed to read APK", e);
                 }
                 if (result.containsErrors()) {
                     return result;
@@ -349,6 +310,9 @@ public class ApkVerifier {
             }
         }
 
+        List<CentralDirectoryRecord> cdRecords =
+                V1SchemeVerifier.parseZipCentralDirectory(apk, zipSections);
+
         // Attempt to verify the APK using JAR signing if necessary. Platforms prior to Android N
         // ignore APK Signature Scheme v2 signatures and always attempt to verify JAR signatures.
         // Android N onwards verifies JAR signatures only if no APK Signature Scheme v2 (or newer
@@ -363,6 +327,46 @@ public class ApkVerifier {
                             minSdkVersion,
                             maxSdkVersion);
             result.mergeFrom(v1Result);
+            signatureSchemeApkContentDigests.put(
+                    ApkSigningBlockUtils.VERSION_JAR_SIGNATURE_SCHEME,
+                    getApkContentDigestFromV1SigningScheme(cdRecords, apk, zipSections));
+        }
+        if (result.containsErrors()) {
+            return result;
+        }
+
+        // Verify the SourceStamp, if found in the APK.
+        try {
+            CentralDirectoryRecord sourceStampCdRecord = null;
+            for (CentralDirectoryRecord cdRecord : cdRecords) {
+                if (SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME.equals(
+                        cdRecord.getName())) {
+                    sourceStampCdRecord = cdRecord;
+                    break;
+                }
+            }
+            // If SourceStamp file is found inside the APK, there must be a SourceStamp
+            // block in the APK signing block as well.
+            if (sourceStampCdRecord != null) {
+                byte[] sourceStampCertificateDigest =
+                        LocalFileRecord.getUncompressedData(
+                                apk,
+                                sourceStampCdRecord,
+                                zipSections.getZipCentralDirectoryOffset());
+                ApkSigningBlockUtils.Result sourceStampResult =
+                        V2SourceStampVerifier.verify(
+                                apk,
+                                zipSections,
+                                sourceStampCertificateDigest,
+                                signatureSchemeApkContentDigests,
+                                Math.max(minSdkVersion, AndroidSdkVersion.R),
+                                maxSdkVersion);
+                result.mergeFrom(sourceStampResult);
+            }
+        } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
+            result.addWarning(Issue.SOURCE_STAMP_SIG_MISSING);
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Failed to read APK", e);
         }
         if (result.containsErrors()) {
             return result;
@@ -601,6 +605,37 @@ public class ApkVerifier {
             collectApkContentDigests(signerInfo.contentDigests, apkContentDigests);
         }
         return apkContentDigests;
+    }
+
+    private static Map<ContentDigestAlgorithm, byte[]> getApkContentDigestFromV1SigningScheme(
+            List<CentralDirectoryRecord> cdRecords,
+            DataSource apk,
+            ApkUtils.ZipSections zipSections)
+            throws IOException, ApkFormatException {
+        CentralDirectoryRecord manifestCdRecord = null;
+        Map<ContentDigestAlgorithm, byte[]> v1ContentDigest = new HashMap<>();
+        for (CentralDirectoryRecord cdRecord : cdRecords) {
+            if (MANIFEST_ENTRY_NAME.equals(cdRecord.getName())) {
+                manifestCdRecord = cdRecord;
+                break;
+            }
+        }
+        if (manifestCdRecord == null) {
+            // No JAR signing manifest file found. For SourceStamp verification, returning an empty
+            // digest is enough since this would affect the final digest signed by the stamp, and
+            // thus an empty digest will invalidate that signature.
+            return v1ContentDigest;
+        }
+        try {
+            byte[] manifestBytes =
+                    LocalFileRecord.getUncompressedData(
+                            apk, manifestCdRecord, zipSections.getZipCentralDirectoryOffset());
+            v1ContentDigest.put(
+                    ContentDigestAlgorithm.SHA256, computeSha256DigestBytes(manifestBytes));
+            return v1ContentDigest;
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Failed to read APK", e);
+        }
     }
 
     private static void collectApkContentDigests(List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> contentDigests, Map<ContentDigestAlgorithm, byte[]> apkContentDigests) {

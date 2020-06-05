@@ -17,6 +17,7 @@
 package com.android.apksig;
 
 import static com.android.apksig.apk.ApkUtils.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME;
+import static com.android.apksig.apk.ApkUtils.computeSha256DigestBytes;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_JAR_SIGNATURE_SCHEME;
@@ -1151,17 +1152,6 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return InputJarEntryInstructions.OutputPolicy.OUTPUT;
         }
         return InputJarEntryInstructions.OutputPolicy.SKIP;
-    }
-
-    private static byte[] computeSha256DigestBytes(byte[] data) {
-        MessageDigest messageDigest;
-        try {
-            messageDigest = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is not found", e);
-        }
-        messageDigest.update(data);
-        return messageDigest.digest();
     }
 
     private static class OutputJarSignatureRequestImpl implements OutputJarSignatureRequest {
