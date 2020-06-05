@@ -19,6 +19,7 @@ package com.android.apksig;
 import static com.android.apksig.apk.ApkUtils.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3;
+import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_JAR_SIGNATURE_SCHEME;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
@@ -833,7 +834,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             throws IOException, InvalidKeyException, SignatureException, NoSuchAlgorithmException {
         checkNotClosed();
         checkV1SigningDoneIfEnabled();
-        if (!mV2SigningEnabled && !mV3SigningEnabled) {
+        if (!mV2SigningEnabled && !mV3SigningEnabled && !isEligibleForSourceStamp()) {
             return null;
         }
         checkOutputApkNotDebuggableIfDebuggableMustBeRejected();
@@ -891,7 +892,32 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 signatureSchemeDigestInfos.put(
                         VERSION_APK_SIGNATURE_SCHEME_V2, v2SigningSchemeBlockAndDigests.digestInfo);
             }
-            // TODO(b/158196850): Add V1 digest.
+            if (mV1SigningEnabled) {
+                Map<ContentDigestAlgorithm, byte[]> v1SigningSchemeDigests = new HashMap<>();
+                try {
+                    // Jar signing related variables must have been already populated at this point
+                    // if V1 signing is enabled since it is happening before computations on the APK
+                    // signing block (V2/V3/V4/SourceStamp signing).
+                    byte[] inputJarManifest =
+                            (mInputJarManifestEntryDataRequest != null)
+                                    ? mInputJarManifestEntryDataRequest.getData()
+                                    : null;
+                    byte[] jarManifest =
+                            V1SchemeSigner.generateManifestFile(
+                                            mV1ContentDigestAlgorithm,
+                                            mOutputJarEntryDigests,
+                                            inputJarManifest)
+                                    .contents;
+                    // The digest of the jar manifest does not need to be computed in chunks due to
+                    // the small size of the manifest.
+                    v1SigningSchemeDigests.put(
+                            ContentDigestAlgorithm.SHA256, computeSha256DigestBytes(jarManifest));
+                } catch (ApkFormatException e) {
+                    throw new RuntimeException("Failed to generate manifest file", e);
+                }
+                signatureSchemeDigestInfos.put(
+                        VERSION_JAR_SIGNATURE_SCHEME, v1SigningSchemeDigests);
+            }
             signingSchemeBlocks.add(
                     V2SourceStampSigner.generateSourceStampBlock(
                             sourceStampSignerConfig, signatureSchemeDigestInfos));
@@ -951,7 +977,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
     @Override
     public boolean isEligibleForSourceStamp() {
-        return mSourceStampSignerConfig != null && (mV2SigningEnabled || mV3SigningEnabled);
+        return mSourceStampSignerConfig != null
+                && (mV2SigningEnabled || mV3SigningEnabled || mV1SigningEnabled);
     }
 
     @Override
