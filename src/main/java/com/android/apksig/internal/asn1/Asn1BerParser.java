@@ -507,23 +507,22 @@ public final class Asn1BerParser {
 
     private static int integerToInt(ByteBuffer encoded) throws Asn1DecodingException {
         BigInteger value = integerToBigInteger(encoded);
-        try {
-            return value.intValueExact();
-        } catch (ArithmeticException e) {
+        if (value.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0
+            || value.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
             throw new Asn1DecodingException(
-                    String.format("INTEGER cannot be represented as int: %1$d (0x%1$x)", value), e);
+                String.format("INTEGER cannot be represented as int: %1$d (0x%1$x)", value));
         }
+        return value.intValue();
     }
 
     private static long integerToLong(ByteBuffer encoded) throws Asn1DecodingException {
         BigInteger value = integerToBigInteger(encoded);
-        try {
-            return value.longValueExact();
-        } catch (ArithmeticException e) {
+        if (value.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0
+                || value.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
             throw new Asn1DecodingException(
-                    String.format("INTEGER cannot be represented as long: %1$d (0x%1$x)", value),
-                    e);
+                String.format("INTEGER cannot be represented as long: %1$d (0x%1$x)", value));
         }
+        return value.longValue();
     }
 
     private static List<AnnotatedField> getAnnotatedFields(Class<?> containerClass)
