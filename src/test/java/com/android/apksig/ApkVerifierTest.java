@@ -781,6 +781,36 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void testTargetSdkMinSchemeVersionNotMet() throws Exception {
+        // Android 11 / SDK version 30 requires apps targeting this SDK version or higher must be
+        // signed with at least the V2 signature scheme. This test verifies if an app is targeting
+        // this SDK version and is only signed with a V1 signature then the verifier reports the
+        // platform will not accept it.
+        assertVerificationFailure(verify("v1-ec-p256-targetSdk-30.apk"),
+                Issue.MIN_SIG_SCHEME_FOR_TARGET_SDK_NOT_MET);
+    }
+
+    @Test
+    public void testTargetSdkMinSchemeVersionMet() throws Exception {
+        // This test verifies if an app is signed with the minimum required signature scheme version
+        // for the target SDK version then the verifier reports the platform will accept it.
+        assertVerified(verify("v2-ec-p256-targetSdk-30.apk"));
+
+        // If an app is only signed with a signature scheme higher than the required version for the
+        // target SDK the verifier should also report that the platform will accept it.
+        assertVerified(verify("v3-ec-p256-targetSdk-30.apk"));
+    }
+
+    @Test
+    public void testTargetSdkMinSchemeVersionNotMetMaxLessThanTarget() throws Exception {
+        // If the minimum signature scheme for the target SDK version is not met but the maximum
+        // SDK version is less than the target then the verifier should report that the platform
+        // will accept it since the specified max SDK version does not know about the minimum
+        // signature scheme requirement.
+        verifyForMaxSdkVersion("v1-ec-p256-targetSdk-30.apk", 29);
+    }
+
+    @Test
     public void testV1MultipleDigestAlgsInManifestAndSignatureFile() throws Exception {
         // MANIFEST.MF contains SHA-1 and SHA-256 digests for each entry, .SF contains only SHA-1
         // digests. This file was obtained by:
