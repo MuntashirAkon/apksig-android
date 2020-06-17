@@ -25,7 +25,10 @@ public enum ContentDigestAlgorithm {
     CHUNKED_SHA512(2, "SHA-512", 512 / 8),
 
     /** SHA2-256 over 4 KB chunks for APK verity. */
-    VERITY_CHUNKED_SHA256(3, "SHA-256", 256 / 8);
+    VERITY_CHUNKED_SHA256(3, "SHA-256", 256 / 8),
+
+    /** Non-chunk SHA2-256. */
+    SHA256(4, "SHA-256", 256 / 8);
 
     private final int mId;
     private final String mJcaMessageDigestAlgorithm;
