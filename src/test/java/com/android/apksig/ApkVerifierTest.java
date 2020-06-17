@@ -1082,8 +1082,24 @@ public class ApkVerifierTest {
     }
 
     @Test
-    public void testSourceStampBlock_apkHashMismatch() throws Exception {
-        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch.apk");
+    public void testSourceStampBlock_apkHashMismatch_v1SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v1.apk");
+        // A broken stamp should not block a signing scheme verified APK.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void testSourceStampBlock_apkHashMismatch_v2SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v2.apk");
+        // A broken stamp should not block a signing scheme verified APK.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void testSourceStampBlock_apkHashMismatch_v3SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v3.apk");
         // A broken stamp should not block a signing scheme verified APK.
         assertVerified(verificationResult);
         assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
