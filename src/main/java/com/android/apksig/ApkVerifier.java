@@ -529,7 +529,8 @@ public class ApkVerifier {
         if (androidManifest == null) {
             androidManifest = getAndroidManifestFromApk(apk, zipSections);
         }
-        int targetSdkVersion = getTargetSdkVersionFromBinaryAndroidManifest(androidManifest);
+        int targetSdkVersion = getTargetSdkVersionFromBinaryAndroidManifest(
+                androidManifest.slice());
         int minSchemeVersion = getMinimumSignatureSchemeVersionForTargetSdk(targetSdkVersion);
         // The platform currently only enforces a single minimum signature scheme version, but when
         // later platform versions support another minimum version this will need to be expanded to
@@ -642,8 +643,9 @@ public class ApkVerifier {
      * Android resource ID of the {@code android:targetSdkVersion} attribute in
      * AndroidManifest.xml.
      */
+    private static final int MIN_SDK_VERSION_ATTR_ID = 0x0101020c;
     private static final int TARGET_SDK_VERSION_ATTR_ID = 0x01010270;
-    private static final String TARGET_SDK_VERSION_ELEMENT_NAME = "uses-sdk";
+    private static final String USES_SDK_ELEMENT_NAME = "uses-sdk";
 
     /**
      * Returns the security sandbox version targeted by an APK with the provided
@@ -668,9 +670,26 @@ public class ApkVerifier {
      * @throws ApkFormatException if an error occurred while determining the version
      */
     private static int getTargetSdkVersionFromBinaryAndroidManifest(
-            ByteBuffer androidManifestContents) throws ApkFormatException {
-        return getAttributeValueFromBinaryAndroidManifest(androidManifestContents,
-                TARGET_SDK_VERSION_ELEMENT_NAME, TARGET_SDK_VERSION_ATTR_ID);
+            ByteBuffer androidManifestContents) {
+        // If the targetSdkVersion is not specified then the platform will use the value of the
+        // minSdkVersion; if neither is specified then the platform will use a value of 1.
+        int minSdkVersion = 1;
+        try {
+            return getAttributeValueFromBinaryAndroidManifest(androidManifestContents,
+                    USES_SDK_ELEMENT_NAME, TARGET_SDK_VERSION_ATTR_ID);
+        } catch (ApkFormatException e) {
+            // Expected if the APK does not contain a targetSdkVersion attribute or the uses-sdk
+            // element is not specified at all.
+        }
+        androidManifestContents.rewind();
+        try {
+            minSdkVersion = getAttributeValueFromBinaryAndroidManifest(androidManifestContents,
+                    USES_SDK_ELEMENT_NAME, MIN_SDK_VERSION_ATTR_ID);
+        } catch (ApkFormatException e) {
+            // Similar to above, expected if the APK does not contain a minSdkVersion attribute or
+            // the uses-sdk element is not specified at all.
+        }
+        return minSdkVersion;
     }
 
     /**
