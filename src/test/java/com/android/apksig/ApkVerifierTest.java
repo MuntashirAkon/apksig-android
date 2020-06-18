@@ -811,6 +811,17 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void testTargetSdkNoUsesSdkElement() throws Exception {
+        // The target SDK minimum signature scheme version check will attempt to obtain the
+        // targetSdkVersion attribute value from the uses-sdk element in the AndroidManifest. If
+        // the targetSdkVersion is not specified then the verifier should behave the same as the
+        // platform; the minSdkVersion should be used when available and when neither the minimum or
+        // target SDK are specified a default value of 1 should be used. This test verifies that the
+        // verifier does not fail when the uses-sdk element is not specified.
+        verify("v1-only-no-uses-sdk.apk");
+    }
+
+    @Test
     public void testV1MultipleDigestAlgsInManifestAndSignatureFile() throws Exception {
         // MANIFEST.MF contains SHA-1 and SHA-256 digests for each entry, .SF contains only SHA-1
         // digests. This file was obtained by:
@@ -1071,8 +1082,24 @@ public class ApkVerifierTest {
     }
 
     @Test
-    public void testSourceStampBlock_apkHashMismatch() throws Exception {
-        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch.apk");
+    public void testSourceStampBlock_apkHashMismatch_v1SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v1.apk");
+        // A broken stamp should not block a signing scheme verified APK.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void testSourceStampBlock_apkHashMismatch_v2SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v2.apk");
+        // A broken stamp should not block a signing scheme verified APK.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void testSourceStampBlock_apkHashMismatch_v3SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v3.apk");
         // A broken stamp should not block a signing scheme verified APK.
         assertVerified(verificationResult);
         assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
