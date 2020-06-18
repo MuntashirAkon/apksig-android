@@ -34,7 +34,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * SourceStamp signer.
@@ -45,13 +44,15 @@ import java.util.stream.Collectors;
  *
  * <p>The APK contents hash is signed using the stamp key, and is saved as part of the signing
  * block.
+ *
+ * <p>V1 of the source stamp allows signing the digest of at most one signature scheme only.
  */
-public abstract class SourceStampSigner {
+public abstract class V1SourceStampSigner {
 
-    public static final int SOURCE_STAMP_BLOCK_ID = 0x2b09189e;
+    public static final int V1_SOURCE_STAMP_BLOCK_ID = 0x2b09189e;
 
     /** Hidden constructor to prevent instantiation. */
-    private SourceStampSigner() {}
+    private V1SourceStampSigner() {}
 
     public static Pair<byte[], Integer> generateSourceStampBlock(
             SignerConfig sourceStampSignerConfig, Map<ContentDigestAlgorithm, byte[]> digestInfo)
@@ -98,7 +99,7 @@ public abstract class SourceStampSigner {
         // FORMAT:
         // * length-prefixed stamp block.
         return Pair.of(
-                encodeAsLengthPrefixedElement(sourceStampSignerBlock), SOURCE_STAMP_BLOCK_ID);
+                encodeAsLengthPrefixedElement(sourceStampSignerBlock), V1_SOURCE_STAMP_BLOCK_ID);
     }
 
     private static final class SourceStampBlock {

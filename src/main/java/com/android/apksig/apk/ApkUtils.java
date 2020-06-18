@@ -27,6 +27,8 @@ import com.android.apksig.zip.ZipFormatException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -603,5 +605,16 @@ public abstract class ApkUtils {
                             + ANDROID_MANIFEST_ZIP_ENTRY_NAME,
                     e);
         }
+    }
+
+    public static byte[] computeSha256DigestBytes(byte[] data) {
+        MessageDigest messageDigest;
+        try {
+            messageDigest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not found", e);
+        }
+        messageDigest.update(data);
+        return messageDigest.digest();
     }
 }
