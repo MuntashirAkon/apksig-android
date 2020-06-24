@@ -20,6 +20,7 @@ import static com.android.apksig.apk.ApkUtils.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_
 import static com.android.apksig.apk.ApkUtils.findZipSections;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -35,6 +36,7 @@ import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
 import com.android.apksig.internal.apk.v3.V3SchemeSigner;
 import com.android.apksig.internal.asn1.Asn1BerParser;
+import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.Resources;
 import com.android.apksig.internal.x509.RSAPublicKey;
 import com.android.apksig.internal.x509.SubjectPublicKeyInfo;
@@ -1032,6 +1034,80 @@ public class ApkSignerTest {
     }
 
     @Test
+    public void testSignApk_existingStampFile_sameSourceStamp() throws Exception {
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(
+                        getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
+        ApkSigner.SignerConfig sourceStampSigner =
+                getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME);
+
+        DataSource signedApk =
+                sign(
+                        "original-with-stamp-file.apk",
+                        new ApkSigner.Builder(signers)
+                                .setV1SigningEnabled(true)
+                                .setV2SigningEnabled(true)
+                                .setV3SigningEnabled(true)
+                                .setSourceStampSignerConfig(sourceStampSigner));
+
+        ApkVerifier.Result sourceStampVerificationResult =
+                verify(signedApk, /* minSdkVersionOverride= */ null);
+        assertSourceStampVerified(signedApk, sourceStampVerificationResult);
+    }
+
+    @Test
+    public void testSignApk_existingStampFile_differentSourceStamp() throws Exception {
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(
+                        getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
+        ApkSigner.SignerConfig sourceStampSigner =
+                getDefaultSignerConfigFromResources(SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
+
+        Exception exception =
+                assertThrows(
+                        ApkFormatException.class,
+                        () ->
+                                sign(
+                                        "original-with-stamp-file.apk",
+                                        new ApkSigner.Builder(signers)
+                                                .setV1SigningEnabled(true)
+                                                .setV2SigningEnabled(true)
+                                                .setV3SigningEnabled(true)
+                                                .setSourceStampSignerConfig(sourceStampSigner)));
+        assertEquals(
+                String.format(
+                        "Cannot generate SourceStamp. APK contains an existing entry with the"
+                                + " name: %s, and it is different than the provided source stamp"
+                                + " certificate",
+                        SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME),
+                exception.getMessage());
+    }
+
+    @Test
+    public void testSignApk_existingStampFile_differentSourceStamp_forceOverwrite()
+            throws Exception {
+        List<ApkSigner.SignerConfig> signers =
+                Collections.singletonList(
+                        getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
+        ApkSigner.SignerConfig sourceStampSigner =
+                getDefaultSignerConfigFromResources(SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
+
+        DataSource signedApk =
+                sign(
+                        "original-with-stamp-file.apk",
+                        new ApkSigner.Builder(signers)
+                                .setV1SigningEnabled(true)
+                                .setV2SigningEnabled(true)
+                                .setV3SigningEnabled(true)
+                                .setForceSourceStampOverwrite(true)
+                                .setSourceStampSignerConfig(sourceStampSigner));
+
+        ApkVerifier.Result sourceStampVerificationResult =
+                verify(signedApk, /* minSdkVersionOverride= */ null);
+        assertSourceStampVerified(signedApk, sourceStampVerificationResult);
+    }
+
+    @Test
     public void testSignApk_stampBlock_noStampGenerated() throws Exception {
         List<ApkSigner.SignerConfig> signersList =
                 Collections.singletonList(
@@ -1075,12 +1151,9 @@ public class ApkSignerTest {
                                 .setV3SigningEnabled(false)
                                 .setSourceStampSignerConfig(sourceStampSigner));
 
-        SignatureInfo signatureInfo =
-                getSignatureInfoFromApk(
-                        signedApk,
-                        ApkSigningBlockUtils.VERSION_SOURCE_STAMP,
-                        V2SourceStampSigner.V2_SOURCE_STAMP_BLOCK_ID);
-        assertNotNull(signatureInfo.signatureBlock);
+        ApkVerifier.Result sourceStampVerificationResult =
+                verify(signedApk, /* minSdkVersionOverride= */ null);
+        assertSourceStampVerified(signedApk, sourceStampVerificationResult);
     }
 
     @Test
@@ -1100,12 +1173,9 @@ public class ApkSignerTest {
                                 .setV3SigningEnabled(false)
                                 .setSourceStampSignerConfig(sourceStampSigner));
 
-        SignatureInfo signatureInfo =
-                getSignatureInfoFromApk(
-                        signedApk,
-                        ApkSigningBlockUtils.VERSION_SOURCE_STAMP,
-                        V2SourceStampSigner.V2_SOURCE_STAMP_BLOCK_ID);
-        assertNotNull(signatureInfo.signatureBlock);
+        ApkVerifier.Result sourceStampVerificationResult =
+                verifyForMinSdkVersion(signedApk, /* minSdkVersion= */ AndroidSdkVersion.N);
+        assertSourceStampVerified(signedApk, sourceStampVerificationResult);
     }
 
     @Test
@@ -1125,12 +1195,9 @@ public class ApkSignerTest {
                                 .setV3SigningEnabled(true)
                                 .setSourceStampSignerConfig(sourceStampSigner));
 
-        SignatureInfo signatureInfo =
-                getSignatureInfoFromApk(
-                        signedApk,
-                        ApkSigningBlockUtils.VERSION_SOURCE_STAMP,
-                        V2SourceStampSigner.V2_SOURCE_STAMP_BLOCK_ID);
-        assertNotNull(signatureInfo.signatureBlock);
+        ApkVerifier.Result sourceStampVerificationResult =
+                verifyForMinSdkVersion(signedApk, /* minSdkVersion= */ AndroidSdkVersion.N);
+        assertSourceStampVerified(signedApk, sourceStampVerificationResult);
     }
 
     private RSAPublicKey getRSAPublicKeyFromSigningBlock(DataSource apk, int signatureVersionId)
@@ -1270,6 +1337,18 @@ public class ApkSignerTest {
 
     private static void assertVerified(ApkVerifier.Result result) {
         ApkVerifierTest.assertVerified(result);
+    }
+
+    private static void assertSourceStampVerified(DataSource signedApk, ApkVerifier.Result result)
+            throws ApkSigningBlockUtils.SignatureNotFoundException, IOException,
+                    ZipFormatException {
+        SignatureInfo signatureInfo =
+                getSignatureInfoFromApk(
+                        signedApk,
+                        ApkSigningBlockUtils.VERSION_SOURCE_STAMP,
+                        V2SourceStampSigner.V2_SOURCE_STAMP_BLOCK_ID);
+        assertNotNull(signatureInfo.signatureBlock);
+        assertTrue(result.isSourceStampVerified());
     }
 
     private static void assertVerificationFailure(ApkVerifier.Result result, Issue expectedIssue) {
