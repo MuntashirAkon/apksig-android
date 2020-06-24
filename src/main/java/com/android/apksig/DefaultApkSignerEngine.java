@@ -379,7 +379,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             throws InvalidKeyException {
         return createSigningBlockSignerConfig(
                 mSourceStampSignerConfig,
-                /* apkSigningBlockPaddingSupported= */ true,
+                /* apkSigningBlockPaddingSupported= */ false,
                 ApkSigningBlockUtils.VERSION_SOURCE_STAMP);
     }
 
@@ -459,7 +459,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             case ApkSigningBlockUtils.VERSION_SOURCE_STAMP:
                 newSignerConfig.signatureAlgorithms =
                         Collections.singletonList(
-                                SignatureAlgorithm.VERITY_RSA_PKCS1_V1_5_WITH_SHA256);
+                                SignatureAlgorithm.RSA_PKCS1_V1_5_WITH_SHA256);
                 break;
             default:
                 throw new IllegalArgumentException("Unknown APK Signature Scheme ID requested");
