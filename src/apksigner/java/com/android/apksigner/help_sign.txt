@@ -46,6 +46,10 @@ certificate.
                       enabled based on min and max SDK version (see
                       --min-sdk-version and --max-sdk-version).
 
+--force-stamp-overwrite  Whether to overwrite existing source stamp in the
+                      APK, if found. By default, it is set to false. It has no
+                      effect if no source stamp signer config is provided.
+
 --verity-enabled      Whether to enable the verity signature algorithm for the
                       v2 and v3 signature schemes.
 
