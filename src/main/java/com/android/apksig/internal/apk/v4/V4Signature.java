@@ -134,7 +134,7 @@ public class V4Signature {
         writeBytes(stream, this.signingInfo);
     }
 
-    static byte[] getSigningData(long fileSize, HashingInfo hashingInfo, SigningInfo signingInfo) {
+    static byte[] getSignedData(long fileSize, HashingInfo hashingInfo, SigningInfo signingInfo) {
         final int size =
                 4/*size*/ + 8/*fileSize*/ + 4/*hash_algorithm*/ + 1/*log2_blocksize*/ + bytesSize(
                         hashingInfo.salt) + bytesSize(hashingInfo.rawRootHash) + bytesSize(
