@@ -25,6 +25,8 @@ import com.android.apksig.apk.MinSdkVersionException;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 
+import org.conscrypt.OpenSSLProvider;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -78,6 +80,8 @@ public class ApkSignerTool {
             return;
         }
 
+        addProviders();
+
         String cmd = params[0];
         try {
             if ("sign".equals(cmd)) {
@@ -106,6 +110,19 @@ public class ApkSignerTool {
             System.err.println(e.getMessage());
             System.exit(1);
             return;
+        }
+    }
+
+    /**
+     * Adds additional security providers to add support for signature algorithms not covered by
+     * the default providers.
+     */
+    private static void addProviders() {
+        try {
+            Security.addProvider(new OpenSSLProvider());
+        } catch (UnsatisfiedLinkError e) {
+            // This is expected if the library path does not include the native conscrypt library;
+            // the default providers support all but PSS algorithms.
         }
     }
 

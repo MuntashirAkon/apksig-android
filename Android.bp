@@ -31,5 +31,9 @@ java_binary_host {
     java_resource_dirs: ["src/apksigner/java"],
     wrapper: "etc/apksigner",
     manifest: "src/apksigner/apksigner.mf",
-    static_libs: ["apksig"],
+    static_libs: [
+        "apksig",
+        "conscrypt-unbundled",
+    ],
+    required: ["libconscrypt_openjdk_jni"],
 }
