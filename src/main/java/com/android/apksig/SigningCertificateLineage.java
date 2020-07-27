@@ -23,6 +23,7 @@ import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.SignatureInfo;
+import com.android.apksig.internal.apk.v3.V3SchemeConstants;
 import com.android.apksig.internal.apk.v3.V3SchemeSigner;
 import com.android.apksig.internal.apk.v3.V3SigningCertificateLineage;
 import com.android.apksig.internal.apk.v3.V3SigningCertificateLineage.SigningCertificateNode;
@@ -192,7 +193,7 @@ public class SigningCertificateLineage {
                     ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
             signatureInfo =
                     ApkSigningBlockUtils.findSignature(apk, zipSections,
-                            V3SchemeSigner.APK_SIGNATURE_SCHEME_V3_BLOCK_ID, result);
+                            V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID, result);
         } catch (ZipFormatException e) {
             throw new ApkFormatException(e.getMessage());
         } catch (ApkSigningBlockUtils.SignatureNotFoundException e) {
@@ -263,7 +264,7 @@ public class SigningCertificateLineage {
         while (additionalAttributes.hasRemaining()) {
             ByteBuffer attribute = getLengthPrefixedSlice(additionalAttributes);
             int id = attribute.getInt();
-            if (id == V3SchemeSigner.PROOF_OF_ROTATION_ATTR_ID) {
+            if (id == V3SchemeConstants.PROOF_OF_ROTATION_ATTR_ID) {
                 byte[] value = ByteBufferUtils.toByteArray(attribute);
                 SigningCertificateLineage lineage = readFromV3AttributeValue(value);
                 lineages.add(lineage);
@@ -502,7 +503,7 @@ public class SigningCertificateLineage {
         ByteBuffer result = ByteBuffer.allocate(payloadSize);
         result.order(ByteOrder.LITTLE_ENDIAN);
         result.putInt(4 + encodedLineage.length);
-        result.putInt(V3SchemeSigner.PROOF_OF_ROTATION_ATTR_ID);
+        result.putInt(V3SchemeConstants.PROOF_OF_ROTATION_ATTR_ID);
         result.put(encodedLineage);
         return result.array();
     }
