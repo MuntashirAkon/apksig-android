@@ -21,6 +21,7 @@ java_library_host {
     srcs: [
         "src/main/java/**/*.java",
     ],
+    java_version: "1.8",
 }
 
 // apksigner command-line tool for signing APKs and verifying their signatures
@@ -36,4 +37,5 @@ java_binary_host {
         "conscrypt-unbundled",
     ],
     required: ["libconscrypt_openjdk_jni"],
+    java_version: "1.8",
 }
