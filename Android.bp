@@ -19,6 +19,7 @@
 java_library_host {
     name: "apksig",
     srcs: ["src/main/java/**/*.java"],
+    java_version: "1.8",
 }
 
 // apksigner command-line tool for signing APKs and verifying their signatures
@@ -30,4 +31,5 @@ java_binary_host {
     wrapper: "etc/apksigner",
     manifest: "src/apksigner/apksigner.mf",
     static_libs: ["apksig"],
+    java_version: "1.8",
 }
