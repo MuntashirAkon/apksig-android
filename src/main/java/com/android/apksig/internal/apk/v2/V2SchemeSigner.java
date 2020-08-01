@@ -70,8 +70,6 @@ public abstract class V2SchemeSigner {
      * protected by signatures inside the block.
      */
 
-    public static final int APK_SIGNATURE_SCHEME_V2_BLOCK_ID = 0x7109871a;
-
     /** Hidden constructor to prevent instantiation. */
     private V2SchemeSigner() {}
 
@@ -183,7 +181,7 @@ public abstract class V2SchemeSigner {
                         new byte[][] {
                             encodeAsSequenceOfLengthPrefixedElements(signerBlocks),
                         }),
-                APK_SIGNATURE_SCHEME_V2_BLOCK_ID);
+                V2SchemeConstants.APK_SIGNATURE_SCHEME_V2_BLOCK_ID);
     }
 
     private static byte[] generateSignerBlock(
@@ -263,9 +261,6 @@ public abstract class V2SchemeSigner {
                 });
     }
 
-    // Attribute to check whether a newer APK Signature Scheme signature was stripped
-    protected static final int STRIPPING_PROTECTION_ATTR_ID = 0xbeeff00d;
-
     private static byte[] generateAdditionalAttributes(boolean v3SigningEnabled) {
         if (v3SigningEnabled) {
             // FORMAT (little endian):
@@ -276,7 +271,7 @@ public abstract class V2SchemeSigner {
             ByteBuffer result = ByteBuffer.allocate(payloadSize);
             result.order(ByteOrder.LITTLE_ENDIAN);
             result.putInt(payloadSize - 4);
-            result.putInt(STRIPPING_PROTECTION_ATTR_ID);
+            result.putInt(V2SchemeConstants.STRIPPING_PROTECTION_ATTR_ID);
             result.putInt(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
             return result.array();
         } else {
