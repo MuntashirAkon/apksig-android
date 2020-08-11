@@ -18,6 +18,8 @@ package com.android.apksig.internal.apk.v2;
 
 /** Constants used by the V2 Signature Scheme signing and verification. */
 public class V2SchemeConstants {
+    private V2SchemeConstants() {}
+
     public static final int APK_SIGNATURE_SCHEME_V2_BLOCK_ID = 0x7109871a;
     public static final int STRIPPING_PROTECTION_ATTR_ID = 0xbeeff00d;
 }
