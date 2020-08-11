@@ -324,6 +324,30 @@ public abstract class ApkUtils {
     private static final int DEBUGGABLE_ATTR_ID = 0x0101000f;
 
     /**
+     * Android resource ID of the {@code android:targetSandboxVersion} attribute in
+     * AndroidManifest.xml.
+     */
+    private static final int TARGET_SANDBOX_VERSION_ATTR_ID = 0x0101054c;
+
+    /**
+     * Android resource ID of the {@code android:targetSdkVersion} attribute in
+     * AndroidManifest.xml.
+     */
+    private static final int TARGET_SDK_VERSION_ATTR_ID = 0x01010270;
+    private static final String USES_SDK_ELEMENT_TAG = "uses-sdk";
+
+    /**
+     * Android resource ID of the {@code android:versionCode} attribute in AndroidManifest.xml.
+     */
+    private static final int VERSION_CODE_ATTR_ID = 0x0101021b;
+    private static final String MANIFEST_ELEMENT_TAG = "manifest";
+
+    /**
+     * Android resource ID of the {@code android:versionCodeMajor} attribute in AndroidManifest.xml.
+     */
+    private static final int VERSION_CODE_MAJOR_ATTR_ID = 0x01010576;
+
+    /**
      * Returns the lowest Android platform version (API Level) supported by an APK with the
      * provided {@code AndroidManifest.xml}.
      *
@@ -604,6 +628,157 @@ public abstract class ApkUtils {
                     "Unable to determine APK package name: malformed binary resource: "
                             + ANDROID_MANIFEST_ZIP_ENTRY_NAME,
                     e);
+        }
+    }
+
+    /**
+     * Returns the security sandbox version targeted by an APK with the provided
+     * {@code AndroidManifest.xml}.
+     *
+     * <p>If the security sandbox version is not specified in the manifest a default value of 1 is
+     * returned.
+     *
+     * @param androidManifestContents contents of {@code AndroidManifest.xml} in binary Android
+     *                                resource format
+     * @throws ApkFormatException if an error occurred while determining the version
+     */
+    public static int getTargetSandboxVersionFromBinaryAndroidManifest(
+            ByteBuffer androidManifestContents) throws ApkFormatException {
+        try {
+            return getAttributeValueFromBinaryAndroidManifest(androidManifestContents,
+                    MANIFEST_ELEMENT_TAG, TARGET_SANDBOX_VERSION_ATTR_ID);
+        } catch (ApkFormatException e) {
+            // An ApkFormatException indicates the target sandbox is not specified in the manifest;
+            // return a default value of 1.
+            return 1;
+        }
+    }
+
+    /**
+     * Returns the SDK version targeted by an APK with the provided {@code AndroidManifest.xml}.
+     *
+     * <p>If the targetSdkVersion is not specified the minimumSdkVersion is returned. If neither
+     * value is specified then a value of 1 is returned.
+     *
+     * @param androidManifestContents contents of {@code AndroidManifest.xml} in binary Android
+     *                                resource format
+     * @throws ApkFormatException if an error occurred while determining the version
+     */
+    public static int getTargetSdkVersionFromBinaryAndroidManifest(
+            ByteBuffer androidManifestContents) {
+        // If the targetSdkVersion is not specified then the platform will use the value of the
+        // minSdkVersion; if neither is specified then the platform will use a value of 1.
+        int minSdkVersion = 1;
+        try {
+            return getAttributeValueFromBinaryAndroidManifest(androidManifestContents,
+                    USES_SDK_ELEMENT_TAG, TARGET_SDK_VERSION_ATTR_ID);
+        } catch (ApkFormatException e) {
+            // Expected if the APK does not contain a targetSdkVersion attribute or the uses-sdk
+            // element is not specified at all.
+        }
+        androidManifestContents.rewind();
+        try {
+            minSdkVersion = getMinSdkVersionFromBinaryAndroidManifest(androidManifestContents);
+        } catch (ApkFormatException e) {
+            // Similar to above, expected if the APK does not contain a minSdkVersion attribute, or
+            // the uses-sdk element is not specified at all.
+        }
+        return minSdkVersion;
+    }
+
+    /**
+     * Returns the versionCode of the APK according to its {@code AndroidManifest.xml}.
+     *
+     * <p>If the versionCode is not specified in the {@code AndroidManifest.xml} or is not a valid
+     * integer an ApkFormatException is thrown.
+     *
+     * @param androidManifestContents contents of {@code AndroidManifest.xml} in binary Android
+     *                                resource format
+     * @throws ApkFormatException if an error occurred while determining the versionCode, or if the
+     *                            versionCode attribute value is not available.
+     */
+    public static int getVersionCodeFromBinaryAndroidManifest(ByteBuffer androidManifestContents)
+            throws ApkFormatException {
+        return getAttributeValueFromBinaryAndroidManifest(androidManifestContents,
+                MANIFEST_ELEMENT_TAG, VERSION_CODE_ATTR_ID);
+    }
+
+    /**
+     * Returns the versionCode and versionCodeMajor of the APK according to its {@code
+     * AndroidManifest.xml} combined together as a single long value.
+     *
+     * <p>The versionCodeMajor is placed in the upper 32 bits, and the versionCode is in the lower
+     * 32 bits. If the versionCodeMajor is not specified then the versionCode is returned.
+     *
+     * @param androidManifestContents contents of {@code AndroidManifest.xml} in binary Android
+     *                                resource format
+     * @throws ApkFormatException if an error occurred while determining the version, or if the
+     *                            versionCode attribute value is not available.
+     */
+    public static long getLongVersionCodeFromBinaryAndroidManifest(
+            ByteBuffer androidManifestContents) throws ApkFormatException {
+        // If the versionCode is not found then allow the ApkFormatException to be thrown to notify
+        // the caller that the versionCode is not available.
+        int versionCode = getVersionCodeFromBinaryAndroidManifest(androidManifestContents);
+        long versionCodeMajor = 0;
+        try {
+            androidManifestContents.rewind();
+            versionCodeMajor = getAttributeValueFromBinaryAndroidManifest(androidManifestContents,
+                    MANIFEST_ELEMENT_TAG, VERSION_CODE_MAJOR_ATTR_ID);
+        } catch (ApkFormatException e) {
+            // This is expected if the versionCodeMajor has not been defined for the APK; in this
+            // case the return value is just the versionCode.
+        }
+        return (versionCodeMajor << 32) | versionCode;
+    }
+
+    /**
+     * Returns the integer value of the requested {@code attributeId} in the specified {@code
+     * elementName} from the provided {@code androidManifestContents} in binary Android resource
+     * format.
+     *
+     * @throws ApkFormatException if an error occurred while attempting to obtain the attribute, or
+     *                            if the requested attribute is not found.
+     */
+    private static int getAttributeValueFromBinaryAndroidManifest(
+            ByteBuffer androidManifestContents, String elementName, int attributeId)
+            throws ApkFormatException {
+        if (elementName == null) {
+            throw new NullPointerException("elementName cannot be null");
+        }
+        try {
+            AndroidBinXmlParser parser = new AndroidBinXmlParser(androidManifestContents);
+            int eventType = parser.getEventType();
+            while (eventType != AndroidBinXmlParser.EVENT_END_DOCUMENT) {
+                if ((eventType == AndroidBinXmlParser.EVENT_START_ELEMENT)
+                        && (elementName.equals(parser.getName()))) {
+                    for (int i = 0; i < parser.getAttributeCount(); i++) {
+                        if (parser.getAttributeNameResourceId(i) == attributeId) {
+                            int valueType = parser.getAttributeValueType(i);
+                            switch (valueType) {
+                                case AndroidBinXmlParser.VALUE_TYPE_INT:
+                                case AndroidBinXmlParser.VALUE_TYPE_STRING:
+                                    return parser.getAttributeIntValue(i);
+                                default:
+                                    throw new ApkFormatException(
+                                            "Unsupported value type, " + valueType
+                                                    + ", for attribute " + String.format("0x%08X",
+                                                    attributeId) + " under element " + elementName);
+
+                            }
+                        }
+                    }
+                }
+                eventType = parser.next();
+            }
+            throw new ApkFormatException(
+                    "Failed to determine APK's " + elementName + " attribute "
+                            + String.format("0x%08X", attributeId) + " value");
+        } catch (AndroidBinXmlParser.XmlParserException e) {
+            throw new ApkFormatException(
+                    "Unable to determine value for attribute " + String.format("0x%08X",
+                            attributeId) + " under element " + elementName
+                            + "; malformed binary resource: " + ANDROID_MANIFEST_ZIP_ENTRY_NAME, e);
         }
     }
 
