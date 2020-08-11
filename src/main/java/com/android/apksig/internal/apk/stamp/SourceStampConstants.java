@@ -18,6 +18,8 @@ package com.android.apksig.internal.apk.stamp;
 
 /** Constants used for source stamp signing and verification. */
 public class SourceStampConstants {
+    private SourceStampConstants() {}
+
     public static final int V1_SOURCE_STAMP_BLOCK_ID = 0x2b09189e;
     public static final int V2_SOURCE_STAMP_BLOCK_ID = 0x6dff800d;
 }
