@@ -1,6 +1,8 @@
 // Gradle project used when building the Android Plugin for Gradle
-
-apply from: "$rootDir/buildSrc/base/baseJava.gradle"
+plugins {
+    id 'com.android.tools.java-library'
+    id 'com.android.tools.publish'
+}
 
 dependencies {
     testCompile libs.junit
@@ -12,6 +14,3 @@ version = rootProject.ext.buildVersion
 
 project.ext.pomName = 'Android Tools apksig library'
 project.ext.pomDesc = 'Library for signing APKs and for checking that APK signatures verify on Android'
-
-apply from: "$rootDir/buildSrc/base/publish.gradle"
-apply from: "$rootDir/buildSrc/base/javadoc.gradle"
