@@ -490,9 +490,9 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     @Override
     @SuppressWarnings("AndroidJdkLibsChecker")
     public Set<String> initWith(byte[] manifestBytes, Set<String> entryNames) {
-        V1SchemeVerifier.Result dummyResult = new V1SchemeVerifier.Result();
+        V1SchemeVerifier.Result result = new V1SchemeVerifier.Result();
         Pair<ManifestParser.Section, Map<String, ManifestParser.Section>> sections =
-                V1SchemeVerifier.parseManifest(manifestBytes, entryNames, dummyResult);
+                V1SchemeVerifier.parseManifest(manifestBytes, entryNames, result);
         String alg = V1SchemeSigner.getJcaMessageDigestAlgorithm(mV1ContentDigestAlgorithm);
         for (Map.Entry<String, ManifestParser.Section> entry : sections.getSecond().entrySet()) {
             String entryName = entry.getKey();
