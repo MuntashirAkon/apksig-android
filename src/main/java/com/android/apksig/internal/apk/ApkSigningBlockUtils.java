@@ -843,7 +843,7 @@ public class ApkSigningBlockUtils {
         //     uint64:           size (excluding this field)
         //     uint32:           ID
         //     (size - 4) bytes: value
-        // (extra dummy ID-value for padding to make block size a multiple of 4096 bytes)
+        // (extra placeholder ID-value for padding to make block size a multiple of 4096 bytes)
         // uint64:  size (same as the one above)
         // uint128: magic
 
