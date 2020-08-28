@@ -24,6 +24,9 @@ import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.MinSdkVersionException;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
+
+import org.conscrypt.OpenSSLProvider;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -77,6 +80,8 @@ public class ApkSignerTool {
             return;
         }
 
+        addProviders();
+
         String cmd = params[0];
         try {
             if ("sign".equals(cmd)) {
@@ -108,6 +113,19 @@ public class ApkSignerTool {
         }
     }
 
+    /**
+     * Adds additional security providers to add support for signature algorithms not covered by
+     * the default providers.
+     */
+    private static void addProviders() {
+        try {
+            Security.addProvider(new OpenSSLProvider());
+        } catch (UnsatisfiedLinkError e) {
+            // This is expected if the library path does not include the native conscrypt library;
+            // the default providers support all but PSS algorithms.
+        }
+    }
+
     private static void sign(String[] params) throws Exception {
         if (params.length == 0) {
             printUsage(HELP_PAGE_SIGN);
@@ -120,18 +138,24 @@ public class ApkSignerTool {
         boolean v1SigningEnabled = true;
         boolean v2SigningEnabled = true;
         boolean v3SigningEnabled = true;
+        boolean v4SigningEnabled = true;
+        boolean forceSourceStampOverwrite = false;
+        boolean verityEnabled = false;
         boolean debuggableApkPermitted = true;
         int minSdkVersion = 1;
         boolean minSdkVersionSpecified = false;
         int maxSdkVersion = Integer.MAX_VALUE;
         List<SignerParams> signers = new ArrayList<>(1);
         SignerParams signerParams = new SignerParams();
+        SignerParams sourceStampSignerParams = new SignerParams();
         SigningCertificateLineage lineage = null;
         List<ProviderInstallSpec> providers = new ArrayList<>();
         ProviderInstallSpec providerParams = new ProviderInstallSpec();
         OptionsParser optionsParser = new OptionsParser(params);
         String optionName;
         String optionOriginalForm = null;
+        boolean v4SigningFlagFound = false;
+        boolean sourceStampFlagFound = false;
         while ((optionName = optionsParser.nextOption()) != null) {
             optionOriginalForm = optionsParser.getOptionOriginalForm();
             if (("help".equals(optionName)) || ("h".equals(optionName))) {
@@ -152,6 +176,13 @@ public class ApkSignerTool {
                 v2SigningEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("v3-signing-enabled".equals(optionName)) {
                 v3SigningEnabled = optionsParser.getOptionalBooleanValue(true);
+            } else if ("v4-signing-enabled".equals(optionName)) {
+                v4SigningEnabled = optionsParser.getOptionalBooleanValue(true);
+                v4SigningFlagFound = true;
+            } else if ("force-stamp-overwrite".equals(optionName)) {
+                forceSourceStampOverwrite = optionsParser.getOptionalBooleanValue(true);
+            } else if ("verity-enabled".equals(optionName)) {
+                verityEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("debuggable-apk-permitted".equals(optionName)) {
                 debuggableApkPermitted = optionsParser.getOptionalBooleanValue(true);
             } else if ("next-signer".equals(optionName)) {
@@ -218,6 +249,9 @@ public class ApkSignerTool {
             } else if ("provider-pos".equals(optionName)) {
                 providerParams.position =
                         optionsParser.getRequiredIntValue("JCA Provider position");
+            } else if ("stamp-signer".equals(optionName)) {
+                sourceStampFlagFound = true;
+                sourceStampSignerParams = processSignerParams(optionsParser);
             } else {
                 throw new ParameterException(
                         "Unsupported option: " + optionOriginalForm + ". See --help for supported"
@@ -267,48 +301,26 @@ public class ApkSignerTool {
             providerInstallSpec.installProvider();
         }
 
+        ApkSigner.SignerConfig sourceStampSignerConfig = null;
         List<ApkSigner.SignerConfig> signerConfigs = new ArrayList<>(signers.size());
         int signerNumber = 0;
         try (PasswordRetriever passwordRetriever = new PasswordRetriever()) {
             for (SignerParams signer : signers) {
                 signerNumber++;
                 signer.setName("signer #" + signerNumber);
-                try {
-                    signer.loadPrivateKeyAndCerts(passwordRetriever);
-                } catch (ParameterException e) {
-                    System.err.println(
-                            "Failed to load signer \"" + signer.getName() + "\": "
-                                    + e.getMessage());
-                    System.exit(2);
-                    return;
-                } catch (Exception e) {
-                    System.err.println("Failed to load signer \"" + signer.getName() + "\"");
-                    e.printStackTrace();
-                    System.exit(2);
+                ApkSigner.SignerConfig signerConfig = getSignerConfig(signer, passwordRetriever);
+                if (signerConfig == null) {
                     return;
                 }
-                String v1SigBasename;
-                if (signer.getV1SigFileBasename() != null) {
-                    v1SigBasename = signer.getV1SigFileBasename();
-                } else if (signer.getKeystoreKeyAlias() != null) {
-                    v1SigBasename = signer.getKeystoreKeyAlias();
-                } else if (signer.getKeyFile() != null) {
-                    String keyFileName = new File(signer.getKeyFile()).getName();
-                    int delimiterIndex = keyFileName.indexOf('.');
-                    if (delimiterIndex == -1) {
-                        v1SigBasename = keyFileName;
-                    } else {
-                        v1SigBasename = keyFileName.substring(0, delimiterIndex);
-                    }
-                } else {
-                    throw new RuntimeException(
-                            "Neither KeyStore key alias nor private key file available");
-                }
-                ApkSigner.SignerConfig signerConfig =
-                        new ApkSigner.SignerConfig.Builder(
-                                v1SigBasename, signer.getPrivateKey(), signer.getCerts())
-                                .build();
                 signerConfigs.add(signerConfig);
+            }
+            if (sourceStampFlagFound) {
+                sourceStampSignerParams.setName("stamp signer");
+                sourceStampSignerConfig =
+                        getSignerConfig(sourceStampSignerParams, passwordRetriever);
+                if (sourceStampSignerConfig == null) {
+                    return;
+                }
             }
         }
 
@@ -330,10 +342,23 @@ public class ApkSignerTool {
                         .setV1SigningEnabled(v1SigningEnabled)
                         .setV2SigningEnabled(v2SigningEnabled)
                         .setV3SigningEnabled(v3SigningEnabled)
+                        .setV4SigningEnabled(v4SigningEnabled)
+                        .setForceSourceStampOverwrite(forceSourceStampOverwrite)
+                        .setVerityEnabled(verityEnabled)
+                        .setV4ErrorReportingEnabled(v4SigningEnabled && v4SigningFlagFound)
                         .setDebuggableApkPermitted(debuggableApkPermitted)
                         .setSigningCertificateLineage(lineage);
         if (minSdkVersionSpecified) {
             apkSignerBuilder.setMinSdkVersion(minSdkVersion);
+        }
+        if (v4SigningEnabled) {
+            final File outputV4SignatureFile =
+                    new File(outputApk.getCanonicalPath() + ".idsig");
+            Files.deleteIfExists(outputV4SignatureFile.toPath());
+            apkSignerBuilder.setV4SignatureOutputFile(outputV4SignatureFile);
+        }
+        if (sourceStampSignerConfig != null) {
+            apkSignerBuilder.setSourceStampSignerConfig(sourceStampSignerConfig);
         }
         ApkSigner apkSigner = apkSignerBuilder.build();
         try {
@@ -358,6 +383,44 @@ public class ApkSignerTool {
         }
     }
 
+    private static ApkSigner.SignerConfig getSignerConfig(
+            SignerParams signer, PasswordRetriever passwordRetriever) {
+        try {
+            signer.loadPrivateKeyAndCerts(passwordRetriever);
+        } catch (ParameterException e) {
+            System.err.println(
+                    "Failed to load signer \"" + signer.getName() + "\": " + e.getMessage());
+            System.exit(2);
+            return null;
+        } catch (Exception e) {
+            System.err.println("Failed to load signer \"" + signer.getName() + "\"");
+            e.printStackTrace();
+            System.exit(2);
+            return null;
+        }
+        String v1SigBasename;
+        if (signer.getV1SigFileBasename() != null) {
+            v1SigBasename = signer.getV1SigFileBasename();
+        } else if (signer.getKeystoreKeyAlias() != null) {
+            v1SigBasename = signer.getKeystoreKeyAlias();
+        } else if (signer.getKeyFile() != null) {
+            String keyFileName = new File(signer.getKeyFile()).getName();
+            int delimiterIndex = keyFileName.indexOf('.');
+            if (delimiterIndex == -1) {
+                v1SigBasename = keyFileName;
+            } else {
+                v1SigBasename = keyFileName.substring(0, delimiterIndex);
+            }
+        } else {
+            throw new RuntimeException("Neither KeyStore key alias nor private key file available");
+        }
+        ApkSigner.SignerConfig signerConfig =
+                new ApkSigner.SignerConfig.Builder(
+                        v1SigBasename, signer.getPrivateKey(), signer.getCerts())
+                        .build();
+        return signerConfig;
+    }
+
     private static void verify(String[] params) throws Exception {
         if (params.length == 0) {
             printUsage(HELP_PAGE_VERIFY);
@@ -372,6 +435,7 @@ public class ApkSignerTool {
         boolean printCerts = false;
         boolean verbose = false;
         boolean warningsTreatedAsErrors = false;
+        File v4SignatureFile = null;
         OptionsParser optionsParser = new OptionsParser(params);
         String optionName;
         String optionOriginalForm = null;
@@ -392,6 +456,9 @@ public class ApkSignerTool {
             } else if (("help".equals(optionName)) || ("h".equals(optionName))) {
                 printUsage(HELP_PAGE_VERIFY);
                 return;
+            } else if ("v4-signature-file".equals(optionName)) {
+                v4SignatureFile = new File(optionsParser.getRequiredValue(
+                        "Input V4 Signature File"));
             } else if ("in".equals(optionName)) {
                 inputApk = new File(optionsParser.getRequiredValue("Input APK file"));
             } else {
@@ -435,6 +502,14 @@ public class ApkSignerTool {
         if (maxSdkVersionSpecified) {
             apkVerifierBuilder.setMaxCheckedPlatformVersion(maxSdkVersion);
         }
+        if (v4SignatureFile != null) {
+            if (!v4SignatureFile.exists()) {
+                throw new ParameterException("V4 signature file does not exist: "
+                        + v4SignatureFile.getCanonicalPath());
+            }
+            apkVerifierBuilder.setV4SignatureFile(v4SignatureFile);
+        }
+
         ApkVerifier apkVerifier = apkVerifierBuilder.build();
         ApkVerifier.Result result;
         try {
@@ -465,6 +540,10 @@ public class ApkSignerTool {
                 System.out.println(
                         "Verified using v3 scheme (APK Signature Scheme v3): "
                                 + result.isVerifiedUsingV3Scheme());
+                System.out.println(
+                        "Verified using v4 scheme (APK Signature Scheme v4): "
+                                + result.isVerifiedUsingV4Scheme());
+                System.out.println("Verified for SourceStamp: " + result.isSourceStampVerified());
                 System.out.println("Number of signers: " + signerCerts.size());
             }
             if (printCerts) {
@@ -520,6 +599,16 @@ public class ApkSignerTool {
                 warningsEncountered = true;
                 warningsOut.println(
                         "WARNING: APK Signature Scheme v3 " + signerName + ": " + warning);
+            }
+        }
+
+        ApkVerifier.Result.SourceStampInfo sourceStampInfo = result.getSourceStampInfo();
+        if (sourceStampInfo != null) {
+            for (ApkVerifier.IssueWithParams error : sourceStampInfo.getErrors()) {
+                System.err.println("ERROR: SourceStamp: " + error);
+            }
+            for (ApkVerifier.IssueWithParams warning : sourceStampInfo.getWarnings()) {
+                warningsOut.println("WARNING: SourceStamp: " + warning);
             }
         }
 
@@ -678,7 +767,6 @@ public class ApkSignerTool {
         File outputKeyLineage = null;
         String optionName;
         OptionsParser optionsParser = new OptionsParser(params);
-        SigningCertificateLineage lineage = null;
         List<SignerParams> signers = new ArrayList<>(1);
         while ((optionName = optionsParser.nextOption()) != null) {
             if (("help".equals(optionName)) || ("h".equals(optionName))) {
@@ -704,7 +792,7 @@ public class ApkSignerTool {
         if (inputKeyLineage == null) {
             throw new ParameterException("Input lineage file parameter not present");
         }
-        lineage = getLineageFromInputFile(inputKeyLineage);
+        SigningCertificateLineage lineage = getLineageFromInputFile(inputKeyLineage);
 
         try (PasswordRetriever passwordRetriever = new PasswordRetriever()) {
             for (int i = 0; i < signers.size(); i++) {

@@ -80,14 +80,12 @@ public abstract class V2SchemeSigner {
      * provided key.
      *
      * @param minSdkVersion minimum API Level of the platform on which the APK may be installed (see
-     *        AndroidManifest.xml minSdkVersion attribute).
-     *
-     * @throws InvalidKeyException if the provided key is not suitable for signing APKs using
-     *         APK Signature Scheme v2
+     *     AndroidManifest.xml minSdkVersion attribute).
+     * @throws InvalidKeyException if the provided key is not suitable for signing APKs using APK
+     *     Signature Scheme v2
      */
-    public static List<SignatureAlgorithm> getSuggestedSignatureAlgorithms(
-            PublicKey signingKey, int minSdkVersion, boolean apkSigningBlockPaddingSupported)
-            throws InvalidKeyException {
+    public static List<SignatureAlgorithm> getSuggestedSignatureAlgorithms(PublicKey signingKey,
+            int minSdkVersion, boolean verityEnabled) throws InvalidKeyException {
         String keyAlgorithm = signingKey.getAlgorithm();
         if ("RSA".equalsIgnoreCase(keyAlgorithm)) {
             // Use RSASSA-PKCS1-v1_5 signature scheme instead of RSASSA-PSS to guarantee
@@ -100,7 +98,7 @@ public abstract class V2SchemeSigner {
                 // 3072-bit RSA is roughly 128-bit strong, meaning SHA-256 is a good fit.
                 List<SignatureAlgorithm> algorithms = new ArrayList<>();
                 algorithms.add(SignatureAlgorithm.RSA_PKCS1_V1_5_WITH_SHA256);
-                if (apkSigningBlockPaddingSupported) {
+                if (verityEnabled) {
                     algorithms.add(SignatureAlgorithm.VERITY_RSA_PKCS1_V1_5_WITH_SHA256);
                 }
                 return algorithms;
@@ -113,7 +111,7 @@ public abstract class V2SchemeSigner {
             // DSA is supported only with SHA-256.
             List<SignatureAlgorithm> algorithms = new ArrayList<>();
             algorithms.add(SignatureAlgorithm.DSA_WITH_SHA256);
-            if (apkSigningBlockPaddingSupported) {
+            if (verityEnabled) {
                 algorithms.add(SignatureAlgorithm.VERITY_DSA_WITH_SHA256);
             }
             return algorithms;
@@ -124,7 +122,7 @@ public abstract class V2SchemeSigner {
                 // 256-bit Elliptic Curve is roughly 128-bit strong, meaning SHA-256 is a good fit.
                 List<SignatureAlgorithm> algorithms = new ArrayList<>();
                 algorithms.add(SignatureAlgorithm.ECDSA_WITH_SHA256);
-                if (apkSigningBlockPaddingSupported) {
+                if (verityEnabled) {
                     algorithms.add(SignatureAlgorithm.VERITY_ECDSA_WITH_SHA256);
                 }
                 return algorithms;
@@ -138,28 +136,30 @@ public abstract class V2SchemeSigner {
         }
     }
 
-    public static Pair<byte[], Integer> generateApkSignatureSchemeV2Block(
-            RunnablesExecutor executor,
-            DataSource beforeCentralDir,
-            DataSource centralDir,
-            DataSource eocd,
-            List<SignerConfig> signerConfigs,
-            boolean v3SigningEnabled)
+    public static ApkSigningBlockUtils.SigningSchemeBlockAndDigests
+            generateApkSignatureSchemeV2Block(
+                    RunnablesExecutor executor,
+                    DataSource beforeCentralDir,
+                    DataSource centralDir,
+                    DataSource eocd,
+                    List<SignerConfig> signerConfigs,
+                    boolean v3SigningEnabled)
                     throws IOException, InvalidKeyException, NoSuchAlgorithmException,
                             SignatureException {
-        Pair<List<SignerConfig>,
-                Map<ContentDigestAlgorithm, byte[]>> digestInfo =
+        Pair<List<SignerConfig>, Map<ContentDigestAlgorithm, byte[]>> digestInfo =
                 ApkSigningBlockUtils.computeContentDigests(
                         executor, beforeCentralDir, centralDir, eocd, signerConfigs);
-        return generateApkSignatureSchemeV2Block(
-                digestInfo.getFirst(), digestInfo.getSecond(),v3SigningEnabled);
+        return new ApkSigningBlockUtils.SigningSchemeBlockAndDigests(
+                generateApkSignatureSchemeV2Block(
+                        digestInfo.getFirst(), digestInfo.getSecond(), v3SigningEnabled),
+                digestInfo.getSecond());
     }
 
     private static Pair<byte[], Integer> generateApkSignatureSchemeV2Block(
             List<SignerConfig> signerConfigs,
             Map<ContentDigestAlgorithm, byte[]> contentDigests,
             boolean v3SigningEnabled)
-                    throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
+            throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
         // FORMAT:
         // * length-prefixed sequence of length-prefixed signer blocks.
 
@@ -178,17 +178,19 @@ public abstract class V2SchemeSigner {
             signerBlocks.add(signerBlock);
         }
 
-        return Pair.of(encodeAsSequenceOfLengthPrefixedElements(
-                new byte[][] {
-                    encodeAsSequenceOfLengthPrefixedElements(signerBlocks),
-                }), APK_SIGNATURE_SCHEME_V2_BLOCK_ID);
+        return Pair.of(
+                encodeAsSequenceOfLengthPrefixedElements(
+                        new byte[][] {
+                            encodeAsSequenceOfLengthPrefixedElements(signerBlocks),
+                        }),
+                APK_SIGNATURE_SCHEME_V2_BLOCK_ID);
     }
 
     private static byte[] generateSignerBlock(
             SignerConfig signerConfig,
             Map<ContentDigestAlgorithm, byte[]> contentDigests,
             boolean v3SigningEnabled)
-                    throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
+            throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
         if (signerConfig.certificates.isEmpty()) {
             throw new SignatureException("No certificates configured for signer");
         }
@@ -211,7 +213,9 @@ public abstract class V2SchemeSigner {
             byte[] contentDigest = contentDigests.get(contentDigestAlgorithm);
             if (contentDigest == null) {
                 throw new RuntimeException(
-                        contentDigestAlgorithm + " content digest for " + signatureAlgorithm
+                        contentDigestAlgorithm
+                                + " content digest for "
+                                + signatureAlgorithm
                                 + " not computed");
             }
             digests.add(Pair.of(signatureAlgorithm.getId(), contentDigest));
@@ -230,12 +234,15 @@ public abstract class V2SchemeSigner {
         //   * uint32: ID
         //   * (length - 4) bytes: value
 
-        signer.signedData = encodeAsSequenceOfLengthPrefixedElements(new byte[][] {
-            encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(signedData.digests),
-            encodeAsSequenceOfLengthPrefixedElements(signedData.certificates),
-            signedData.additionalAttributes,
-            new byte[0],
-        });
+        signer.signedData =
+                encodeAsSequenceOfLengthPrefixedElements(
+                        new byte[][] {
+                            encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(
+                                    signedData.digests),
+                            encodeAsSequenceOfLengthPrefixedElements(signedData.certificates),
+                            signedData.additionalAttributes,
+                            new byte[0],
+                        });
         signer.publicKey = encodedPublicKey;
         signer.signatures = new ArrayList<>();
         signer.signatures =
@@ -290,5 +297,4 @@ public abstract class V2SchemeSigner {
             public byte[] additionalAttributes;
         }
     }
-
 }

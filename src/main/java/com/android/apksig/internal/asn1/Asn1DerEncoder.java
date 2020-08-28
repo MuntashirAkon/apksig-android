@@ -590,4 +590,7 @@ public final class Asn1DerEncoder {
                     "Unsupported conversion: " + sourceType.getName() + " to ASN.1 " + targetType);
         }
     }
+    /** ASN.1 DER-encoded {@code NULL}. */
+    public static final Asn1OpaqueObject ASN1_DER_NULL =
+            new Asn1OpaqueObject(new byte[] {BerEncoding.TAG_NUMBER_NULL, 0});
 }
