@@ -311,13 +311,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
     }
 
-    private List<ApkSigningBlockUtils.SignerConfig> createV3SignerConfigs(
-            boolean apkSigningBlockPaddingSupported) throws InvalidKeyException {
-        List<ApkSigningBlockUtils.SignerConfig> rawConfigs =
-                createSigningBlockSignerConfigs(
-                        apkSigningBlockPaddingSupported,
-                        ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
-
+    private List<ApkSigningBlockUtils.SignerConfig> processV3Configs(
+            List<ApkSigningBlockUtils.SignerConfig> rawConfigs) throws InvalidKeyException {
         List<ApkSigningBlockUtils.SignerConfig> processedConfigs = new ArrayList<>();
 
         // we have our configs, now touch them up to appropriately cover all SDK levels since APK
@@ -365,13 +360,23 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     "Provided key algorithms not supported on all desired "
                             + "Android SDK versions");
         }
+
         return processedConfigs;
     }
 
+    private List<ApkSigningBlockUtils.SignerConfig> createV3SignerConfigs(
+            boolean apkSigningBlockPaddingSupported) throws InvalidKeyException {
+        return processV3Configs(createSigningBlockSignerConfigs(apkSigningBlockPaddingSupported,
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3));
+    }
+
     private ApkSigningBlockUtils.SignerConfig createV4SignerConfig() throws InvalidKeyException {
-        List<ApkSigningBlockUtils.SignerConfig> configs =
-                createSigningBlockSignerConfigs(
-                        true, ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4);
+        List<ApkSigningBlockUtils.SignerConfig> configs = createSigningBlockSignerConfigs(true,
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4);
+        if (configs.size() != 1) {
+            // V4 only uses signer config to connect back to v3. Use the same filtering logic.
+            configs = processV3Configs(configs);
+        }
         if (configs.size() != 1) {
             throw new InvalidKeyException("Only accepting one signer config for V4 Signature.");
         }
