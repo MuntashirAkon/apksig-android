@@ -364,13 +364,12 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         return processedConfigs;
     }
 
-    private ApkSigningBlockUtils.SignerConfig createV4SignerConfig()
-            throws InvalidKeyException, IllegalStateException {
+    private ApkSigningBlockUtils.SignerConfig createV4SignerConfig() throws InvalidKeyException {
         List<ApkSigningBlockUtils.SignerConfig> configs =
                 createSigningBlockSignerConfigs(
                         true, ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4);
         if (configs.size() != 1) {
-            throw new IllegalStateException("Only accepting one signer config for V4 Signature.");
+            throw new InvalidKeyException("Only accepting one signer config for V4 Signature.");
         }
         return configs.get(0);
     }
