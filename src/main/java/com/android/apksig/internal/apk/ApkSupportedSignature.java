@@ -14,13 +14,22 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.apk.stamp;
+package com.android.apksig.internal.apk;
 
-/** Constants used for source stamp signing and verification. */
-public class SourceStampConstants {
-    private SourceStampConstants() {}
+/**
+ * Base implementation of a supported signature for an APK.
+ */
+public class ApkSupportedSignature {
+    public final SignatureAlgorithm algorithm;
+    public final byte[] signature;
 
-    public static final int V1_SOURCE_STAMP_BLOCK_ID = 0x2b09189e;
-    public static final int V2_SOURCE_STAMP_BLOCK_ID = 0x6dff800d;
-    public static final String SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME = "stamp-cert-sha256";
+    /**
+     * Constructs a new supported signature using the provided {@code algorithm} and {@code
+     * signature} bytes.
+     */
+    public ApkSupportedSignature(SignatureAlgorithm algorithm, byte[] signature) {
+        this.algorithm = algorithm;
+        this.signature = signature;
+    }
+
 }
