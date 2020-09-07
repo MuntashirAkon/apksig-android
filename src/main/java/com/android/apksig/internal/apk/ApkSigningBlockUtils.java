@@ -23,7 +23,6 @@ import static com.android.apksig.internal.apk.ContentDigestAlgorithm.VERITY_CHUN
 import com.android.apksig.ApkVerifier;
 import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.apk.ApkFormatException;
-import com.android.apksig.apk.ApkSigningBlockNotFoundException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.asn1.Asn1BerParser;
 import com.android.apksig.internal.asn1.Asn1DecodingException;
@@ -110,56 +109,8 @@ public class ApkSigningBlockUtils {
      * {@code alg2} is preferred over {@code alg1}, and {@code 0} if there is no preference.
      */
     public static int compareSignatureAlgorithm(SignatureAlgorithm alg1, SignatureAlgorithm alg2) {
-        ContentDigestAlgorithm digestAlg1 = alg1.getContentDigestAlgorithm();
-        ContentDigestAlgorithm digestAlg2 = alg2.getContentDigestAlgorithm();
-        return compareContentDigestAlgorithm(digestAlg1, digestAlg2);
+        return ApkSigningBlockUtilsLite.compareSignatureAlgorithm(alg1, alg2);
     }
-
-    /**
-     * Returns a positive number if {@code alg1} is preferred over {@code alg2}, a negative number
-     * if {@code alg2} is preferred over {@code alg1}, or {@code 0} if there is no preference.
-     */
-    private static int compareContentDigestAlgorithm(
-            ContentDigestAlgorithm alg1,
-            ContentDigestAlgorithm alg2) {
-        switch (alg1) {
-            case CHUNKED_SHA256:
-                switch (alg2) {
-                    case CHUNKED_SHA256:
-                        return 0;
-                    case CHUNKED_SHA512:
-                    case VERITY_CHUNKED_SHA256:
-                        return -1;
-                    default:
-                        throw new IllegalArgumentException("Unknown alg2: " + alg2);
-                }
-            case CHUNKED_SHA512:
-                switch (alg2) {
-                    case CHUNKED_SHA256:
-                    case VERITY_CHUNKED_SHA256:
-                        return 1;
-                    case CHUNKED_SHA512:
-                        return 0;
-                    default:
-                        throw new IllegalArgumentException("Unknown alg2: " + alg2);
-                }
-            case VERITY_CHUNKED_SHA256:
-                switch (alg2) {
-                    case CHUNKED_SHA256:
-                        return 1;
-                    case VERITY_CHUNKED_SHA256:
-                        return 0;
-                    case CHUNKED_SHA512:
-                        return -1;
-                    default:
-                        throw new IllegalArgumentException("Unknown alg2: " + alg2);
-                }
-            default:
-                throw new IllegalArgumentException("Unknown alg1: " + alg1);
-        }
-    }
-
-
 
     /**
      * Verifies integrity of the APK outside of the APK Signing Block by computing digests of the
@@ -279,50 +230,15 @@ public class ApkSigningBlockUtils {
             ByteBuffer apkSigningBlock,
             int blockId,
             Result result) throws SignatureNotFoundException {
-        checkByteOrderLittleEndian(apkSigningBlock);
-        // FORMAT:
-        // OFFSET       DATA TYPE  DESCRIPTION
-        // * @+0  bytes uint64:    size in bytes (excluding this field)
-        // * @+8  bytes pairs
-        // * @-24 bytes uint64:    size in bytes (same as the one above)
-        // * @-16 bytes uint128:   magic
-        ByteBuffer pairs = sliceFromTo(apkSigningBlock, 8, apkSigningBlock.capacity() - 24);
-
-        int entryCount = 0;
-        while (pairs.hasRemaining()) {
-            entryCount++;
-            if (pairs.remaining() < 8) {
-                throw new SignatureNotFoundException(
-                        "Insufficient data to read size of APK Signing Block entry #" + entryCount);
-            }
-            long lenLong = pairs.getLong();
-            if ((lenLong < 4) || (lenLong > Integer.MAX_VALUE)) {
-                throw new SignatureNotFoundException(
-                        "APK Signing Block entry #" + entryCount
-                                + " size out of range: " + lenLong);
-            }
-            int len = (int) lenLong;
-            int nextEntryPos = pairs.position() + len;
-            if (len > pairs.remaining()) {
-                throw new SignatureNotFoundException(
-                        "APK Signing Block entry #" + entryCount + " size out of range: " + len
-                                + ", available: " + pairs.remaining());
-            }
-            int id = pairs.getInt();
-            if (id == blockId) {
-                return getByteBuffer(pairs, len - 4);
-            }
-            pairs.position(nextEntryPos);
+        try {
+            return ApkSigningBlockUtilsLite.findApkSignatureSchemeBlock(apkSigningBlock, blockId);
+        } catch (com.android.apksig.internal.apk.SignatureNotFoundException e) {
+            throw new SignatureNotFoundException(e.getMessage());
         }
-
-        throw new SignatureNotFoundException(
-                "No APK Signature Scheme block in APK Signing Block with ID: " + blockId);
     }
 
     public static void checkByteOrderLittleEndian(ByteBuffer buffer) {
-        if (buffer.order() != ByteOrder.LITTLE_ENDIAN) {
-            throw new IllegalArgumentException("ByteBuffer byte order must be little endian");
-        }
+        ApkSigningBlockUtilsLite.checkByteOrderLittleEndian(buffer);
     }
 
     /**
@@ -389,45 +305,15 @@ public class ApkSigningBlockUtils {
     }
 
     public static ByteBuffer getLengthPrefixedSlice(ByteBuffer source) throws ApkFormatException {
-        if (source.remaining() < 4) {
-            throw new ApkFormatException(
-                    "Remaining buffer too short to contain length of length-prefixed field"
-                            + ". Remaining: " + source.remaining());
-        }
-        int len = source.getInt();
-        if (len < 0) {
-            throw new IllegalArgumentException("Negative length");
-        } else if (len > source.remaining()) {
-            throw new ApkFormatException(
-                    "Length-prefixed field longer than remaining buffer"
-                            + ". Field length: " + len + ", remaining: " + source.remaining());
-        }
-        return getByteBuffer(source, len);
+        return ApkSigningBlockUtilsLite.getLengthPrefixedSlice(source);
     }
 
     public static byte[] readLengthPrefixedByteArray(ByteBuffer buf) throws ApkFormatException {
-        int len = buf.getInt();
-        if (len < 0) {
-            throw new ApkFormatException("Negative length");
-        } else if (len > buf.remaining()) {
-            throw new ApkFormatException(
-                    "Underflow while reading length-prefixed value. Length: " + len
-                            + ", available: " + buf.remaining());
-        }
-        byte[] result = new byte[len];
-        buf.get(result);
-        return result;
+        return ApkSigningBlockUtilsLite.readLengthPrefixedByteArray(buf);
     }
 
     public static String toHex(byte[] value) {
-        StringBuilder sb = new StringBuilder(value.length * 2);
-        int len = value.length;
-        for (int i = 0; i < len; i++) {
-            int hi = (value[i] & 0xff) >>> 4;
-            int lo = value[i] & 0x0f;
-            sb.append(HEX_DIGITS[hi]).append(HEX_DIGITS[lo]);
-        }
-        return sb.toString();
+        return ApkSigningBlockUtilsLite.toHex(value);
     }
 
     public static Map<ContentDigestAlgorithm, byte[]> computeContentDigests(
@@ -946,20 +832,8 @@ public class ApkSigningBlockUtils {
 
     public static byte[] encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(
             List<Pair<Integer, byte[]>> sequence) {
-          int resultSize = 0;
-          for (Pair<Integer, byte[]> element : sequence) {
-              resultSize += 12 + element.getSecond().length;
-          }
-          ByteBuffer result = ByteBuffer.allocate(resultSize);
-          result.order(ByteOrder.LITTLE_ENDIAN);
-          for (Pair<Integer, byte[]> element : sequence) {
-              byte[] second = element.getSecond();
-              result.putInt(8 + second.length);
-              result.putInt(element.getFirst());
-              result.putInt(second.length);
-              result.put(second);
-          }
-          return result.array();
+        return ApkSigningBlockUtilsLite
+                .encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(sequence);
       }
 
     /**
@@ -976,30 +850,11 @@ public class ApkSigningBlockUtils {
     public static SignatureInfo findSignature(
             DataSource apk, ApkUtils.ZipSections zipSections, int blockId, Result result)
                     throws IOException, SignatureNotFoundException {
-        // Find the APK Signing Block.
-        DataSource apkSigningBlock;
-        long apkSigningBlockOffset;
         try {
-            ApkUtils.ApkSigningBlock apkSigningBlockInfo =
-                    ApkUtils.findApkSigningBlock(apk, zipSections);
-            apkSigningBlockOffset = apkSigningBlockInfo.getStartOffset();
-            apkSigningBlock = apkSigningBlockInfo.getContents();
-        } catch (ApkSigningBlockNotFoundException e) {
-            throw new SignatureNotFoundException(e.getMessage(), e);
+            return ApkSigningBlockUtilsLite.findSignature(apk, zipSections, blockId);
+        } catch (com.android.apksig.internal.apk.SignatureNotFoundException e) {
+            throw new SignatureNotFoundException(e.getMessage());
         }
-        ByteBuffer apkSigningBlockBuf =
-                apkSigningBlock.getByteBuffer(0, (int) apkSigningBlock.size());
-        apkSigningBlockBuf.order(ByteOrder.LITTLE_ENDIAN);
-
-        // Find the APK Signature Scheme Block inside the APK Signing Block.
-        ByteBuffer apkSignatureSchemeBlock =
-                findApkSignatureSchemeBlock(apkSigningBlockBuf, blockId, result);
-        return new SignatureInfo(
-                apkSignatureSchemeBlock,
-                apkSigningBlockOffset,
-                zipSections.getZipCentralDirectoryOffset(),
-                zipSections.getZipEndOfCentralDirectoryOffset(),
-                zipSections.getZipEndOfCentralDirectory());
     }
 
     /**
@@ -1173,8 +1028,8 @@ public class ApkSigningBlockUtils {
      * @throws NoSupportedSignaturesException if no supported signatures were
      *         found for an Android platform version in the range.
      */
-    public static List<SupportedSignature> getSignaturesToVerify(
-            List<SupportedSignature> signatures, int minSdkVersion, int maxSdkVersion)
+    public static <T extends ApkSupportedSignature> List<T> getSignaturesToVerify(
+            List<T> signatures, int minSdkVersion, int maxSdkVersion)
             throws NoSupportedSignaturesException {
         return getSignaturesToVerify(signatures, minSdkVersion, maxSdkVersion, false);
     }
@@ -1194,58 +1049,18 @@ public class ApkSigningBlockUtils {
      * @throws NoSupportedSignaturesException if no supported signatures were
      *         found for an Android platform version in the range.
      */
-    public static List<SupportedSignature> getSignaturesToVerify(
-            List<SupportedSignature> signatures, int minSdkVersion, int maxSdkVersion,
+    public static <T extends ApkSupportedSignature> List<T> getSignaturesToVerify(
+            List<T> signatures, int minSdkVersion, int maxSdkVersion,
             boolean onlyRequireJcaSupport) throws NoSupportedSignaturesException {
-        // Pick the signature with the strongest algorithm at all required SDK versions, to mimic
-        // Android's behavior on those versions.
-        //
-        // Here we assume that, once introduced, a signature algorithm continues to be supported in
-        // all future Android versions. We also assume that the better-than relationship between
-        // algorithms is exactly the same on all Android platform versions (except that older
-        // platforms might support fewer algorithms). If these assumption are no longer true, the
-        // logic here will need to change accordingly.
-        Map<Integer, SupportedSignature> bestSigAlgorithmOnSdkVersion = new HashMap<>();
-        int minProvidedSignaturesVersion = Integer.MAX_VALUE;
-        for (SupportedSignature sig : signatures) {
-            SignatureAlgorithm sigAlgorithm = sig.algorithm;
-            int sigMinSdkVersion = onlyRequireJcaSupport ? sigAlgorithm.getJcaSigAlgMinSdkVersion()
-                    : sigAlgorithm.getMinSdkVersion();
-            if (sigMinSdkVersion > maxSdkVersion) {
-                continue;
-            }
-            if (sigMinSdkVersion < minProvidedSignaturesVersion) {
-                minProvidedSignaturesVersion = sigMinSdkVersion;
-            }
-
-            SupportedSignature candidate = bestSigAlgorithmOnSdkVersion.get(sigMinSdkVersion);
-            if ((candidate == null)
-                    || (compareSignatureAlgorithm(
-                            sigAlgorithm, candidate.algorithm) > 0)) {
-                bestSigAlgorithmOnSdkVersion.put(sigMinSdkVersion, sig);
-            }
+        try {
+            return ApkSigningBlockUtilsLite.getSignaturesToVerify(signatures, minSdkVersion,
+                    maxSdkVersion, onlyRequireJcaSupport);
+        } catch (NoApkSupportedSignaturesException e) {
+            throw new NoSupportedSignaturesException(e.getMessage());
         }
-
-        // Must have some supported signature algorithms for minSdkVersion.
-        if (minSdkVersion < minProvidedSignaturesVersion) {
-            throw new NoSupportedSignaturesException(
-                    "Minimum provided signature version " + minProvidedSignaturesVersion +
-                    " > minSdkVersion " + minSdkVersion);
-        }
-        if (bestSigAlgorithmOnSdkVersion.isEmpty()) {
-            throw new NoSupportedSignaturesException("No supported signature");
-        }
-        List<SupportedSignature> signaturesToVerify =
-                new ArrayList<>(bestSigAlgorithmOnSdkVersion.values());
-        Collections.sort(
-                signaturesToVerify,
-                (sig1, sig2) -> Integer.compare(sig1.algorithm.getId(), sig2.algorithm.getId()));
-        return signaturesToVerify;
     }
 
-    public static class NoSupportedSignaturesException extends Exception {
-        private static final long serialVersionUID = 1L;
-
+    public static class NoSupportedSignaturesException extends NoApkSupportedSignaturesException {
         public NoSupportedSignaturesException(String message) {
             super(message);
         }
@@ -1408,19 +1223,14 @@ public class ApkSigningBlockUtils {
         public SigningCertificateLineage mSigningCertificateLineage;
     }
 
-    public static class Result {
-        public final int signatureSchemeVersion;
-
-        /** Whether the APK's APK Signature Scheme signature verifies. */
-        public boolean verified;
-
-        public final List<Result.SignerInfo> signers = new ArrayList<>();
+    public static class Result extends ApkSigResult {
         public SigningCertificateLineage signingCertificateLineage = null;
+        public final List<Result.SignerInfo> signers = new ArrayList<>();
         private final List<ApkVerifier.IssueWithParams> mWarnings = new ArrayList<>();
         private final List<ApkVerifier.IssueWithParams> mErrors = new ArrayList<>();
 
         public Result(int signatureSchemeVersion) {
-            this.signatureSchemeVersion = signatureSchemeVersion;
+            super(signatureSchemeVersion);
         }
 
         public boolean containsErrors() {
@@ -1459,17 +1269,17 @@ public class ApkSigningBlockUtils {
             mWarnings.add(new ApkVerifier.IssueWithParams(msg, parameters));
         }
 
+        @Override
         public List<ApkVerifier.IssueWithParams> getErrors() {
             return mErrors;
         }
 
+        @Override
         public List<ApkVerifier.IssueWithParams> getWarnings() {
             return mWarnings;
         }
 
-        public static class SignerInfo {
-            public int index;
-            public List<X509Certificate> certs = new ArrayList<>();
+        public static class SignerInfo extends ApkSignerInfo {
             public List<ContentDigest> contentDigests = new ArrayList<>();
             public Map<ContentDigestAlgorithm, byte[]> verifiedContentDigests = new HashMap<>();
             public List<Signature> signatures = new ArrayList<>();
@@ -1563,13 +1373,9 @@ public class ApkSigningBlockUtils {
         }
     }
 
-    public static class SupportedSignature {
-        public final SignatureAlgorithm algorithm;
-        public final byte[] signature;
-
+    public static class SupportedSignature extends ApkSupportedSignature {
         public SupportedSignature(SignatureAlgorithm algorithm, byte[] signature) {
-            this.algorithm = algorithm;
-            this.signature = signature;
+            super(algorithm, signature);
         }
     }
 

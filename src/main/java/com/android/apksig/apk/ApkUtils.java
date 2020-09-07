@@ -17,6 +17,7 @@
 package com.android.apksig.apk;
 
 import com.android.apksig.internal.apk.AndroidBinXmlParser;
+import com.android.apksig.internal.apk.stamp.SourceStampConstants;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
@@ -24,6 +25,8 @@ import com.android.apksig.internal.zip.LocalFileRecord;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.zip.ZipFormatException;
+import com.android.apksig.zip.ZipSections;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -44,7 +47,8 @@ public abstract class ApkUtils {
     public static final String ANDROID_MANIFEST_ZIP_ENTRY_NAME = "AndroidManifest.xml";
 
     /** Name of the SourceStamp certificate hash ZIP entry in APKs. */
-    public static final String SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME = "stamp-cert-sha256";
+    public static final String SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME =
+            SourceStampConstants.SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME;
 
     private ApkUtils() {}
 
@@ -56,101 +60,27 @@ public abstract class ApkUtils {
      */
     public static ZipSections findZipSections(DataSource apk)
             throws IOException, ZipFormatException {
-        Pair<ByteBuffer, Long> eocdAndOffsetInFile =
-                ZipUtils.findZipEndOfCentralDirectoryRecord(apk);
-        if (eocdAndOffsetInFile == null) {
-            throw new ZipFormatException("ZIP End of Central Directory record not found");
-        }
-
-        ByteBuffer eocdBuf = eocdAndOffsetInFile.getFirst();
-        long eocdOffset = eocdAndOffsetInFile.getSecond();
-        eocdBuf.order(ByteOrder.LITTLE_ENDIAN);
-        long cdStartOffset = ZipUtils.getZipEocdCentralDirectoryOffset(eocdBuf);
-        if (cdStartOffset > eocdOffset) {
-            throw new ZipFormatException(
-                    "ZIP Central Directory start offset out of range: " + cdStartOffset
-                        + ". ZIP End of Central Directory offset: " + eocdOffset);
-        }
-
-        long cdSizeBytes = ZipUtils.getZipEocdCentralDirectorySizeBytes(eocdBuf);
-        long cdEndOffset = cdStartOffset + cdSizeBytes;
-        if (cdEndOffset > eocdOffset) {
-            throw new ZipFormatException(
-                    "ZIP Central Directory overlaps with End of Central Directory"
-                            + ". CD end: " + cdEndOffset
-                            + ", EoCD start: " + eocdOffset);
-        }
-
-        int cdRecordCount = ZipUtils.getZipEocdCentralDirectoryTotalRecordCount(eocdBuf);
-
+        com.android.apksig.zip.ZipSections zipSections = ApkUtilsLite.findZipSections(apk);
         return new ZipSections(
-                cdStartOffset,
-                cdSizeBytes,
-                cdRecordCount,
-                eocdOffset,
-                eocdBuf);
+                zipSections.getZipCentralDirectoryOffset(),
+                zipSections.getZipCentralDirectorySizeBytes(),
+                zipSections.getZipCentralDirectoryRecordCount(),
+                zipSections.getZipEndOfCentralDirectoryOffset(),
+                zipSections.getZipEndOfCentralDirectory());
     }
 
     /**
      * Information about the ZIP sections of an APK.
      */
-    public static class ZipSections {
-        private final long mCentralDirectoryOffset;
-        private final long mCentralDirectorySizeBytes;
-        private final int mCentralDirectoryRecordCount;
-        private final long mEocdOffset;
-        private final ByteBuffer mEocd;
-
+    public static class ZipSections extends com.android.apksig.zip.ZipSections {
         public ZipSections(
                 long centralDirectoryOffset,
                 long centralDirectorySizeBytes,
                 int centralDirectoryRecordCount,
                 long eocdOffset,
                 ByteBuffer eocd) {
-            mCentralDirectoryOffset = centralDirectoryOffset;
-            mCentralDirectorySizeBytes = centralDirectorySizeBytes;
-            mCentralDirectoryRecordCount = centralDirectoryRecordCount;
-            mEocdOffset = eocdOffset;
-            mEocd = eocd;
-        }
-
-        /**
-         * Returns the start offset of the ZIP Central Directory. This value is taken from the
-         * ZIP End of Central Directory record.
-         */
-        public long getZipCentralDirectoryOffset() {
-            return mCentralDirectoryOffset;
-        }
-
-        /**
-         * Returns the size (in bytes) of the ZIP Central Directory. This value is taken from the
-         * ZIP End of Central Directory record.
-         */
-        public long getZipCentralDirectorySizeBytes() {
-            return mCentralDirectorySizeBytes;
-        }
-
-        /**
-         * Returns the number of records in the ZIP Central Directory. This value is taken from the
-         * ZIP End of Central Directory record.
-         */
-        public int getZipCentralDirectoryRecordCount() {
-            return mCentralDirectoryRecordCount;
-        }
-
-        /**
-         * Returns the start offset of the ZIP End of Central Directory record. The record extends
-         * until the very end of the APK.
-         */
-        public long getZipEndOfCentralDirectoryOffset() {
-            return mEocdOffset;
-        }
-
-        /**
-         * Returns the contents of the ZIP End of Central Directory.
-         */
-        public ByteBuffer getZipEndOfCentralDirectory() {
-            return mEocd;
+            super(centralDirectoryOffset, centralDirectorySizeBytes, centralDirectoryRecordCount,
+                    eocdOffset, eocd);
         }
     }
 
@@ -180,74 +110,20 @@ public abstract class ApkUtils {
      * @throws IOException if an I/O error occurs
      * @throws ApkSigningBlockNotFoundException if there is no APK Signing Block in the APK
      *
-     * @see <a href="https://source.android.com/security/apksigning/v2.html">APK Signature Scheme v2</a>
+     * @see <a href="https://source.android.com/security/apksigning/v2.html">APK Signature Scheme v2
+     * </a>
      */
     public static ApkSigningBlock findApkSigningBlock(DataSource apk, ZipSections zipSections)
             throws IOException, ApkSigningBlockNotFoundException {
-        // FORMAT (see https://source.android.com/security/apksigning/v2.html):
-        // OFFSET       DATA TYPE  DESCRIPTION
-        // * @+0  bytes uint64:    size in bytes (excluding this field)
-        // * @+8  bytes payload
-        // * @-24 bytes uint64:    size in bytes (same as the one above)
-        // * @-16 bytes uint128:   magic
-
-        long centralDirStartOffset = zipSections.getZipCentralDirectoryOffset();
-        long centralDirEndOffset =
-                centralDirStartOffset + zipSections.getZipCentralDirectorySizeBytes();
-        long eocdStartOffset = zipSections.getZipEndOfCentralDirectoryOffset();
-        if (centralDirEndOffset != eocdStartOffset) {
-            throw new ApkSigningBlockNotFoundException(
-                    "ZIP Central Directory is not immediately followed by End of Central Directory"
-                            + ". CD end: " + centralDirEndOffset
-                            + ", EoCD start: " + eocdStartOffset);
-        }
-
-        if (centralDirStartOffset < APK_SIG_BLOCK_MIN_SIZE) {
-            throw new ApkSigningBlockNotFoundException(
-                    "APK too small for APK Signing Block. ZIP Central Directory offset: "
-                            + centralDirStartOffset);
-        }
-        // Read the magic and offset in file from the footer section of the block:
-        // * uint64:   size of block
-        // * 16 bytes: magic
-        ByteBuffer footer = apk.getByteBuffer(centralDirStartOffset - 24, 24);
-        footer.order(ByteOrder.LITTLE_ENDIAN);
-        if ((footer.getLong(8) != APK_SIG_BLOCK_MAGIC_LO)
-                || (footer.getLong(16) != APK_SIG_BLOCK_MAGIC_HI)) {
-            throw new ApkSigningBlockNotFoundException(
-                    "No APK Signing Block before ZIP Central Directory");
-        }
-        // Read and compare size fields
-        long apkSigBlockSizeInFooter = footer.getLong(0);
-        if ((apkSigBlockSizeInFooter < footer.capacity())
-                || (apkSigBlockSizeInFooter > Integer.MAX_VALUE - 8)) {
-            throw new ApkSigningBlockNotFoundException(
-                    "APK Signing Block size out of range: " + apkSigBlockSizeInFooter);
-        }
-        int totalSize = (int) (apkSigBlockSizeInFooter + 8);
-        long apkSigBlockOffset = centralDirStartOffset - totalSize;
-        if (apkSigBlockOffset < 0) {
-            throw new ApkSigningBlockNotFoundException(
-                    "APK Signing Block offset out of range: " + apkSigBlockOffset);
-        }
-        ByteBuffer apkSigBlock = apk.getByteBuffer(apkSigBlockOffset, 8);
-        apkSigBlock.order(ByteOrder.LITTLE_ENDIAN);
-        long apkSigBlockSizeInHeader = apkSigBlock.getLong(0);
-        if (apkSigBlockSizeInHeader != apkSigBlockSizeInFooter) {
-            throw new ApkSigningBlockNotFoundException(
-                    "APK Signing Block sizes in header and footer do not match: "
-                            + apkSigBlockSizeInHeader + " vs " + apkSigBlockSizeInFooter);
-        }
-        return new ApkSigningBlock(apkSigBlockOffset, apk.slice(apkSigBlockOffset, totalSize));
+        ApkUtilsLite.ApkSigningBlock apkSigningBlock = ApkUtilsLite.findApkSigningBlock(apk,
+                zipSections);
+        return new ApkSigningBlock(apkSigningBlock.getStartOffset(), apkSigningBlock.getContents());
     }
 
     /**
      * Information about the location of the APK Signing Block inside an APK.
      */
-    public static class ApkSigningBlock {
-        private final long mStartOffsetInApk;
-        private final DataSource mContents;
-
+    public static class ApkSigningBlock extends ApkUtilsLite.ApkSigningBlock {
         /**
          * Constructs a new {@code ApkSigningBlock}.
          *
@@ -256,23 +132,7 @@ public abstract class ApkUtils {
          * @param contents contents of the APK Signing Block
          */
         public ApkSigningBlock(long startOffsetInApk, DataSource contents) {
-            mStartOffsetInApk = startOffsetInApk;
-            mContents = contents;
-        }
-
-        /**
-         * Returns the start offset (in bytes, relative to start of file) of the APK Signing Block.
-         */
-        public long getStartOffset() {
-            return mStartOffsetInApk;
-        }
-
-        /**
-         * Returns the data source which provides the full contents of the APK Signing Block,
-         * including its footer.
-         */
-        public DataSource getContents() {
-            return mContents;
+            super(startOffsetInApk, contents);
         }
     }
 
@@ -781,13 +641,6 @@ public abstract class ApkUtils {
     }
 
     public static byte[] computeSha256DigestBytes(byte[] data) {
-        MessageDigest messageDigest;
-        try {
-            messageDigest = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is not found", e);
-        }
-        messageDigest.update(data);
-        return messageDigest.digest();
+        return ApkUtilsLite.computeSha256DigestBytes(data);
     }
 }
