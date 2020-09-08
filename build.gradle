@@ -1,6 +1,7 @@
 // Generic Gradle project
 
 apply plugin: 'java'
+apply plugin: 'com.google.protobuf'
 
 sourceCompatibility = '1.8'
 
@@ -8,6 +9,31 @@ repositories {
     jcenter()
 }
 
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.11'
+    }
+}
+
 dependencies {
-    testCompile 'junit:junit:4.12'
+    implementation 'com.google.protobuf:protobuf-javalite:3.8.0'
+    testImplementation 'junit:junit:4.13'
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.8.0'
+    }
+    generateProtoTasks {
+        all().each { task ->
+            task.builtins {
+                java {
+                    option "lite"
+                }
+            }
+        }
+    }
 }

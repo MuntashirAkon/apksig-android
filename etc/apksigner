@@ -46,6 +46,8 @@ fi
 if [ ! -r "$libdir/$jarfile" ]; then
     # set apksigner.jar location for the Android tree case
     libdir=`dirname "$progdir"`/framework
+    # also include the library directory for any provider native libraries
+    providerLibdir=`dirname "$progdir"`/lib64
 fi
 
 if [ ! -r "$libdir/$jarfile" ]; then
@@ -71,12 +73,18 @@ while expr "x$1" : 'x-J' >/dev/null; do
     javaOpts="${javaOpts} -${opt}"
     if expr "x${opt}" : "xXmx[0-9]" >/dev/null; then
         defaultMx="no"
+    elif expr "x${opt}" : "xDjava.library.path=" >/dev/null; then
+        defaultLibdir="no"
     fi
     shift
 done
 
 if [ "${defaultMx}" != "no" ]; then
     javaOpts="${javaOpts} ${defaultMx}"
+fi
+
+if [ "${defaultLibdir}" != "no" ] && [ -n $providerLibdir ]; then
+    javaOpts="${javaOpts} -Djava.library.path=$providerLibdir"
 fi
 
 if [ "$OSTYPE" = "cygwin" ]; then

@@ -17,6 +17,7 @@
 package com.android.apksig;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeNoException;
 
@@ -27,6 +28,12 @@ import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.HexEncoding;
 import com.android.apksig.internal.util.Resources;
 import com.android.apksig.util.DataSources;
+
+import org.junit.Assume;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
@@ -37,12 +44,12 @@ import java.security.Security;
 import java.security.Signature;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
-import org.junit.Assume;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @RunWith(JUnit4.class)
 public class ApkVerifierTest {
@@ -52,8 +59,9 @@ public class ApkVerifierTest {
     private static final String[] DSA_KEY_NAMES_2048_AND_LARGER = {"2048", "3072"};
     private static final String[] EC_KEY_NAMES = {"p256", "p384", "p521"};
     private static final String[] RSA_KEY_NAMES = {"1024", "2048", "3072", "4096", "8192", "16384"};
-    private static final String[] RSA_KEY_NAMES_2048_AND_LARGER =
-            {"2048", "3072", "4096", "8192", "16384"};
+    private static final String[] RSA_KEY_NAMES_2048_AND_LARGER = {
+        "2048", "3072", "4096", "8192", "16384"
+    };
 
     @Test
     public void testOriginalAccepted() throws Exception {
@@ -121,46 +129,36 @@ public class ApkVerifierTest {
     @Test
     public void testV1OneSignerSHA1withECDSAAccepted() throws Exception {
         // APK signed with v1 scheme only, one signer
-        assertVerifiedForEach(
-                "v1-only-with-ecdsa-sha1-1.2.840.10045.2.1-%s.apk", EC_KEY_NAMES);
-        assertVerifiedForEach(
-                "v1-only-with-ecdsa-sha1-1.2.840.10045.4.1-%s.apk", EC_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-ecdsa-sha1-1.2.840.10045.2.1-%s.apk", EC_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-ecdsa-sha1-1.2.840.10045.4.1-%s.apk", EC_KEY_NAMES);
     }
 
     @Test
     public void testV1OneSignerSHA224withECDSAAccepted() throws Exception {
         // APK signed with v1 scheme only, one signer
-        assertVerifiedForEach(
-                "v1-only-with-ecdsa-sha224-1.2.840.10045.2.1-%s.apk", EC_KEY_NAMES);
-        assertVerifiedForEach(
-                "v1-only-with-ecdsa-sha224-1.2.840.10045.4.3.1-%s.apk", EC_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-ecdsa-sha224-1.2.840.10045.2.1-%s.apk", EC_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-ecdsa-sha224-1.2.840.10045.4.3.1-%s.apk", EC_KEY_NAMES);
     }
 
     @Test
     public void testV1OneSignerSHA256withECDSAAccepted() throws Exception {
         // APK signed with v1 scheme only, one signer
-        assertVerifiedForEach(
-                "v1-only-with-ecdsa-sha256-1.2.840.10045.2.1-%s.apk", EC_KEY_NAMES);
-        assertVerifiedForEach(
-                "v1-only-with-ecdsa-sha256-1.2.840.10045.4.3.2-%s.apk", EC_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-ecdsa-sha256-1.2.840.10045.2.1-%s.apk", EC_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-ecdsa-sha256-1.2.840.10045.4.3.2-%s.apk", EC_KEY_NAMES);
     }
 
     @Test
     public void testV1OneSignerSHA384withECDSAAccepted() throws Exception {
         // APK signed with v1 scheme only, one signer
-        assertVerifiedForEach(
-                "v1-only-with-ecdsa-sha384-1.2.840.10045.2.1-%s.apk", EC_KEY_NAMES);
-        assertVerifiedForEach(
-                "v1-only-with-ecdsa-sha384-1.2.840.10045.4.3.3-%s.apk", EC_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-ecdsa-sha384-1.2.840.10045.2.1-%s.apk", EC_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-ecdsa-sha384-1.2.840.10045.4.3.3-%s.apk", EC_KEY_NAMES);
     }
 
     @Test
     public void testV1OneSignerSHA512withECDSAAccepted() throws Exception {
         // APK signed with v1 scheme only, one signer
-        assertVerifiedForEach(
-                "v1-only-with-ecdsa-sha512-1.2.840.10045.2.1-%s.apk", EC_KEY_NAMES);
-        assertVerifiedForEach(
-                "v1-only-with-ecdsa-sha512-1.2.840.10045.4.3.4-%s.apk", EC_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-ecdsa-sha512-1.2.840.10045.2.1-%s.apk", EC_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-ecdsa-sha512-1.2.840.10045.4.3.4-%s.apk", EC_KEY_NAMES);
     }
 
     @Test
@@ -233,8 +231,7 @@ public class ApkVerifierTest {
     @Test
     public void testV1OneSignerSHA256withDSAAccepted() throws Exception {
         // APK signed with v1 scheme only, one signer
-        assertVerifiedForEach(
-                "v1-only-with-dsa-sha256-1.2.840.10040.4.1-%s.apk", DSA_KEY_NAMES);
+        assertVerifiedForEach("v1-only-with-dsa-sha256-1.2.840.10040.4.1-%s.apk", DSA_KEY_NAMES);
         assertVerifiedForEach(
                 "v1-only-with-dsa-sha256-2.16.840.1.101.3.4.3.2-%s.apk", DSA_KEY_NAMES);
     }
@@ -246,8 +243,7 @@ public class ApkVerifierTest {
         // This should fail because the v1 signature indicates that the APK was supposed to be
         // signed with v2 scheme as well, making the platform's anti-stripping protections reject
         // the APK.
-        assertVerificationFailure(
-                "v2-stripped.apk", Issue.JAR_SIG_MISSING_APK_SIG_REFERENCED);
+        assertVerificationFailure("v2-stripped.apk", Issue.JAR_SIG_MISSING_APK_SIG_REFERENCED);
 
         // Similar to above, but the X-Android-APK-Signed anti-stripping header in v1 signature
         // lists unknown signature schemes in addition to APK Signature Scheme v2. Unknown schemes
@@ -262,8 +258,7 @@ public class ApkVerifierTest {
         // APK signed with v2 and v3 schemes, but v3 signature was stripped from the file by
         // modifying the v3 block ID to be the verity padding block ID. Without the stripping
         // protection this modification ignores the v3 signing scheme block.
-        assertVerificationFailure(
-                "v3-stripped.apk", Issue.V2_SIG_MISSING_APK_SIG_REFERENCED);
+        assertVerificationFailure("v3-stripped.apk", Issue.V2_SIG_MISSING_APK_SIG_REFERENCED);
     }
 
     @Test
@@ -271,10 +266,12 @@ public class ApkVerifierTest {
         // The V2 signature scheme was introduced in N, and V3 was introduced in P. This test
         // verifies a max SDK of pre-P ignores the V3 signature and a max SDK of pre-N ignores both
         // the V2 and V3 signatures.
-        assertVerified(verifyForMaxSdkVersion("v1v2v3-with-rsa-2048-lineage-3-signers.apk",
-                AndroidSdkVersion.O));
-        assertVerified(verifyForMaxSdkVersion("v1v2v3-with-rsa-2048-lineage-3-signers.apk",
-                AndroidSdkVersion.M));
+        assertVerified(
+                verifyForMaxSdkVersion(
+                        "v1v2v3-with-rsa-2048-lineage-3-signers.apk", AndroidSdkVersion.O));
+        assertVerified(
+                verifyForMaxSdkVersion(
+                        "v1v2v3-with-rsa-2048-lineage-3-signers.apk", AndroidSdkVersion.M));
     }
 
     @Test
@@ -390,13 +387,11 @@ public class ApkVerifierTest {
 
         // Based on v2-only-with-rsa-pkcs1-sha512-4096.apk. Obtained by modifying APK signer to
         // flip the leftmost bit in content digest before signing signed-data.
-        assertVerificationFailure(
-                "v2-only-with-rsa-pkcs1-sha512-4096-digest-mismatch.apk", error);
+        assertVerificationFailure("v2-only-with-rsa-pkcs1-sha512-4096-digest-mismatch.apk", error);
 
         // Based on v2-only-with-ecdsa-sha256-p256.apk. Obtained by modifying APK signer to flip the
         // leftmost bit in content digest before signing signed-data.
-        assertVerificationFailure(
-                "v2-only-with-ecdsa-sha256-p256-digest-mismatch.apk", error);
+        assertVerificationFailure("v2-only-with-ecdsa-sha256-p256-digest-mismatch.apk", error);
     }
 
     @Test
@@ -425,21 +420,18 @@ public class ApkVerifierTest {
         // Obtained from v2-only-with-rsa-pkcs1-sha512-4096.apk by flipping a bit in the magic
         // field in the footer of APK Signing Block. This makes the APK Signing Block disappear.
         assertVerificationFailure(
-                "v2-only-wrong-apk-sig-block-magic.apk",
-                Issue.JAR_SIG_NO_MANIFEST);
+                "v2-only-wrong-apk-sig-block-magic.apk", Issue.JAR_SIG_NO_MANIFEST);
 
         // Obtained by modifying APK signer to insert "GARBAGE" between ZIP Central Directory and
         // End of Central Directory. The APK is otherwise fine and is signed with APK Signature
         // Scheme v2. Based on v2-only-with-rsa-pkcs1-sha256.apk.
         assertVerificationFailure(
-                "v2-only-garbage-between-cd-and-eocd.apk",
-                Issue.JAR_SIG_NO_MANIFEST);
+                "v2-only-garbage-between-cd-and-eocd.apk", Issue.JAR_SIG_NO_MANIFEST);
 
         // Obtained by modifying the size in APK Signature Block header. Based on
         // v2-only-with-ecdsa-sha512-p521.apk.
         assertVerificationFailure(
-                "v2-only-apk-sig-block-size-mismatch.apk",
-                Issue.JAR_SIG_NO_MANIFEST);
+                "v2-only-apk-sig-block-size-mismatch.apk", Issue.JAR_SIG_NO_MANIFEST);
 
         // Obtained by modifying the ID under which APK Signature Scheme v2 Block is stored in
         // APK Signing Block and by modifying the APK signer to not insert anti-stripping
@@ -539,7 +531,8 @@ public class ApkVerifierTest {
         // APK's v2 and v3 signatures contain unknown additional attributes before and after the
         // anti-stripping and lineage attributes.
         assertVerified(
-                verifyForMinSdkVersion("v2v3-unknown-additional-attr.apk", AndroidSdkVersion.P));    }
+                verifyForMinSdkVersion("v2v3-unknown-additional-attr.apk", AndroidSdkVersion.P));
+    }
 
     @Test
     public void testV2MismatchBetweenSignaturesAndDigestsBlockRejected() throws Exception {
@@ -585,16 +578,14 @@ public class ApkVerifierTest {
     public void testV2SignerBlockWithNoCertificatesRejected() throws Exception {
         // APK is signed with v2 only. There are no certificates listed in the signer block.
         // Obtained by modifying APK signer to output no certificates.
-        assertVerificationFailure(
-                "v2-only-no-certs-in-sig.apk", Issue.V2_SIG_NO_CERTIFICATES);
+        assertVerificationFailure("v2-only-no-certs-in-sig.apk", Issue.V2_SIG_NO_CERTIFICATES);
     }
 
     @Test
     public void testV3SignerBlockWithNoCertificatesRejected() throws Exception {
         // APK is signed with v3 only. There are no certificates listed in the signer block.
         // Obtained by modifying APK signer to output no certificates.
-        assertVerificationFailure(
-                "v3-only-no-certs-in-sig.apk", Issue.V3_SIG_NO_CERTIFICATES);
+        assertVerificationFailure("v3-only-no-certs-in-sig.apk", Issue.V3_SIG_NO_CERTIFICATES);
     }
 
     @Test
@@ -739,25 +730,29 @@ public class ApkVerifierTest {
         try {
             verifyForMinSdkVersion("empty-unsigned.apk", 1);
             fail("ApkFormatException should've been thrown");
-        } catch (ApkFormatException expected) {}
+        } catch (ApkFormatException expected) {
+        }
 
         // JAR-signed empty ZIP archive
         try {
             verifyForMinSdkVersion("v1-only-empty.apk", 18);
             fail("ApkFormatException should've been thrown");
-        } catch (ApkFormatException expected) {}
+        } catch (ApkFormatException expected) {
+        }
 
         // APK Signature Scheme v2 signed empty ZIP archive
         try {
             verifyForMinSdkVersion("v2-only-empty.apk", AndroidSdkVersion.N);
             fail("ApkFormatException should've been thrown");
-        } catch (ApkFormatException expected) {}
+        } catch (ApkFormatException expected) {
+        }
 
         // APK Signature Scheme v3 signed empty ZIP archive
         try {
             verifyForMinSdkVersion("v3-only-empty.apk", AndroidSdkVersion.P);
             fail("ApkFormatException should've been thrown");
-        } catch (ApkFormatException expected) {}
+        } catch (ApkFormatException expected) {
+        }
     }
 
     @Test
@@ -783,6 +778,47 @@ public class ApkVerifierTest {
 
         // minSdkVersion 28, meaning v1 signature not needed
         assertVerified(verify("v2-only-targetSandboxVersion-3.apk"));
+    }
+
+    @Test
+    public void testTargetSdkMinSchemeVersionNotMet() throws Exception {
+        // Android 11 / SDK version 30 requires apps targeting this SDK version or higher must be
+        // signed with at least the V2 signature scheme. This test verifies if an app is targeting
+        // this SDK version and is only signed with a V1 signature then the verifier reports the
+        // platform will not accept it.
+        assertVerificationFailure(verify("v1-ec-p256-targetSdk-30.apk"),
+                Issue.MIN_SIG_SCHEME_FOR_TARGET_SDK_NOT_MET);
+    }
+
+    @Test
+    public void testTargetSdkMinSchemeVersionMet() throws Exception {
+        // This test verifies if an app is signed with the minimum required signature scheme version
+        // for the target SDK version then the verifier reports the platform will accept it.
+        assertVerified(verify("v2-ec-p256-targetSdk-30.apk"));
+
+        // If an app is only signed with a signature scheme higher than the required version for the
+        // target SDK the verifier should also report that the platform will accept it.
+        assertVerified(verify("v3-ec-p256-targetSdk-30.apk"));
+    }
+
+    @Test
+    public void testTargetSdkMinSchemeVersionNotMetMaxLessThanTarget() throws Exception {
+        // If the minimum signature scheme for the target SDK version is not met but the maximum
+        // SDK version is less than the target then the verifier should report that the platform
+        // will accept it since the specified max SDK version does not know about the minimum
+        // signature scheme requirement.
+        verifyForMaxSdkVersion("v1-ec-p256-targetSdk-30.apk", 29);
+    }
+
+    @Test
+    public void testTargetSdkNoUsesSdkElement() throws Exception {
+        // The target SDK minimum signature scheme version check will attempt to obtain the
+        // targetSdkVersion attribute value from the uses-sdk element in the AndroidManifest. If
+        // the targetSdkVersion is not specified then the verifier should behave the same as the
+        // platform; the minSdkVersion should be used when available and when neither the minimum or
+        // target SDK are specified a default value of 1 should be used. This test verifies that the
+        // verifier does not fail when the uses-sdk element is not specified.
+        verify("v1-only-no-uses-sdk.apk");
     }
 
     @Test
@@ -954,8 +990,7 @@ public class ApkVerifierTest {
                 verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1),
                 Issue.JAR_SIG_VERIFY_EXCEPTION);
         assertVerificationFailure(
-                verifyForMinSdkVersion(apk, AndroidSdkVersion.N),
-                Issue.JAR_SIG_VERIFY_EXCEPTION);
+                verifyForMinSdkVersion(apk, AndroidSdkVersion.N), Issue.JAR_SIG_VERIFY_EXCEPTION);
         // Assert that this issue fails verification of the entire signature block, rather than
         // skipping the broken SignerInfo. The second signer info SignerInfo verifies fine, but
         // verification does not get there.
@@ -964,8 +999,7 @@ public class ApkVerifierTest {
                 verifyForMaxSdkVersion(apk, AndroidSdkVersion.N - 1),
                 Issue.JAR_SIG_VERIFY_EXCEPTION);
         assertVerificationFailure(
-                verifyForMinSdkVersion(apk, AndroidSdkVersion.N),
-                Issue.JAR_SIG_VERIFY_EXCEPTION);
+                verifyForMinSdkVersion(apk, AndroidSdkVersion.N), Issue.JAR_SIG_VERIFY_EXCEPTION);
     }
 
     @Test
@@ -1020,6 +1054,66 @@ public class ApkVerifierTest {
         assertVerified(verifyForMinSdkVersion(apk, AndroidSdkVersion.N));
     }
 
+    @Test
+    public void testSourceStampBlock_correctSignature() throws Exception {
+        ApkVerifier.Result verificationResult = verify("valid-stamp.apk");
+        // Verifies the signature of the APK.
+        assertVerified(verificationResult);
+        // Verifies the signature of source stamp.
+        assertTrue(verificationResult.isSourceStampVerified());
+    }
+
+    @Test
+    public void testSourceStampBlock_signatureMissing() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-without-block.apk");
+        // A broken stamp should not block a signing scheme verified APK.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_SIG_MISSING);
+    }
+
+    @Test
+    public void testSourceStampBlock_certificateMismatch() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-certificate-mismatch.apk");
+        // A broken stamp should not block a signing scheme verified APK.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(
+                verificationResult,
+                Issue.SOURCE_STAMP_CERTIFICATE_MISMATCH_BETWEEN_SIGNATURE_BLOCK_AND_APK);
+    }
+
+    @Test
+    public void testSourceStampBlock_apkHashMismatch_v1SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v1.apk");
+        // A broken stamp should not block a signing scheme verified APK.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void testSourceStampBlock_apkHashMismatch_v2SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v2.apk");
+        // A broken stamp should not block a signing scheme verified APK.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void testSourceStampBlock_apkHashMismatch_v3SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v3.apk");
+        // A broken stamp should not block a signing scheme verified APK.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void testSourceStampBlock_malformedSignature() throws Exception {
+        ApkVerifier.Result verificationResult = verify("stamp-malformed-signature.apk");
+        // A broken stamp should not block a signing scheme verified APK.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(
+                verificationResult, Issue.SOURCE_STAMP_MALFORMED_SIGNATURE);
+    }
+
     private ApkVerifier.Result verify(String apkFilenameInResources)
             throws IOException, ApkFormatException, NoSuchAlgorithmException {
         return verify(apkFilenameInResources, null, null);
@@ -1027,13 +1121,13 @@ public class ApkVerifierTest {
 
     private ApkVerifier.Result verifyForMinSdkVersion(
             String apkFilenameInResources, int minSdkVersion)
-                    throws IOException, ApkFormatException, NoSuchAlgorithmException {
+            throws IOException, ApkFormatException, NoSuchAlgorithmException {
         return verify(apkFilenameInResources, minSdkVersion, null);
     }
 
     private ApkVerifier.Result verifyForMaxSdkVersion(
             String apkFilenameInResources, int maxSdkVersion)
-                    throws IOException, ApkFormatException, NoSuchAlgorithmException {
+            throws IOException, ApkFormatException, NoSuchAlgorithmException {
         return verify(apkFilenameInResources, null, maxSdkVersion);
     }
 
@@ -1041,7 +1135,7 @@ public class ApkVerifierTest {
             String apkFilenameInResources,
             Integer minSdkVersionOverride,
             Integer maxSdkVersionOverride)
-                    throws IOException, ApkFormatException, NoSuchAlgorithmException {
+            throws IOException, ApkFormatException, NoSuchAlgorithmException {
         byte[] apkBytes = Resources.toByteArray(getClass(), apkFilenameInResources);
 
         ApkVerifier.Builder builder =
@@ -1077,8 +1171,12 @@ public class ApkVerifierTest {
                 if (msg.length() > 0) {
                     msg.append('\n');
                 }
-                msg.append("JAR signer ").append(signerName).append(": ")
-                        .append(issue.getIssue()).append(": ").append(issue);
+                msg.append("JAR signer ")
+                        .append(signerName)
+                        .append(": ")
+                        .append(issue.getIssue())
+                        .append(": ")
+                        .append(issue);
             }
         }
         for (ApkVerifier.Result.V2SchemeSignerInfo signer : result.getV2SchemeSigners()) {
@@ -1088,8 +1186,25 @@ public class ApkVerifierTest {
                     msg.append('\n');
                 }
                 msg.append("APK Signature Scheme v2 signer ")
-                        .append(signerName).append(": ")
-                        .append(issue.getIssue()).append(": ").append(issue);
+                        .append(signerName)
+                        .append(": ")
+                        .append(issue.getIssue())
+                        .append(": ")
+                        .append(issue);
+            }
+        }
+        for (ApkVerifier.Result.V3SchemeSignerInfo signer : result.getV3SchemeSigners()) {
+            String signerName = "signer #" + (signer.getIndex() + 1);
+            for (IssueWithParams issue : signer.getErrors()) {
+                if (msg.length() > 0) {
+                    msg.append('\n');
+                }
+                msg.append("APK Signature Scheme v3 signer ")
+                        .append(signerName)
+                        .append(": ")
+                        .append(issue.getIssue())
+                        .append(": ")
+                        .append(issue);
             }
         }
 
@@ -1099,7 +1214,8 @@ public class ApkVerifierTest {
     private void assertVerified(
             String apkFilenameInResources,
             Integer minSdkVersionOverride,
-            Integer maxSdkVersionOverride) throws Exception {
+            Integer maxSdkVersionOverride)
+            throws Exception {
         assertVerified(
                 verify(apkFilenameInResources, minSdkVersionOverride, maxSdkVersionOverride),
                 apkFilenameInResources);
@@ -1130,8 +1246,12 @@ public class ApkVerifierTest {
                 if (msg.length() > 0) {
                     msg.append('\n');
                 }
-                msg.append("JAR signer ").append(signerName).append(": ")
-                        .append(issue.getIssue()).append(" ").append(issue);
+                msg.append("JAR signer ")
+                        .append(signerName)
+                        .append(": ")
+                        .append(issue.getIssue())
+                        .append(" ")
+                        .append(issue);
             }
         }
         for (ApkVerifier.Result.V2SchemeSignerInfo signer : result.getV2SchemeSigners()) {
@@ -1144,7 +1264,9 @@ public class ApkVerifierTest {
                     msg.append('\n');
                 }
                 msg.append("APK Signature Scheme v2 signer ")
-                        .append(signerName).append(": ").append(issue);
+                        .append(signerName)
+                        .append(": ")
+                        .append(issue);
             }
         }
         for (ApkVerifier.Result.V3SchemeSignerInfo signer : result.getV3SchemeSigners()) {
@@ -1157,22 +1279,78 @@ public class ApkVerifierTest {
                     msg.append('\n');
                 }
                 msg.append("APK Signature Scheme v3 signer ")
-                        .append(signerName).append(": ").append(issue);
+                        .append(signerName)
+                        .append(": ")
+                        .append(issue);
             }
         }
 
-        fail("APK failed verification for the wrong reason"
-                + ". Expected: " + expectedIssue + ", actual: " + msg);
+        fail(
+                "APK failed verification for the wrong reason"
+                        + ". Expected: "
+                        + expectedIssue
+                        + ", actual: "
+                        + msg);
+    }
+
+    private static void assertSourceStampVerificationFailure(
+            ApkVerifier.Result result, Issue expectedIssue) {
+        if (result.isSourceStampVerified()) {
+            fail(
+                    "APK source stamp verification succeeded instead of failing with "
+                            + expectedIssue);
+            return;
+        }
+
+        StringBuilder msg = new StringBuilder();
+        List<IssueWithParams> resultIssueWithParams =
+                Stream.of(result.getErrors(), result.getWarnings())
+                        .filter(Objects::nonNull)
+                        .flatMap(Collection::stream)
+                        .collect(Collectors.toList());
+        for (IssueWithParams issue : resultIssueWithParams) {
+            if (expectedIssue.equals(issue.getIssue())) {
+                return;
+            }
+            if (msg.length() > 0) {
+                msg.append('\n');
+            }
+            msg.append(issue);
+        }
+
+        ApkVerifier.Result.SourceStampInfo signer = result.getSourceStampInfo();
+        if (signer != null) {
+            List<IssueWithParams> sourceStampIssueWithParams =
+                    Stream.of(signer.getErrors(), signer.getWarnings())
+                            .filter(Objects::nonNull)
+                            .flatMap(Collection::stream)
+                            .collect(Collectors.toList());
+            for (IssueWithParams issue : sourceStampIssueWithParams) {
+                if (expectedIssue.equals(issue.getIssue())) {
+                    return;
+                }
+                if (msg.length() > 0) {
+                    msg.append('\n');
+                }
+                msg.append("APK SourceStamp signer").append(": ").append(issue);
+            }
+        }
+
+        fail(
+                "APK source stamp failed verification for the wrong reason"
+                        + ". Expected: "
+                        + expectedIssue
+                        + ", actual: "
+                        + msg);
     }
 
     private void assertVerificationFailure(
-            String apkFilenameInResources, ApkVerifier.Issue expectedIssue)
-                    throws Exception {
+            String apkFilenameInResources, ApkVerifier.Issue expectedIssue) throws Exception {
         assertVerificationFailure(verify(apkFilenameInResources), expectedIssue);
     }
 
-    private void assertVerifiedForEach(
-            String apkFilenamePatternInResources, String[] args) throws Exception {
+    private void assertVerifiedForEach(String apkFilenamePatternInResources, String[] args)
+            throws Exception {
         assertVerifiedForEach(apkFilenamePatternInResources, args, null, null);
     }
 
@@ -1180,7 +1358,8 @@ public class ApkVerifierTest {
             String apkFilenamePatternInResources,
             String[] args,
             Integer minSdkVersionOverride,
-            Integer maxSdkVersionOverride) throws Exception {
+            Integer maxSdkVersionOverride)
+            throws Exception {
         for (String arg : args) {
             String apkFilenameInResources =
                     String.format(Locale.US, apkFilenamePatternInResources, arg);
@@ -1189,12 +1368,11 @@ public class ApkVerifierTest {
     }
 
     private void assertVerifiedForEachForMinSdkVersion(
-            String apkFilenameInResources, String[] args, int minSdkVersion)
-                    throws Exception {
+            String apkFilenameInResources, String[] args, int minSdkVersion) throws Exception {
         assertVerifiedForEach(apkFilenameInResources, args, minSdkVersion, null);
     }
 
-    private static byte[] sha256(byte[] msg) throws Exception {
+    private static byte[] sha256(byte[] msg) {
         try {
             return MessageDigest.getInstance("SHA-256").digest(msg);
         } catch (NoSuchAlgorithmException e) {
@@ -1202,7 +1380,7 @@ public class ApkVerifierTest {
         }
     }
 
-    private static void assumeThatRsaPssAvailable() throws Exception {
+    private static void assumeThatRsaPssAvailable() {
         Assume.assumeTrue(Security.getProviders("Signature.SHA256withRSA/PSS") != null);
     }
 }

@@ -90,14 +90,14 @@ public class FileChannelDataSourceTest {
         assertArrayEquals(expectedBytes, resultBytes);
     }
 
-    private byte[] getDataSinkBytes(ByteArrayDataSink dataSink) {
+    private static byte[] getDataSinkBytes(ByteArrayDataSink dataSink) {
         ByteBuffer result = dataSink.getByteBuffer(0, (int)dataSink.size());
         byte[] resultBytes = new byte[result.limit()];
         result.get(resultBytes);
         return resultBytes;
     }
 
-    private byte[] createFileContent(int fileSize) {
+    private static byte[] createFileContent(int fileSize) {
         byte[] fullFileContent = new byte[fileSize];
         for (int i = 0; i < fileSize; ++i) {
             fullFileContent[i] = (byte) (i % 255);
