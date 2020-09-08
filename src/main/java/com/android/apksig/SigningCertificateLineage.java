@@ -492,20 +492,8 @@ public class SigningCertificateLineage {
         return result;
     }
 
-    public byte[] generateV3SignerAttribute() {
-        // FORMAT (little endian):
-        // * length-prefixed bytes: attribute pair
-        //   * uint32: ID
-        //   * bytes: value - encoded V3 SigningCertificateLineage
-        byte[] encodedLineage =
-                V3SigningCertificateLineage.encodeSigningCertificateLineage(mSigningLineage);
-        int payloadSize = 4 + 4 + encodedLineage.length;
-        ByteBuffer result = ByteBuffer.allocate(payloadSize);
-        result.order(ByteOrder.LITTLE_ENDIAN);
-        result.putInt(4 + encodedLineage.length);
-        result.putInt(V3SchemeConstants.PROOF_OF_ROTATION_ATTR_ID);
-        result.put(encodedLineage);
-        return result.array();
+    public byte[] encodeSigningCertificateLineage() {
+        return V3SigningCertificateLineage.encodeSigningCertificateLineage(mSigningLineage);
     }
 
     public List<DefaultApkSignerEngine.SignerConfig> sortSignerConfigs(
