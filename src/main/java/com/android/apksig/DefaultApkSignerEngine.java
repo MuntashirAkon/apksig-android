@@ -385,10 +385,15 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
     private ApkSigningBlockUtils.SignerConfig createSourceStampSignerConfig()
             throws InvalidKeyException {
-        return createSigningBlockSignerConfig(
+        ApkSigningBlockUtils.SignerConfig config = createSigningBlockSignerConfig(
                 mSourceStampSignerConfig,
                 /* apkSigningBlockPaddingSupported= */ false,
                 ApkSigningBlockUtils.VERSION_SOURCE_STAMP);
+        if (mSourceStampSigningCertificateLineage != null) {
+            config.mSigningCertificateLineage = mSourceStampSigningCertificateLineage.getSubLineage(
+                    config.certificates.get(0));
+        }
+        return config;
     }
 
     private int getMinSdkFromV3SignatureAlgorithms(List<SignatureAlgorithm> algorithms) {
