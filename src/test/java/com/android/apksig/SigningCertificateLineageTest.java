@@ -90,6 +90,23 @@ public class SigningCertificateLineageTest {
     }
 
     @Test
+    public void testLineageFromBytesContainsExpectedSigners() throws Exception {
+        // This file contains the lineage with the three rsa-2048 signers
+        DataSource lineageDataSource = Resources.toDataSource(getClass(),
+                "rsa-2048-lineage-3-signers");
+        SigningCertificateLineage lineage = SigningCertificateLineage.readFromBytes(
+                lineageDataSource.getByteBuffer(0, (int) lineageDataSource.size()).array());
+        List<SignerConfig> signers = new ArrayList<>(3);
+        signers.add(
+                Resources.toLineageSignerConfig(getClass(), FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
+        signers.add(
+                Resources.toLineageSignerConfig(getClass(), SECOND_RSA_2048_SIGNER_RESOURCE_NAME));
+        signers.add(
+                Resources.toLineageSignerConfig(getClass(), THIRD_RSA_2048_SIGNER_RESOURCE_NAME));
+        assertLineageContainsExpectedSigners(lineage, signers);
+    }
+
+    @Test
     public void testLineageFromFileContainsExpectedSigners() throws Exception {
         // This file contains the lineage with the three rsa-2048 signers
         DataSource lineageDataSource = Resources.toDataSource(getClass(),
@@ -128,6 +145,17 @@ public class SigningCertificateLineageTest {
         // This file contains the lineage with two rsa-2048 signers and an invalid value of FF for
         // the version
         Resources.toSigningCertificateLineage(getClass(), "rsa-2048-lineage-invalid-version");
+    }
+
+    @Test
+    public void testLineageWrittenToBytesContainsExpectedSigners() throws Exception {
+        SigningCertificateLineage lineage = createLineageWithSignersFromResources(
+                FIRST_RSA_2048_SIGNER_RESOURCE_NAME, SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
+        lineage = updateLineageWithSignerFromResources(lineage,
+                THIRD_RSA_2048_SIGNER_RESOURCE_NAME);
+        byte[] lineageBytes = lineage.getBytes();
+        lineage = SigningCertificateLineage.readFromBytes(lineageBytes);
+        assertLineageContainsExpectedSigners(lineage, mSigners);
     }
 
     @Test
