@@ -758,6 +758,15 @@ public class SourceStampVerifier {
             }
 
             /**
+             * Returns a {@code List} of {@link X509Certificate} instances representing the source
+             * stamp signer's lineage with the oldest signer at element 0, or an empty {@code List}
+             * if the stamp's signing certificate has not been rotated.
+             */
+            public List<X509Certificate> getCertificatesInLineage() {
+                return mCertificateLineage;
+            }
+
+            /**
              * Returns whether any errors were encountered during the source stamp verification.
              */
             public boolean containsErrors() {
