@@ -124,6 +124,11 @@ public class SigningCertificateLineage {
         return signingCertificateLineage.spawnDescendant(parent, child, childCapabilities);
     }
 
+    public static SigningCertificateLineage readFromBytes(byte[] lineageBytes)
+            throws IOException {
+        return readFromDataSource(DataSources.asDataSource(ByteBuffer.wrap(lineageBytes)));
+    }
+
     public static SigningCertificateLineage readFromFile(File file)
             throws IOException {
         if (file == null) {
@@ -281,6 +286,10 @@ public class SigningCertificateLineage {
             result = lineages.get(0);
         }
         return result;
+    }
+
+    public byte[] getBytes() {
+        return write().array();
     }
 
     public void writeToFile(File file) throws IOException {
