@@ -16,8 +16,6 @@
 
 package com.android.apksig;
 
-import static com.android.apksig.SourceStampVerifier.Result;
-import static com.android.apksig.SourceStampVerifier.Result.SignerInfo;
 import static com.android.apksig.apk.ApkUtilsLite.computeSha256DigestBytes;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtilsLite.toHex;
 
@@ -25,6 +23,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
+import com.android.apksig.SourceStampVerifier.Result;
+import com.android.apksig.SourceStampVerifier.Result.SignerInfo;
 import com.android.apksig.internal.util.Resources;
 import com.android.apksig.util.DataSources;
 
@@ -40,6 +40,10 @@ import java.util.List;
 public class SourceStampVerifierTest {
     private static final String RSA_2048_CERT_SHA256_DIGEST =
             "fb5dbd3c669af9fc236c6991e6387b7f11ff0590997f22d0f5c74ff40e04fca8";
+    private static final String RSA_2048_2_CERT_SHA256_DIGEST =
+            "681b0e56a796350c08647352a4db800cc44b2adc8f4c72fa350bd05d4d50264d";
+    private static final String RSA_2048_3_CERT_SHA256_DIGEST =
+            "bb77a72efc60e66501ab75953af735874f82cfe52a70d035186a01b3482180f3";
     private static final String EC_P256_CERT_SHA256_DIGEST =
             "6a8b96e278e58f62cfe3584022cec1d0527fcb85a9e5d2e1694eb0405be5b599";
     private static final String EC_P256_2_CERT_SHA256_DIGEST =
@@ -73,7 +77,7 @@ public class SourceStampVerifierTest {
         // Verify when platform versions that support the V1 - V3 signature schemes are specified
         // that an APK signed with all signature schemes has its expected signers returned in the
         // result.
-        Result verificationResult = verifySourceStamp("./v1v2v3-rotated-v3-key-valid-stamp.apk", 23,
+        Result verificationResult = verifySourceStamp("v1v2v3-rotated-v3-key-valid-stamp.apk", 23,
                 28);
         assertVerified(verificationResult);
         assertSigningCertificates(verificationResult, EC_P256_CERT_SHA256_DIGEST,
@@ -81,15 +85,15 @@ public class SourceStampVerifierTest {
 
         // Verify when the specified platform versions only support a single signature scheme that
         // scheme's signer is the only one in the result.
-        verificationResult = verifySourceStamp("./v1v2v3-rotated-v3-key-valid-stamp.apk", 18, 18);
+        verificationResult = verifySourceStamp("v1v2v3-rotated-v3-key-valid-stamp.apk", 18, 18);
         assertVerified(verificationResult);
         assertSigningCertificates(verificationResult, EC_P256_CERT_SHA256_DIGEST, null, null);
 
-        verificationResult = verifySourceStamp("./v1v2v3-rotated-v3-key-valid-stamp.apk", 24, 24);
+        verificationResult = verifySourceStamp("v1v2v3-rotated-v3-key-valid-stamp.apk", 24, 24);
         assertVerified(verificationResult);
         assertSigningCertificates(verificationResult, null, EC_P256_CERT_SHA256_DIGEST, null);
 
-        verificationResult = verifySourceStamp("./v1v2v3-rotated-v3-key-valid-stamp.apk", 28, 28);
+        verificationResult = verifySourceStamp("v1v2v3-rotated-v3-key-valid-stamp.apk", 28, 28);
         assertVerified(verificationResult);
         assertSigningCertificates(verificationResult, null, null, EC_P256_2_CERT_SHA256_DIGEST);
     }
@@ -221,6 +225,8 @@ public class SourceStampVerifierTest {
         Result verificationResult = verifySourceStamp(
                 "stamp-lineage-valid.apk");
         assertVerified(verificationResult);
+        assertSigningCertificatesInLineage(verificationResult, RSA_2048_CERT_SHA256_DIGEST,
+                RSA_2048_2_CERT_SHA256_DIGEST);
     }
 
     @Test
@@ -229,6 +235,22 @@ public class SourceStampVerifierTest {
                 "stamp-lineage-invalid.apk");
         assertSourceStampVerificationFailure(verificationResult,
                 ApkVerificationIssue.SOURCE_STAMP_POR_CERT_MISMATCH);
+    }
+
+    @Test
+    public void verifySourceStamp_multipleSignersInLineage() throws Exception {
+        Result verificationResult = verifySourceStamp("stamp-lineage-with-3-signers.apk", 18, 28);
+        assertVerified(verificationResult);
+        assertSigningCertificatesInLineage(verificationResult, RSA_2048_CERT_SHA256_DIGEST,
+                RSA_2048_2_CERT_SHA256_DIGEST, RSA_2048_3_CERT_SHA256_DIGEST);
+    }
+
+    @Test
+    public void verifySourceStamp_noSignersInLineage_returnsEmptyLineage() throws Exception {
+        // If the source stamp's signer has not yet been rotated then an empty lineage should be
+        // returned.
+        Result verificationResult = verifySourceStamp("valid-stamp.apk");
+        assertSigningCertificatesInLineage(verificationResult);
     }
 
     @Test
@@ -374,6 +396,25 @@ public class SourceStampVerifierTest {
             assertNotNull(signingCertificate);
             assertEquals(expectedCertDigests[i],
                     toHex(computeSha256DigestBytes(signingCertificate.getEncoded())));
+        }
+    }
+
+    /**
+     * Asserts that the provided {@code expectedCertDigests} match their respective certificate in
+     * the source stamp's lineage with the oldest signer at element 0.
+     *
+     * <p>If no values are provided for the expectedCertDigests, the source stamp's lineage will
+     * be checked for an empty {@code List} indicating the source stamp has not been rotated.
+     */
+    private static void assertSigningCertificatesInLineage(Result result,
+            String... expectedCertDigests) throws Exception {
+        List<X509Certificate> lineageCertificates =
+                result.getSourceStampInfo().getCertificatesInLineage();
+        assertEquals("Unexpected number of lineage certificates", expectedCertDigests.length,
+                lineageCertificates.size());
+        for (int i = 0; i < expectedCertDigests.length; i++) {
+            assertEquals("Stamp lineage mismatch at signer " + i, expectedCertDigests[i],
+                    toHex(computeSha256DigestBytes(lineageCertificates.get(i).getEncoded())));
         }
     }
 }
