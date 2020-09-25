@@ -325,9 +325,9 @@ class SourceStampVerifier {
     private static void readStampCertificateLineage(byte[] lineageBytes,
             X509Certificate sourceStampCertificate, ApkSignerInfo result) {
         try {
-            // SigningCertificateLineage is verified when built
-            List<V3SigningCertificateLineage.SigningCertificateNode> nodes =
-                    V3SigningCertificateLineage.readSigningCertificateLineage(
+            // SourceStampCertificateLineage is verified when built
+            List<SourceStampCertificateLineage.SigningCertificateNode> nodes =
+                    SourceStampCertificateLineage.readSigningCertificateLineage(
                             ByteBuffer.wrap(lineageBytes).order(ByteOrder.LITTLE_ENDIAN));
             for (int i = 0; i < nodes.size(); i++) {
                 result.certificateLineage.add(nodes.get(i).signingCert);
