@@ -21,20 +21,14 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.android.apksig.SigningCertificateLineage.SignerCapabilities;
+import com.android.apksig.SigningCertificateLineage.SignerConfig;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.v3.V3SchemeConstants;
-import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.util.ByteBufferUtils;
 import com.android.apksig.internal.util.Resources;
-
-import com.android.apksig.SigningCertificateLineage.SignerConfig;
-import com.android.apksig.SigningCertificateLineage.SignerCapabilities;
-
 import com.android.apksig.util.DataSource;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -42,6 +36,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.io.File;
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
