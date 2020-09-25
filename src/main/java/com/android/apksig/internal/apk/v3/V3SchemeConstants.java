@@ -18,6 +18,8 @@ package com.android.apksig.internal.apk.v3;
 
 /** Constants used by the V3 Signature Scheme signing and verification. */
 public class V3SchemeConstants {
+    private V3SchemeConstants() {}
+
     public static final int APK_SIGNATURE_SCHEME_V3_BLOCK_ID = 0xf05368c0;
     public static final int PROOF_OF_ROTATION_ATTR_ID = 0x3ba06f8c;
 }

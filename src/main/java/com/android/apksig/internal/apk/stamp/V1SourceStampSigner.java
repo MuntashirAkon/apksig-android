@@ -48,6 +48,9 @@ import java.util.Map;
  * <p>V1 of the source stamp allows signing the digest of at most one signature scheme only.
  */
 public abstract class V1SourceStampSigner {
+    public static final int V1_SOURCE_STAMP_BLOCK_ID =
+            SourceStampConstants.V1_SOURCE_STAMP_BLOCK_ID;
+
     /** Hidden constructor to prevent instantiation. */
     private V1SourceStampSigner() {}
 
