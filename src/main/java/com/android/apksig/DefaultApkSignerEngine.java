@@ -99,6 +99,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     private final String mCreatedBy;
     private final List<SignerConfig> mSignerConfigs;
     private final SignerConfig mSourceStampSignerConfig;
+    private final SigningCertificateLineage mSourceStampSigningCertificateLineage;
     private final int mMinSdkVersion;
     private final SigningCertificateLineage mSigningCertificateLineage;
 
@@ -161,6 +162,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     private DefaultApkSignerEngine(
             List<SignerConfig> signerConfigs,
             SignerConfig sourceStampSignerConfig,
+            SigningCertificateLineage sourceStampSigningCertificateLineage,
             int minSdkVersion,
             boolean v1SigningEnabled,
             boolean v2SigningEnabled,
@@ -191,6 +193,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         mCreatedBy = createdBy;
         mSignerConfigs = signerConfigs;
         mSourceStampSignerConfig = sourceStampSignerConfig;
+        mSourceStampSigningCertificateLineage = sourceStampSigningCertificateLineage;
         mMinSdkVersion = minSdkVersion;
         mSigningCertificateLineage = signingCertificateLineage;
 
@@ -1474,6 +1477,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     public static class Builder {
         private List<SignerConfig> mSignerConfigs;
         private SignerConfig mStampSignerConfig;
+        private SigningCertificateLineage mSourceStampSigningCertificateLineage;
         private final int mMinSdkVersion;
 
         private boolean mV1SigningEnabled = true;
@@ -1565,6 +1569,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return new DefaultApkSignerEngine(
                     mSignerConfigs,
                     mStampSignerConfig,
+                    mSourceStampSigningCertificateLineage,
                     mMinSdkVersion,
                     mV1SigningEnabled,
                     mV2SigningEnabled,
@@ -1579,6 +1584,16 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         /** Sets the signer configuration for the SourceStamp to be embedded in the APK. */
         public Builder setStampSignerConfig(SignerConfig stampSignerConfig) {
             mStampSignerConfig = stampSignerConfig;
+            return this;
+        }
+
+        /**
+         * Sets the source stamp {@link SigningCertificateLineage}. This structure provides proof of
+         * signing certificate rotation for certificates previously used to sign source stamps.
+         */
+        public Builder setSourceStampSigningCertificateLineage(
+                SigningCertificateLineage sourceStampSigningCertificateLineage) {
+            mSourceStampSigningCertificateLineage = sourceStampSigningCertificateLineage;
             return this;
         }
 
