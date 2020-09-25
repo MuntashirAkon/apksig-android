@@ -640,10 +640,9 @@ public abstract class ApkUtils {
      *
      * @param androidManifestContents contents of {@code AndroidManifest.xml} in binary Android
      *                                resource format
-     * @throws ApkFormatException if an error occurred while determining the version
      */
     public static int getTargetSandboxVersionFromBinaryAndroidManifest(
-            ByteBuffer androidManifestContents) throws ApkFormatException {
+            ByteBuffer androidManifestContents) {
         try {
             return getAttributeValueFromBinaryAndroidManifest(androidManifestContents,
                     MANIFEST_ELEMENT_TAG, TARGET_SANDBOX_VERSION_ATTR_ID);
@@ -662,7 +661,6 @@ public abstract class ApkUtils {
      *
      * @param androidManifestContents contents of {@code AndroidManifest.xml} in binary Android
      *                                resource format
-     * @throws ApkFormatException if an error occurred while determining the version
      */
     public static int getTargetSdkVersionFromBinaryAndroidManifest(
             ByteBuffer androidManifestContents) {
