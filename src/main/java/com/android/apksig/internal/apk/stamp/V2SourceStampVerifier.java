@@ -17,7 +17,7 @@
 package com.android.apksig.internal.apk.stamp;
 
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes;
-import static com.android.apksig.internal.apk.stamp.V2SourceStampSigner.V2_SOURCE_STAMP_BLOCK_ID;
+import static com.android.apksig.internal.apk.stamp.SourceStampConstants.V2_SOURCE_STAMP_BLOCK_ID;
 
 import com.android.apksig.ApkVerifier;
 import com.android.apksig.apk.ApkFormatException;
