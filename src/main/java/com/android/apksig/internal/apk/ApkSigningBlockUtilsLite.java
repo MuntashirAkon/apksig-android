@@ -38,6 +38,8 @@ import java.util.Map;
  * utility functionality.
  */
 public class ApkSigningBlockUtilsLite {
+    private ApkSigningBlockUtilsLite() {}
+
     private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
     /**
      * Returns the APK Signature Scheme block contained in the provided APK file for the given ID

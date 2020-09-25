@@ -25,13 +25,10 @@ import com.android.apksig.internal.zip.LocalFileRecord;
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.zip.ZipFormatException;
-import com.android.apksig.zip.ZipSections;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -98,11 +95,6 @@ public abstract class ApkUtils {
         eocd.order(ByteOrder.LITTLE_ENDIAN);
         ZipUtils.setZipEocdCentralDirectoryOffset(eocd, offset);
     }
-
-    // See https://source.android.com/security/apksigning/v2.html
-    private static final long APK_SIG_BLOCK_MAGIC_HI = 0x3234206b636f6c42L;
-    private static final long APK_SIG_BLOCK_MAGIC_LO = 0x20676953204b5041L;
-    private static final int APK_SIG_BLOCK_MIN_SIZE = 32;
 
     /**
      * Returns the APK Signing Block of the provided APK.

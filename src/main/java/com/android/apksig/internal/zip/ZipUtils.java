@@ -17,7 +17,6 @@
 package com.android.apksig.internal.zip;
 
 import com.android.apksig.apk.ApkFormatException;
-import com.android.apksig.apk.ApkUtilsLite;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.zip.ZipFormatException;
