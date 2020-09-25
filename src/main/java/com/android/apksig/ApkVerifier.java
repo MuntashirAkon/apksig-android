@@ -27,7 +27,6 @@ import static com.android.apksig.internal.apk.v1.V1SchemeConstants.MANIFEST_ENTR
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
-import com.android.apksig.internal.apk.AndroidBinXmlParser;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
@@ -599,7 +598,7 @@ public class ApkVerifier {
      * Returns the mapping of signature scheme version to signature scheme name for all signature
      * schemes starting from V2 supported by the {@code maxSdkVersion}.
      */
-    private Map<Integer, String> getSupportedSchemeNames(int maxSdkVersion) {
+    private static Map<Integer, String> getSupportedSchemeNames(int maxSdkVersion) {
         Map<Integer, String> supportedSchemeNames;
         if (maxSdkVersion >= AndroidSdkVersion.P) {
             supportedSchemeNames = SUPPORTED_APK_SIG_SCHEME_NAMES;
@@ -814,7 +813,7 @@ public class ApkVerifier {
      * with the provided source stamp {@code verificationStatus}, and logs an error for the
      * specified {@code issue} and {@code params}.
      */
-    private Result createSourceStampResultWithError(
+    private static Result createSourceStampResultWithError(
             Result.SourceStampInfo.SourceStampVerificationStatus verificationStatus, Issue issue,
             Object... params) {
         Result result = new Result();
@@ -826,7 +825,7 @@ public class ApkVerifier {
      * Creates a new {@link Result.SourceStampInfo} under the provided {@code result} and sets the
      * source stamp status to the provided {@code verificationStatus}.
      */
-    private Result mergeSourceStampResult(
+    private static Result mergeSourceStampResult(
             Result.SourceStampInfo.SourceStampVerificationStatus verificationStatus,
             Result result) {
         result.mSourceStampInfo = new Result.SourceStampInfo(verificationStatus);
@@ -855,7 +854,6 @@ public class ApkVerifier {
             return null;
         }
         ApkSigningBlockUtils.Result result = new ApkSigningBlockUtils.Result(apkSigSchemeVersion);
-        Map<ContentDigestAlgorithm, byte[]> apkContentDigests = null;
         SignatureInfo signatureInfo;
         try {
             int sigSchemeBlockId = apkSigSchemeVersion == VERSION_APK_SIGNATURE_SCHEME_V3
@@ -877,7 +875,8 @@ public class ApkVerifier {
             V3SchemeVerifier.parseSigners(signatureInfo.signatureBlock,
                     contentDigestsToVerify, result);
         }
-        apkContentDigests = new EnumMap<>(ContentDigestAlgorithm.class);
+        Map<ContentDigestAlgorithm, byte[]> apkContentDigests = new EnumMap<>(
+                ContentDigestAlgorithm.class);
         for (ApkSigningBlockUtils.Result.SignerInfo signerInfo : result.signers) {
             for (ApkSigningBlockUtils.Result.SignerInfo.ContentDigest contentDigest :
                     signerInfo.contentDigests) {
@@ -1637,9 +1636,9 @@ public class ApkVerifier {
             }
 
             SourceStampInfo(SourceStampVerificationStatus sourceStampVerificationStatus) {
-                mCertificates = Collections.EMPTY_LIST;
-                mErrors = Collections.EMPTY_LIST;
-                mWarnings = Collections.EMPTY_LIST;
+                mCertificates = Collections.emptyList();
+                mErrors = Collections.emptyList();
+                mWarnings = Collections.emptyList();
                 mSourceStampVerificationStatus = sourceStampVerificationStatus;
             }
 
