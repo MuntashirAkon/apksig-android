@@ -27,10 +27,13 @@ import static com.android.apksig.internal.apk.v1.V1SchemeConstants.MANIFEST_ENTR
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
+import com.android.apksig.internal.apk.ApkSigResult;
+import com.android.apksig.internal.apk.ApkSignerInfo;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.SignatureInfo;
+import com.android.apksig.internal.apk.SignatureNotFoundException;
 import com.android.apksig.internal.apk.stamp.SourceStampConstants;
 import com.android.apksig.internal.apk.stamp.V2SourceStampVerifier;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
@@ -323,7 +326,7 @@ public class ApkVerifier {
                                 apk,
                                 sourceStampCdRecord,
                                 zipSections.getZipCentralDirectoryOffset());
-                ApkSigningBlockUtils.Result sourceStampResult =
+                ApkSigResult sourceStampResult =
                         V2SourceStampVerifier.verify(
                                 apk,
                                 zipSections,
@@ -333,7 +336,7 @@ public class ApkVerifier {
                                 maxSdkVersion);
                 result.mergeFrom(sourceStampResult);
             }
-        } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
+        } catch (SignatureNotFoundException ignored) {
             result.addWarning(Issue.SOURCE_STAMP_SIG_MISSING);
         } catch (ZipFormatException e) {
             throw new ApkFormatException("Failed to read APK", e);
@@ -773,7 +776,7 @@ public class ApkVerifier {
                         getApkContentDigestFromV1SigningScheme(cdRecords, apk, zipSections));
             }
 
-            ApkSigningBlockUtils.Result sourceStampResult =
+            ApkSigResult sourceStampResult =
                     V2SourceStampVerifier.verify(
                             apk,
                             zipSections,
@@ -801,7 +804,7 @@ public class ApkVerifier {
             return createSourceStampResultWithError(
                     Result.SourceStampInfo.SourceStampVerificationStatus.VERIFICATION_ERROR,
                     Issue.UNEXPECTED_EXCEPTION, e);
-        } catch (ApkSigningBlockUtils.SignatureNotFoundException e) {
+        } catch (SignatureNotFoundException e) {
             return createSourceStampResultWithError(
                     Result.SourceStampInfo.SourceStampVerificationStatus.STAMP_NOT_VERIFIED,
                     Issue.SOURCE_STAMP_SIG_MISSING);
@@ -1173,6 +1176,21 @@ public class ApkVerifier {
             }
             for (V1SchemeVerifier.Result.SignerInfo signer : source.ignoredSigners) {
                 mV1SchemeIgnoredSigners.add(new V1SchemeSignerInfo(signer));
+            }
+        }
+
+        private void mergeFrom(ApkSigResult source) {
+            switch (source.signatureSchemeVersion) {
+                case ApkSigningBlockUtils.VERSION_SOURCE_STAMP:
+                    mSourceStampVerified = source.verified;
+                    if (!source.mSigners.isEmpty()) {
+                        mSourceStampInfo = new SourceStampInfo(source.mSigners.get(0));
+                    }
+                    break;
+                default:
+                    throw new IllegalArgumentException(
+                            "Unknown ApkSigResult Signing Block Scheme Id "
+                                    + source.signatureSchemeVersion);
             }
         }
 
@@ -1623,10 +1641,12 @@ public class ApkVerifier {
 
             private final SourceStampVerificationStatus mSourceStampVerificationStatus;
 
-            private SourceStampInfo(ApkSigningBlockUtils.Result.SignerInfo result) {
+            private SourceStampInfo(ApkSignerInfo result) {
                 mCertificates = result.certs;
-                mErrors = result.getErrors();
-                mWarnings = result.getWarnings();
+                mErrors = ApkVerificationErrorAdapter.getIssuesFromVerificationIssues(
+                        result.getErrors());
+                mWarnings = ApkVerificationErrorAdapter.getIssuesFromVerificationIssues(
+                        result.getWarnings());
                 if (mErrors.isEmpty() && mWarnings.isEmpty()) {
                     mSourceStampVerificationStatus = SourceStampVerificationStatus.STAMP_VERIFIED;
                 } else {
@@ -2788,7 +2808,7 @@ public class ApkVerifier {
      * {@link Issue} with associated parameters. {@link #toString()} produces a readable formatted
      * form.
      */
-    public static class IssueWithParams {
+    public static class IssueWithParams extends ApkVerificationIssue {
         private final Issue mIssue;
         private final Object[] mParams;
 
@@ -2797,6 +2817,7 @@ public class ApkVerifier {
          * parameters.
          */
         public IssueWithParams(Issue issue, Object[] params) {
+            super(issue.mFormat, params);
             mIssue = issue;
             mParams = params;
         }
@@ -2951,6 +2972,103 @@ public class ApkVerifier {
                     mV4SignatureFile,
                     mMinSdkVersion,
                     mMaxSdkVersion);
+        }
+    }
+
+    /**
+     * Adapter for converting base ApkVerificationError instances to their IssueWithParams
+     * equivalent.
+     */
+    public static class ApkVerificationErrorAdapter {
+        private static final Map<Integer, Issue> sVerificationIssueIdToIssue = new HashMap<>();
+
+        static {
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V2_SIG_MALFORMED_SIGNERS,
+                    Issue.V2_SIG_MALFORMED_SIGNERS);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V2_SIG_NO_SIGNERS,
+                    Issue.V2_SIG_NO_SIGNERS);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V2_SIG_MALFORMED_SIGNER,
+                    Issue.V2_SIG_MALFORMED_SIGNER);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V2_SIG_MALFORMED_SIGNATURE,
+                    Issue.V2_SIG_MALFORMED_SIGNATURE);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V2_SIG_NO_SIGNATURES,
+                    Issue.V2_SIG_NO_SIGNATURES);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V2_SIG_MALFORMED_CERTIFICATE,
+                    Issue.V2_SIG_MALFORMED_CERTIFICATE);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V2_SIG_NO_CERTIFICATES,
+                    Issue.V2_SIG_NO_CERTIFICATES);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V2_SIG_MALFORMED_DIGEST,
+                    Issue.V2_SIG_MALFORMED_DIGEST);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V3_SIG_MALFORMED_SIGNERS,
+                    Issue.V3_SIG_MALFORMED_SIGNERS);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V3_SIG_NO_SIGNERS,
+                    Issue.V3_SIG_NO_SIGNERS);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V3_SIG_MALFORMED_SIGNER,
+                    Issue.V3_SIG_MALFORMED_SIGNER);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V3_SIG_MALFORMED_SIGNATURE,
+                    Issue.V3_SIG_MALFORMED_SIGNATURE);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V3_SIG_NO_SIGNATURES,
+                    Issue.V3_SIG_NO_SIGNATURES);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V3_SIG_MALFORMED_CERTIFICATE,
+                    Issue.V3_SIG_MALFORMED_CERTIFICATE);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V3_SIG_NO_CERTIFICATES,
+                    Issue.V3_SIG_NO_CERTIFICATES);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.V3_SIG_MALFORMED_DIGEST,
+                    Issue.V3_SIG_MALFORMED_DIGEST);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_NO_SIGNATURE,
+                    Issue.SOURCE_STAMP_NO_SIGNATURE);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_MALFORMED_CERTIFICATE,
+                    Issue.SOURCE_STAMP_MALFORMED_CERTIFICATE);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_UNKNOWN_SIG_ALGORITHM,
+                    Issue.SOURCE_STAMP_UNKNOWN_SIG_ALGORITHM);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_MALFORMED_SIGNATURE,
+                    Issue.SOURCE_STAMP_MALFORMED_SIGNATURE);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_DID_NOT_VERIFY,
+                    Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_VERIFY_EXCEPTION,
+                    Issue.SOURCE_STAMP_VERIFY_EXCEPTION);
+            sVerificationIssueIdToIssue.put(
+                    ApkVerificationIssue.SOURCE_STAMP_EXPECTED_DIGEST_MISMATCH,
+                    Issue.SOURCE_STAMP_EXPECTED_DIGEST_MISMATCH);
+            sVerificationIssueIdToIssue.put(
+                    ApkVerificationIssue.SOURCE_STAMP_SIGNATURE_BLOCK_WITHOUT_CERT_DIGEST,
+                    Issue.SOURCE_STAMP_SIGNATURE_BLOCK_WITHOUT_CERT_DIGEST);
+            sVerificationIssueIdToIssue.put(
+                    ApkVerificationIssue.SOURCE_STAMP_CERT_DIGEST_AND_SIG_BLOCK_MISSING,
+                    Issue.SOURCE_STAMP_CERT_DIGEST_AND_SIG_BLOCK_MISSING);
+            sVerificationIssueIdToIssue.put(
+                    ApkVerificationIssue.SOURCE_STAMP_NO_SUPPORTED_SIGNATURE,
+                    Issue.SOURCE_STAMP_NO_SUPPORTED_SIGNATURE);
+            sVerificationIssueIdToIssue.put(
+                    ApkVerificationIssue
+                            .SOURCE_STAMP_CERTIFICATE_MISMATCH_BETWEEN_SIGNATURE_BLOCK_AND_APK,
+                    Issue.SOURCE_STAMP_CERTIFICATE_MISMATCH_BETWEEN_SIGNATURE_BLOCK_AND_APK);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.MALFORMED_APK,
+                    Issue.MALFORMED_APK);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.UNEXPECTED_EXCEPTION,
+                    Issue.UNEXPECTED_EXCEPTION);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_SIG_MISSING,
+                    Issue.SOURCE_STAMP_SIG_MISSING);
+        }
+
+        /**
+         * Converts the provided {@code verificationIssues} to a {@code List} of corresponding
+         *
+         * @link IssueWithParams} instances.
+         */
+        public static List<IssueWithParams> getIssuesFromVerificationIssues(
+                List<? extends ApkVerificationIssue> verificationIssues) {
+            List<IssueWithParams> result = new ArrayList<>(verificationIssues.size());
+            for (ApkVerificationIssue issue : verificationIssues) {
+                if (issue instanceof IssueWithParams) {
+                    result.add((IssueWithParams) issue);
+                } else {
+                    result.add(
+                            new IssueWithParams(sVerificationIssueIdToIssue.get(issue.getIssueId()),
+                                    issue.getParams()));
+                }
+            }
+            return result;
         }
     }
 }
