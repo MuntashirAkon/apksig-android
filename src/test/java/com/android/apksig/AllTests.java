@@ -24,6 +24,7 @@ import org.junit.runners.Suite;
     ApkSignerTest.class,
     ApkVerifierTest.class,
     SigningCertificateLineageTest.class,
+    SourceStampVerifierTest.class,
     com.android.apksig.apk.AllTests.class,
     com.android.apksig.internal.AllTests.class,
     com.android.apksig.util.AllTests.class,
