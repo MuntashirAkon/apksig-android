@@ -84,7 +84,7 @@ public class ApkVerifier {
     private static final Map<Integer, String> SUPPORTED_APK_SIG_SCHEME_NAMES =
             loadSupportedApkSigSchemeNames();
 
-    private static Map<Integer,String> loadSupportedApkSigSchemeNames() {
+    private static Map<Integer, String> loadSupportedApkSigSchemeNames() {
         Map<Integer, String> supportedMap = new HashMap<>(2);
         supportedMap.put(
                 ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2, "APK Signature Scheme v2");
@@ -125,12 +125,12 @@ public class ApkVerifier {
      * or more errors and whose {@link Result#isVerified()} returns {@code false}, or this method
      * throws an exception.
      *
-     * @throws IOException if an I/O error is encountered while reading the APK
-     * @throws ApkFormatException if the APK is malformed
+     * @throws IOException              if an I/O error is encountered while reading the APK
+     * @throws ApkFormatException       if the APK is malformed
      * @throws NoSuchAlgorithmException if the APK's signatures cannot be verified because a
-     *         required cryptographic algorithm implementation is missing
-     * @throws IllegalStateException if this verifier's configuration is missing required
-     *         information.
+     *                                  required cryptographic algorithm implementation is missing
+     * @throws IllegalStateException    if this verifier's configuration is missing required
+     *                                  information.
      */
     public Result verify() throws IOException, ApkFormatException, NoSuchAlgorithmException,
             IllegalStateException {
@@ -160,11 +160,10 @@ public class ApkVerifier {
      * The verification result also includes errors, warnings, and information about signers.
      *
      * @param apk APK file contents
-     *
-     * @throws IOException if an I/O error is encountered while reading the APK
-     * @throws ApkFormatException if the APK is malformed
+     * @throws IOException              if an I/O error is encountered while reading the APK
+     * @throws ApkFormatException       if the APK is malformed
      * @throws NoSuchAlgorithmException if the APK's signatures cannot be verified because a
-     *         required cryptographic algorithm implementation is missing
+     *                                  required cryptographic algorithm implementation is missing
      */
     private Result verify(DataSource apk)
             throws IOException, ApkFormatException, NoSuchAlgorithmException {
@@ -426,7 +425,7 @@ public class ApkVerifier {
                 }
                 try {
                     if (!Arrays.equals(oldSignerCert.getEncoded(),
-                           v3Signers.get(0).mCerts.get(0).getEncoded())) {
+                            v3Signers.get(0).mCerts.get(0).getEncoded())) {
                         result.addError(Issue.V3_SIG_PAST_SIGNERS_MISMATCH);
                     }
                 } catch (CertificateEncodingException e) {
@@ -896,7 +895,8 @@ public class ApkVerifier {
         return result;
     }
 
-    private static void checkV4Certificate(List<X509Certificate> v4Certs, List<X509Certificate> v2v3Certs, Result result) {
+    private static void checkV4Certificate(List<X509Certificate> v4Certs,
+            List<X509Certificate> v2v3Certs, Result result) {
         try {
             byte[] v4Cert = v4Certs.get(0).getEncoded();
             byte[] cert = v2v3Certs.get(0).getEncoded();
@@ -908,7 +908,8 @@ public class ApkVerifier {
         }
     }
 
-    private static byte[] pickBestDigestForV4(List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> contentDigests) {
+    private static byte[] pickBestDigestForV4(
+            List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> contentDigests) {
         Map<ContentDigestAlgorithm, byte[]> apkContentDigests = new HashMap<>();
         collectApkContentDigests(contentDigests, apkContentDigests);
         return ApkSigningBlockUtils.pickBestDigestForV4(apkContentDigests);
@@ -955,7 +956,9 @@ public class ApkVerifier {
         }
     }
 
-    private static void collectApkContentDigests(List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> contentDigests, Map<ContentDigestAlgorithm, byte[]> apkContentDigests) {
+    private static void collectApkContentDigests(
+            List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> contentDigests,
+            Map<ContentDigestAlgorithm, byte[]> apkContentDigests) {
         for (ApkSigningBlockUtils.Result.SignerInfo.ContentDigest contentDigest : contentDigests) {
             SignatureAlgorithm signatureAlgorithm =
                     SignatureAlgorithm.findById(contentDigest.getSignatureAlgorithmId());
@@ -971,7 +974,7 @@ public class ApkVerifier {
 
     private static ByteBuffer getAndroidManifestFromApk(
             DataSource apk, ApkUtils.ZipSections zipSections)
-                    throws IOException, ApkFormatException {
+            throws IOException, ApkFormatException {
         List<CentralDirectoryRecord> cdRecords =
                 V1SchemeVerifier.parseZipCentralDirectory(apk, zipSections);
         try {
@@ -1224,8 +1227,6 @@ public class ApkVerifier {
                 default:
                     throw new IllegalArgumentException("Unknown Signing Block Scheme Id");
             }
-            mErrors.addAll(source.getErrors());
-            mWarnings.addAll(source.getWarnings());
         }
 
         /**
@@ -1633,8 +1634,10 @@ public class ApkVerifier {
                 STAMP_NOT_VERIFIED,
                 /** The stamp was not able to be verified due to an unexpected error. */
                 VERIFICATION_ERROR
-            };
+            }
+
             private final List<X509Certificate> mCertificates;
+            private final List<X509Certificate> mCertificateLineage;
 
             private final List<IssueWithParams> mErrors;
             private final List<IssueWithParams> mWarnings;
@@ -1643,6 +1646,7 @@ public class ApkVerifier {
 
             private SourceStampInfo(ApkSignerInfo result) {
                 mCertificates = result.certs;
+                mCertificateLineage = result.certificateLineage;
                 mErrors = ApkVerificationIssueAdapter.getIssuesFromVerificationIssues(
                         result.getErrors());
                 mWarnings = ApkVerificationIssueAdapter.getIssuesFromVerificationIssues(
@@ -1657,6 +1661,7 @@ public class ApkVerifier {
 
             SourceStampInfo(SourceStampVerificationStatus sourceStampVerificationStatus) {
                 mCertificates = Collections.emptyList();
+                mCertificateLineage = Collections.emptyList();
                 mErrors = Collections.emptyList();
                 mWarnings = Collections.emptyList();
                 mSourceStampVerificationStatus = sourceStampVerificationStatus;
@@ -1671,6 +1676,13 @@ public class ApkVerifier {
              */
             public X509Certificate getCertificate() {
                 return mCertificates.isEmpty() ? null : mCertificates.get(0);
+            }
+
+            /**
+             * Returns a list containing all of the certificates in the stamp certificate lineage.
+             */
+            public List<X509Certificate> getCertificatesInLineage() {
+                return mCertificateLineage;
             }
 
             public boolean containsErrors() {
@@ -2770,6 +2782,46 @@ public class ApkVerifier {
                         + "expected digest, %2$s"),
 
         /**
+         * Source stamp block contains a malformed attribute.
+         *
+         * <ul>
+         * <li>Parameter 1: attribute number (first attribute is {@code 1}) {@code Integer})</li>
+         * </ul>
+         */
+        SOURCE_STAMP_MALFORMED_ATTRIBUTE("Malformed stamp attribute #%1$d"),
+
+        /**
+         * Source stamp block contains an unknown attribute.
+         *
+         * <ul>
+         * <li>Parameter 1: attribute ID ({@code Integer})</li>
+         * </ul>
+         */
+        SOURCE_STAMP_UNKNOWN_ATTRIBUTE("Unknown stamp attribute: ID %1$#x"),
+
+        /**
+         * Failed to parse the SigningCertificateLineage structure in the source stamp
+         * attributes section.
+         */
+        SOURCE_STAMP_MALFORMED_LINEAGE("Failed to parse the SigningCertificateLineage "
+                + "structure in the source stamp attributes section."),
+
+        /**
+         * The source stamp certificate does not match the terminal node in the provided
+         * proof-of-rotation structure describing the stamp certificate history.
+         */
+        SOURCE_STAMP_POR_CERT_MISMATCH(
+                "APK signing certificate differs from the associated certificate found in the "
+                        + "signer's SigningCertificateLineage."),
+
+        /**
+         * The source stamp SigningCertificateLineage attribute contains a proof-of-rotation record
+         * with signature(s) that did not verify.
+         */
+        SOURCE_STAMP_POR_DID_NOT_VERIFY("Source stamp SigningCertificateLineage attribute "
+                + "contains a proof-of-rotation record with signature(s) that did not verify."),
+
+        /**
          * The APK could not be properly parsed due to a ZIP or APK format exception.
          * <ul>
          *     <li>Parameter 1: The {@code Exception} caught when attempting to parse the APK.
@@ -2777,7 +2829,7 @@ public class ApkVerifier {
          */
         MALFORMED_APK(
                 "Malformed APK; the following exception was caught when attempting to parse the "
-                + "APK: %1$s"),
+                        + "APK: %1$s"),
 
         /**
          * An unexpected exception was caught when attempting to verify the signature(s) within the
@@ -2932,7 +2984,6 @@ public class ApkVerifier {
          * {@code android:minSdkVersion} attributes in the APK's {@code AndroidManifest.xml}.
          *
          * @param minSdkVersion API Level of the oldest platform for which to verify the APK
-         *
          * @see #setMinCheckedPlatformVersion(int)
          */
         public Builder setMinCheckedPlatformVersion(int minSdkVersion) {
@@ -2948,7 +2999,6 @@ public class ApkVerifier {
          * {@link #setMinCheckedPlatformVersion(int)}.
          *
          * @param maxSdkVersion API Level of the newest platform for which to verify the APK
-         *
          * @see #setMinCheckedPlatformVersion(int)
          */
         public Builder setMaxCheckedPlatformVersion(int maxSdkVersion) {
@@ -2980,7 +3030,8 @@ public class ApkVerifier {
      * IssueWithParams} equivalent.
      */
     public static class ApkVerificationIssueAdapter {
-        private ApkVerificationIssueAdapter() {}
+        private ApkVerificationIssueAdapter() {
+        }
 
         private static final Map<Integer, Issue> sVerificationIssueIdToIssue = new HashMap<>();
 
@@ -3051,6 +3102,16 @@ public class ApkVerifier {
                     Issue.UNEXPECTED_EXCEPTION);
             sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_SIG_MISSING,
                     Issue.SOURCE_STAMP_SIG_MISSING);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_MALFORMED_ATTRIBUTE,
+                    Issue.SOURCE_STAMP_MALFORMED_ATTRIBUTE);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_UNKNOWN_ATTRIBUTE,
+                    Issue.SOURCE_STAMP_UNKNOWN_ATTRIBUTE);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_MALFORMED_LINEAGE,
+                    Issue.SOURCE_STAMP_MALFORMED_LINEAGE);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_POR_CERT_MISMATCH,
+                    Issue.SOURCE_STAMP_POR_CERT_MISMATCH);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_POR_DID_NOT_VERIFY,
+                    Issue.SOURCE_STAMP_POR_DID_NOT_VERIFY);
         }
 
         /**
