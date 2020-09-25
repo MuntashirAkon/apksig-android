@@ -29,6 +29,7 @@ import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.stamp.V2SourceStampSigner;
 import com.android.apksig.internal.apk.v1.DigestAlgorithm;
+import com.android.apksig.internal.apk.v1.V1SchemeConstants;
 import com.android.apksig.internal.apk.v1.V1SchemeSigner;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
@@ -549,7 +550,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             case OUTPUT:
                 return new InputJarEntryInstructions(InputJarEntryInstructions.OutputPolicy.OUTPUT);
             case OUTPUT_BY_ENGINE:
-                if (V1SchemeSigner.MANIFEST_ENTRY_NAME.equals(entryName)) {
+                if (V1SchemeConstants.MANIFEST_ENTRY_NAME.equals(entryName)) {
                     // We copy the main section of the JAR manifest from input to output. Thus, this
                     // invalidates v1 signature and we need to see the entry's data.
                     mInputJarManifestEntryDataRequest = new GetJarEntryDataRequest(entryName);
@@ -617,7 +618,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             // the entry's data is as output by the engine.
             invalidateV1Signature();
             GetJarEntryDataRequest dataRequest;
-            if (V1SchemeSigner.MANIFEST_ENTRY_NAME.equals(entryName)) {
+            if (V1SchemeConstants.MANIFEST_ENTRY_NAME.equals(entryName)) {
                 dataRequest = new GetJarEntryDataRequest(entryName);
                 mInputJarManifestEntryDataRequest = dataRequest;
             } else {
@@ -752,7 +753,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     V1SchemeSigner.generateManifestFile(
                             mV1ContentDigestAlgorithm, mOutputJarEntryDigests, inputJarManifest);
             byte[] emittedSignatureManifest =
-                    mEmittedSignatureJarEntryData.get(V1SchemeSigner.MANIFEST_ENTRY_NAME);
+                    mEmittedSignatureJarEntryData.get(V1SchemeConstants.MANIFEST_ENTRY_NAME);
             if (!Arrays.equals(newManifest.contents, emittedSignatureManifest)) {
                 // Emitted v1 signature is no longer valid.
                 try {

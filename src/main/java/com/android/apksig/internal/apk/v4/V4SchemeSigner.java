@@ -17,8 +17,8 @@
 package com.android.apksig.internal.apk.v4;
 
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeCertificates;
-import static com.android.apksig.internal.apk.v2.V2SchemeSigner.APK_SIGNATURE_SCHEME_V2_BLOCK_ID;
-import static com.android.apksig.internal.apk.v3.V3SchemeSigner.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
+import static com.android.apksig.internal.apk.v2.V2SchemeConstants.APK_SIGNATURE_SCHEME_V2_BLOCK_ID;
+import static com.android.apksig.internal.apk.v3.V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;

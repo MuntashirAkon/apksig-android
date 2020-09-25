@@ -23,7 +23,7 @@ import static org.junit.Assert.fail;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
-import com.android.apksig.internal.apk.v3.V3SchemeSigner;
+import com.android.apksig.internal.apk.v3.V3SchemeConstants;
 import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.util.ByteBufferUtils;
 import com.android.apksig.internal.util.Resources;
@@ -258,7 +258,7 @@ public class SigningCertificateLineageTest {
         assertEquals(
                 "The ID of the v3SignerAttribute ByteBuffer is not the expected "
                         + "PROOF_OF_ROTATION_ATTR_ID",
-                V3SchemeSigner.PROOF_OF_ROTATION_ATTR_ID, id);
+                V3SchemeConstants.PROOF_OF_ROTATION_ATTR_ID, id);
         lineage = SigningCertificateLineage.readFromV3AttributeValue(
                 ByteBufferUtils.toByteArray(attribute));
         assertLineageContainsExpectedSigners(lineage, mSigners);
