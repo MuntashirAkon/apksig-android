@@ -147,8 +147,9 @@ public class ApkSignerTool {
         int maxSdkVersion = Integer.MAX_VALUE;
         List<SignerParams> signers = new ArrayList<>(1);
         SignerParams signerParams = new SignerParams();
-        SignerParams sourceStampSignerParams = new SignerParams();
         SigningCertificateLineage lineage = null;
+        SignerParams sourceStampSignerParams = new SignerParams();
+        SigningCertificateLineage sourceStampLineage = null;
         List<ProviderInstallSpec> providers = new ArrayList<>();
         ProviderInstallSpec providerParams = new ProviderInstallSpec();
         OptionsParser optionsParser = new OptionsParser(params);
@@ -252,6 +253,10 @@ public class ApkSignerTool {
             } else if ("stamp-signer".equals(optionName)) {
                 sourceStampFlagFound = true;
                 sourceStampSignerParams = processSignerParams(optionsParser);
+            } else if ("stamp-lineage".equals(optionName)) {
+                File stampLineageFile = new File(
+                        optionsParser.getRequiredValue("Stamp Lineage File"));
+                sourceStampLineage = getLineageFromInputFile(stampLineageFile);
             } else {
                 throw new ParameterException(
                         "Unsupported option: " + optionOriginalForm + ". See --help for supported"
@@ -358,7 +363,8 @@ public class ApkSignerTool {
             apkSignerBuilder.setV4SignatureOutputFile(outputV4SignatureFile);
         }
         if (sourceStampSignerConfig != null) {
-            apkSignerBuilder.setSourceStampSignerConfig(sourceStampSignerConfig);
+            apkSignerBuilder.setSourceStampSignerConfig(sourceStampSignerConfig)
+                    .setSourceStampSigningCertificateLineage(sourceStampLineage);
         }
         ApkSigner apkSigner = apkSignerBuilder.build();
         try {
@@ -578,7 +584,7 @@ public class ApkSignerTool {
         }
 
         @SuppressWarnings("resource") // false positive -- this resource is not opened here
-        PrintStream warningsOut = warningsTreatedAsErrors ? System.err : System.out;
+                PrintStream warningsOut = warningsTreatedAsErrors ? System.err : System.out;
         for (ApkVerifier.IssueWithParams warning : result.getWarnings()) {
             warningsEncountered = true;
             warningsOut.println("WARNING: " + warning);
@@ -976,10 +982,10 @@ public class ApkSignerTool {
 
     private static void printUsage(String page) {
         try (BufferedReader in =
-                new BufferedReader(
-                        new InputStreamReader(
-                                ApkSignerTool.class.getResourceAsStream(page),
-                                StandardCharsets.UTF_8))) {
+                     new BufferedReader(
+                             new InputStreamReader(
+                                     ApkSignerTool.class.getResourceAsStream(page),
+                                     StandardCharsets.UTF_8))) {
             String line;
             while ((line = in.readLine()) != null) {
                 System.out.println(line);
@@ -996,7 +1002,6 @@ public class ApkSignerTool {
      * @param name    the name to be used to identify the certificate.
      * @param verbose boolean indicating whether public key details from the certificate should be
      *                displayed.
-     *
      * @throws NoSuchAlgorithmException     if an instance of MD5, SHA-1, or SHA-256 cannot be
      *                                      obtained.
      * @throws CertificateEncodingException if an error is encountered when encoding the
