@@ -1643,9 +1643,9 @@ public class ApkVerifier {
 
             private SourceStampInfo(ApkSignerInfo result) {
                 mCertificates = result.certs;
-                mErrors = ApkVerificationErrorAdapter.getIssuesFromVerificationIssues(
+                mErrors = ApkVerificationIssueAdapter.getIssuesFromVerificationIssues(
                         result.getErrors());
-                mWarnings = ApkVerificationErrorAdapter.getIssuesFromVerificationIssues(
+                mWarnings = ApkVerificationIssueAdapter.getIssuesFromVerificationIssues(
                         result.getWarnings());
                 if (mErrors.isEmpty() && mWarnings.isEmpty()) {
                     mSourceStampVerificationStatus = SourceStampVerificationStatus.STAMP_VERIFIED;
@@ -2976,10 +2976,12 @@ public class ApkVerifier {
     }
 
     /**
-     * Adapter for converting base ApkVerificationError instances to their IssueWithParams
-     * equivalent.
+     * Adapter for converting base {@link ApkVerificationIssue} instances to their {@link
+     * IssueWithParams} equivalent.
      */
-    public static class ApkVerificationErrorAdapter {
+    public static class ApkVerificationIssueAdapter {
+        private ApkVerificationIssueAdapter() {}
+
         private static final Map<Integer, Issue> sVerificationIssueIdToIssue = new HashMap<>();
 
         static {
@@ -3053,8 +3055,7 @@ public class ApkVerifier {
 
         /**
          * Converts the provided {@code verificationIssues} to a {@code List} of corresponding
-         *
-         * @link IssueWithParams} instances.
+         * {@link IssueWithParams} instances.
          */
         public static List<IssueWithParams> getIssuesFromVerificationIssues(
                 List<? extends ApkVerificationIssue> verificationIssues) {
