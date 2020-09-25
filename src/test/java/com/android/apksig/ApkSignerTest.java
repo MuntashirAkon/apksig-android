@@ -31,10 +31,10 @@ import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.SignatureInfo;
-import com.android.apksig.internal.apk.stamp.V2SourceStampSigner;
+import com.android.apksig.internal.apk.stamp.SourceStampConstants;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
-import com.android.apksig.internal.apk.v2.V2SchemeSigner;
-import com.android.apksig.internal.apk.v3.V3SchemeSigner;
+import com.android.apksig.internal.apk.v2.V2SchemeConstants;
+import com.android.apksig.internal.apk.v3.V3SchemeConstants;
 import com.android.apksig.internal.asn1.Asn1BerParser;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.Resources;
@@ -1205,10 +1205,10 @@ public class ApkSignerTest {
         int signatureVersionBlockId;
         switch (signatureVersionId) {
             case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2:
-                signatureVersionBlockId = V2SchemeSigner.APK_SIGNATURE_SCHEME_V2_BLOCK_ID;
+                signatureVersionBlockId = V2SchemeConstants.APK_SIGNATURE_SCHEME_V2_BLOCK_ID;
                 break;
             case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3:
-                signatureVersionBlockId = V3SchemeSigner.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
+                signatureVersionBlockId = V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
                 break;
             default:
                 throw new Exception(
@@ -1346,7 +1346,7 @@ public class ApkSignerTest {
                 getSignatureInfoFromApk(
                         signedApk,
                         ApkSigningBlockUtils.VERSION_SOURCE_STAMP,
-                        V2SourceStampSigner.V2_SOURCE_STAMP_BLOCK_ID);
+                        SourceStampConstants.V2_SOURCE_STAMP_BLOCK_ID);
         assertNotNull(signatureInfo.signatureBlock);
         assertTrue(result.isSourceStampVerified());
     }
