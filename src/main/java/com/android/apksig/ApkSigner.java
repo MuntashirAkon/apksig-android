@@ -86,6 +86,7 @@ public class ApkSigner {
 
     private final List<SignerConfig> mSignerConfigs;
     private final SignerConfig mSourceStampSignerConfig;
+    private final SigningCertificateLineage mSourceStampSigningCertificateLineage;
     private final boolean mForceSourceStampOverwrite;
     private final Integer mMinSdkVersion;
     private final boolean mV1SigningEnabled;
@@ -114,6 +115,7 @@ public class ApkSigner {
     private ApkSigner(
             List<SignerConfig> signerConfigs,
             SignerConfig sourceStampSignerConfig,
+            SigningCertificateLineage sourceStampSigningCertificateLineage,
             boolean forceSourceStampOverwrite,
             Integer minSdkVersion,
             boolean v1SigningEnabled,
@@ -136,6 +138,7 @@ public class ApkSigner {
 
         mSignerConfigs = signerConfigs;
         mSourceStampSignerConfig = sourceStampSignerConfig;
+        mSourceStampSigningCertificateLineage = sourceStampSigningCertificateLineage;
         mForceSourceStampOverwrite = forceSourceStampOverwrite;
         mMinSdkVersion = minSdkVersion;
         mV1SigningEnabled = v1SigningEnabled;
@@ -303,6 +306,10 @@ public class ApkSigner {
                                         mSourceStampSignerConfig.getPrivateKey(),
                                         mSourceStampSignerConfig.getCertificates())
                                 .build());
+            }
+            if (mSourceStampSigningCertificateLineage != null) {
+                signerEngineBuilder.setSourceStampSigningCertificateLineage(
+                        mSourceStampSigningCertificateLineage);
             }
             signerEngine = signerEngineBuilder.build();
         }
@@ -1022,6 +1029,7 @@ public class ApkSigner {
     public static class Builder {
         private final List<SignerConfig> mSignerConfigs;
         private SignerConfig mSourceStampSignerConfig;
+        private SigningCertificateLineage mSourceStampSigningCertificateLineage;
         private boolean mForceSourceStampOverwrite = false;
         private boolean mV1SigningEnabled = true;
         private boolean mV2SigningEnabled = true;
@@ -1097,6 +1105,16 @@ public class ApkSigner {
         /** Sets the signing configuration of the source stamp to be embedded in the APK. */
         public Builder setSourceStampSignerConfig(SignerConfig sourceStampSignerConfig) {
             mSourceStampSignerConfig = sourceStampSignerConfig;
+            return this;
+        }
+
+        /**
+         * Sets the source stamp {@link SigningCertificateLineage}. This structure provides proof of
+         * signing certificate rotation for certificates previously used to sign source stamps.
+         */
+        public Builder setSourceStampSigningCertificateLineage(
+                SigningCertificateLineage sourceStampSigningCertificateLineage) {
+            mSourceStampSigningCertificateLineage = sourceStampSigningCertificateLineage;
             return this;
         }
 
@@ -1465,6 +1483,7 @@ public class ApkSigner {
             return new ApkSigner(
                     mSignerConfigs,
                     mSourceStampSignerConfig,
+                    mSourceStampSigningCertificateLineage,
                     mForceSourceStampOverwrite,
                     mMinSdkVersion,
                     mV1SigningEnabled,
