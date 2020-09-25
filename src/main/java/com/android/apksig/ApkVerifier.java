@@ -3033,7 +3033,8 @@ public class ApkVerifier {
         private ApkVerificationIssueAdapter() {
         }
 
-        private static final Map<Integer, Issue> sVerificationIssueIdToIssue = new HashMap<>();
+        // This field is visible for testing
+        static final Map<Integer, Issue> sVerificationIssueIdToIssue = new HashMap<>();
 
         static {
             sVerificationIssueIdToIssue.put(ApkVerificationIssue.V2_SIG_MALFORMED_SIGNERS,
@@ -3112,6 +3113,10 @@ public class ApkVerifier {
                     Issue.SOURCE_STAMP_POR_CERT_MISMATCH);
             sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_POR_DID_NOT_VERIFY,
                     Issue.SOURCE_STAMP_POR_DID_NOT_VERIFY);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.JAR_SIG_NO_SIGNATURES,
+                    Issue.JAR_SIG_NO_SIGNATURES);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.JAR_SIG_PARSE_EXCEPTION,
+                    Issue.JAR_SIG_PARSE_EXCEPTION);
         }
 
         /**
