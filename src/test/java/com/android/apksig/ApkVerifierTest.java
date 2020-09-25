@@ -1548,8 +1548,8 @@ public class ApkVerifierTest {
 
     private static void assertSourceStampVerificationStatus(ApkVerifier.Result result,
             SourceStampVerificationStatus verificationStatus) throws Exception {
-        assertEquals(result.getSourceStampInfo().getSourceStampVerificationStatus(),
-                verificationStatus);
+        assertEquals(verificationStatus,
+                result.getSourceStampInfo().getSourceStampVerificationStatus());
     }
 
     private void assertVerificationFailure(
