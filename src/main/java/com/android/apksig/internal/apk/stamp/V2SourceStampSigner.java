@@ -51,9 +51,6 @@ import java.util.Map;
  * <p>V2 of the source stamp allows signing the digests of more than one signature schemes.
  */
 public abstract class V2SourceStampSigner {
-
-    public static final int V2_SOURCE_STAMP_BLOCK_ID = 0x6dff800d;
-
     /** Hidden constructor to prevent instantiation. */
     private V2SourceStampSigner() {}
 
@@ -111,8 +108,8 @@ public abstract class V2SourceStampSigner {
 
         // FORMAT:
         // * length-prefixed stamp block.
-        return Pair.of(
-                encodeAsLengthPrefixedElement(sourceStampSignerBlock), V2_SOURCE_STAMP_BLOCK_ID);
+        return Pair.of(encodeAsLengthPrefixedElement(sourceStampSignerBlock),
+                SourceStampConstants.V2_SOURCE_STAMP_BLOCK_ID);
     }
 
     private static void getSignedDigestsFor(
