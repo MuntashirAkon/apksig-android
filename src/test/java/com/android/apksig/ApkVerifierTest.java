@@ -36,6 +36,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -1301,6 +1303,31 @@ public class ApkVerifierTest {
                 SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
         assertSourceStampVerificationFailure(verificationResult,
                 Issue.SOURCE_STAMP_POR_CERT_MISMATCH);
+    }
+
+    @Test
+    public void apkVerificationIssueAdapter_verifyAllBaseIssuesMapped() throws Exception {
+        Field[] fields = ApkVerificationIssue.class.getFields();
+        StringBuilder msg = new StringBuilder();
+        for (Field field : fields) {
+            // All public static int fields in the ApkVerificationIssue class should be issue IDs;
+            // if any are added that are not intended as IDs a filter set should be applied to this
+            // test.
+            if (Modifier.isStatic(field.getModifiers()) && field.getType() == int.class) {
+                if (!ApkVerifier.ApkVerificationIssueAdapter
+                        .sVerificationIssueIdToIssue.containsKey(field.get(null))) {
+                    if (msg.length() > 0) {
+                        msg.append('\n');
+                    }
+                    msg.append(
+                            "A mapping is required from ApkVerificationIssue." + field.getName()
+                                    + " to an ApkVerifier.Issue in ApkVerificationIssueAdapter");
+                }
+            }
+        }
+        if (msg.length() > 0) {
+            fail(msg.toString());
+        }
     }
 
     private ApkVerifier.Result verify(String apkFilenameInResources)
