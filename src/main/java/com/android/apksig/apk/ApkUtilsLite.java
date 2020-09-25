@@ -33,6 +33,8 @@ import java.security.NoSuchAlgorithmException;
  * functionality.
  */
 public class ApkUtilsLite {
+    private ApkUtilsLite() {}
+
     /**
      * Finds the main ZIP sections of the provided APK.
      *
