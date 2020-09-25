@@ -616,6 +616,7 @@ public class SourceStampVerifier {
          */
         public static class SourceStampInfo {
             private final List<X509Certificate> mCertificates;
+            private final List<X509Certificate> mCertificateLineage;
 
             private final List<ApkVerificationIssue> mErrors = new ArrayList<>();
             private final List<ApkVerificationIssue> mWarnings = new ArrayList<>();
@@ -631,6 +632,7 @@ public class SourceStampVerifier {
 
             private SourceStampInfo(ApkSignerInfo result) {
                 mCertificates = result.certs;
+                mCertificateLineage = result.certificateLineage;
                 mErrors.addAll(result.getErrors());
                 mWarnings.addAll(result.getWarnings());
             }
