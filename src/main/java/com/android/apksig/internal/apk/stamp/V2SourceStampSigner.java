@@ -33,6 +33,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -81,7 +82,7 @@ public abstract class V2SourceStampSigner {
                 signatureSchemeDigestInfos,
                 sourceStampSignerConfig,
                 signatureSchemeDigests);
-        signatureSchemeDigests.sort(Comparator.comparing(Pair::getFirst));
+        Collections.sort(signatureSchemeDigests, Comparator.comparing(Pair::getFirst));
 
         SourceStampBlock sourceStampBlock = new SourceStampBlock();
 
@@ -130,7 +131,7 @@ public abstract class V2SourceStampSigner {
         for (Map.Entry<ContentDigestAlgorithm, byte[]> digest : digestInfo.entrySet()) {
             digests.add(Pair.of(digest.getKey().getId(), digest.getValue()));
         }
-        digests.sort(Comparator.comparing(Pair::getFirst));
+        Collections.sort(digests, Comparator.comparing(Pair::getFirst));
 
         // FORMAT:
         // * length-prefixed sequence of length-prefixed digests:
