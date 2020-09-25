@@ -138,7 +138,7 @@ class SourceStampVerifier {
                     sourceStampCertificate,
                     signedSignatureSchemeData.get(signatureSchemeApkDigest.getKey()),
                     result);
-            if (result.containsWarnings() || result.containsWarnings()) {
+            if (result.containsWarnings() || result.containsErrors()) {
                 return;
             }
         }
