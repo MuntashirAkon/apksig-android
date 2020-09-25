@@ -112,6 +112,10 @@ public class ApkVerificationIssue {
      * with signature(s) that did not verify.
      */
     public static final int SOURCE_STAMP_POR_DID_NOT_VERIFY = 35;
+    /** No V1 / jar signing signature blocks were found in the APK. */
+    public static final int JAR_SIG_NO_SIGNATURES = 36;
+    /** An exception was encountered when parsing the V1 / jar signer in the signature block. */
+    public static final int JAR_SIG_PARSE_EXCEPTION = 37;
 
     private final int mIssueId;
     private final String mFormat;
