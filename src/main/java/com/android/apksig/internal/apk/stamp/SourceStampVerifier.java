@@ -15,18 +15,25 @@
  */
 package com.android.apksig.internal.apk.stamp;
 
+import static com.android.apksig.internal.apk.ApkSigningBlockUtilsLite.getLengthPrefixedSlice;
+import static com.android.apksig.internal.apk.ApkSigningBlockUtilsLite.getSignaturesToVerify;
+import static com.android.apksig.internal.apk.ApkSigningBlockUtilsLite.readLengthPrefixedByteArray;
+import static com.android.apksig.internal.apk.ApkSigningBlockUtilsLite.toHex;
+
 import com.android.apksig.ApkVerificationIssue;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.internal.apk.ApkSignerInfo;
-import com.android.apksig.internal.apk.ApkSigningBlockUtilsLite;
 import com.android.apksig.internal.apk.ApkSupportedSignature;
 import com.android.apksig.internal.apk.NoApkSupportedSignaturesException;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
+import com.android.apksig.internal.apk.v3.V3SigningCertificateLineage;
+import com.android.apksig.internal.util.ByteBufferUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 
 import java.io.ByteArrayInputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -56,7 +63,8 @@ import java.util.Map;
  */
 class SourceStampVerifier {
     /** Hidden constructor to prevent instantiation. */
-    private SourceStampVerifier() {}
+    private SourceStampVerifier() {
+    }
 
     /**
      * Parses the SourceStamp block and populates the {@code result}.
@@ -83,12 +91,13 @@ class SourceStampVerifier {
             return;
         }
 
+        ByteBuffer apkDigestSignatures = getLengthPrefixedSlice(sourceStampBlockData);
         verifySourceStampSignature(
                 apkDigest,
                 minSdkVersion,
                 maxSdkVersion,
                 sourceStampCertificate,
-                sourceStampBlockData,
+                apkDigestSignatures,
                 result);
     }
 
@@ -118,14 +127,13 @@ class SourceStampVerifier {
         }
 
         // Parse signed signature schemes block.
-        ByteBuffer signedSignatureSchemes =
-                ApkSigningBlockUtilsLite.getLengthPrefixedSlice(sourceStampBlockData);
+        ByteBuffer signedSignatureSchemes = getLengthPrefixedSlice(sourceStampBlockData);
         Map<Integer, ByteBuffer> signedSignatureSchemeData = new HashMap<>();
         while (signedSignatureSchemes.hasRemaining()) {
-            ByteBuffer signedSignatureScheme =
-                    ApkSigningBlockUtilsLite.getLengthPrefixedSlice(signedSignatureSchemes);
+            ByteBuffer signedSignatureScheme = getLengthPrefixedSlice(signedSignatureSchemes);
             int signatureSchemeId = signedSignatureScheme.getInt();
-            signedSignatureSchemeData.put(signatureSchemeId, signedSignatureScheme);
+            ByteBuffer apkDigestSignatures = getLengthPrefixedSlice(signedSignatureScheme);
+            signedSignatureSchemeData.put(signatureSchemeId, apkDigestSignatures);
         }
 
         for (Map.Entry<Integer, byte[]> signatureSchemeApkDigest :
@@ -145,6 +153,23 @@ class SourceStampVerifier {
                 return;
             }
         }
+
+        if (sourceStampBlockData.hasRemaining()) {
+            // The stamp block contains some additional attributes.
+            ByteBuffer stampAttributeData = getLengthPrefixedSlice(sourceStampBlockData);
+            ByteBuffer stampAttributeDataSignatures = getLengthPrefixedSlice(sourceStampBlockData);
+
+            byte[] stampAttributeBytes = new byte[stampAttributeData.remaining()];
+            stampAttributeData.get(stampAttributeBytes);
+            stampAttributeData.flip();
+
+            verifySourceStampSignature(stampAttributeBytes, minSdkVersion, maxSdkVersion,
+                    sourceStampCertificate, stampAttributeDataSignatures, result);
+            if (result.containsErrors() || result.containsWarnings()) {
+                return;
+            }
+            parseStampAttributes(stampAttributeData, sourceStampCertificate, result);
+        }
     }
 
     private static X509Certificate verifySourceStampCertificate(
@@ -154,8 +179,7 @@ class SourceStampVerifier {
             ApkSignerInfo result)
             throws NoSuchAlgorithmException, ApkFormatException {
         // Parse the SourceStamp certificate.
-        byte[] sourceStampEncodedCertificate =
-                ApkSigningBlockUtilsLite.readLengthPrefixedByteArray(sourceStampBlockData);
+        byte[] sourceStampEncodedCertificate = readLengthPrefixedByteArray(sourceStampBlockData);
         X509Certificate sourceStampCertificate;
         try {
             sourceStampCertificate = (X509Certificate) certFactory.generateCertificate(
@@ -181,35 +205,34 @@ class SourceStampVerifier {
             result.addWarning(
                     ApkVerificationIssue
                             .SOURCE_STAMP_CERTIFICATE_MISMATCH_BETWEEN_SIGNATURE_BLOCK_AND_APK,
-                    ApkSigningBlockUtilsLite.toHex(sourceStampBlockCertificateDigest),
-                    ApkSigningBlockUtilsLite.toHex(sourceStampCertificateDigest));
+                    toHex(sourceStampBlockCertificateDigest),
+                    toHex(sourceStampCertificateDigest));
             return null;
         }
         return sourceStampCertificate;
     }
 
     private static void verifySourceStampSignature(
-            byte[] apkDigest,
+            byte[] data,
             int minSdkVersion,
             int maxSdkVersion,
             X509Certificate sourceStampCertificate,
-            ByteBuffer signedData,
-            ApkSignerInfo result)
-            throws ApkFormatException {
+            ByteBuffer signatures,
+            ApkSignerInfo result) {
         // Parse the signatures block and identify supported signatures
-        ByteBuffer signatures = ApkSigningBlockUtilsLite.getLengthPrefixedSlice(signedData);
         int signatureCount = 0;
         List<ApkSupportedSignature> supportedSignatures = new ArrayList<>(1);
         while (signatures.hasRemaining()) {
             signatureCount++;
             try {
-                ByteBuffer signature = ApkSigningBlockUtilsLite.getLengthPrefixedSlice(signatures);
+                ByteBuffer signature = getLengthPrefixedSlice(signatures);
                 int sigAlgorithmId = signature.getInt();
-                byte[] sigBytes = ApkSigningBlockUtilsLite.readLengthPrefixedByteArray(signature);
+                byte[] sigBytes = readLengthPrefixedByteArray(signature);
                 SignatureAlgorithm signatureAlgorithm = SignatureAlgorithm.findById(sigAlgorithmId);
                 if (signatureAlgorithm == null) {
                     result.addWarning(
-                            ApkVerificationIssue.SOURCE_STAMP_UNKNOWN_SIG_ALGORITHM, sigAlgorithmId);
+                            ApkVerificationIssue.SOURCE_STAMP_UNKNOWN_SIG_ALGORITHM,
+                            sigAlgorithmId);
                     continue;
                 }
                 supportedSignatures.add(
@@ -228,7 +251,7 @@ class SourceStampVerifier {
         List<ApkSupportedSignature> signaturesToVerify;
         try {
             signaturesToVerify =
-                    ApkSigningBlockUtilsLite.getSignaturesToVerify(
+                    getSignaturesToVerify(
                             supportedSignatures, minSdkVersion, maxSdkVersion, true);
         } catch (NoApkSupportedSignaturesException e) {
             // To facilitate debugging capture the signature algorithms and resulting exception in
@@ -257,7 +280,7 @@ class SourceStampVerifier {
                 if (jcaSignatureAlgorithmParams != null) {
                     sig.setParameter(jcaSignatureAlgorithmParams);
                 }
-                sig.update(apkDigest);
+                sig.update(data);
                 byte[] sigBytes = signature.signature;
                 if (!sig.verify(sigBytes)) {
                     result.addWarning(
@@ -272,6 +295,54 @@ class SourceStampVerifier {
                         ApkVerificationIssue.SOURCE_STAMP_VERIFY_EXCEPTION, signatureAlgorithm, e);
                 return;
             }
+        }
+    }
+
+    private static void parseStampAttributes(ByteBuffer stampAttributeData,
+            X509Certificate sourceStampCertificate, ApkSignerInfo result)
+            throws ApkFormatException {
+        ByteBuffer stampAttributes = getLengthPrefixedSlice(stampAttributeData);
+        int stampAttributeCount = 0;
+        while (stampAttributes.hasRemaining()) {
+            stampAttributeCount++;
+            try {
+                ByteBuffer attribute = getLengthPrefixedSlice(stampAttributes);
+                int id = attribute.getInt();
+                byte[] value = ByteBufferUtils.toByteArray(attribute);
+                if (id == SourceStampConstants.PROOF_OF_ROTATION_ATTR_ID) {
+                    readStampCertificateLineage(value, sourceStampCertificate, result);
+                } else {
+                    result.addWarning(ApkVerificationIssue.SOURCE_STAMP_UNKNOWN_ATTRIBUTE, id);
+                }
+            } catch (ApkFormatException | BufferUnderflowException e) {
+                result.addWarning(ApkVerificationIssue.SOURCE_STAMP_MALFORMED_ATTRIBUTE,
+                        stampAttributeCount);
+                return;
+            }
+        }
+    }
+
+    private static void readStampCertificateLineage(byte[] lineageBytes,
+            X509Certificate sourceStampCertificate, ApkSignerInfo result) {
+        try {
+            // SigningCertificateLineage is verified when built
+            List<V3SigningCertificateLineage.SigningCertificateNode> nodes =
+                    V3SigningCertificateLineage.readSigningCertificateLineage(
+                            ByteBuffer.wrap(lineageBytes).order(ByteOrder.LITTLE_ENDIAN));
+            for (int i = 0; i < nodes.size(); i++) {
+                result.certificateLineage.add(nodes.get(i).signingCert);
+            }
+            // Make sure that the last cert in the chain matches this signer cert
+            if (!sourceStampCertificate.equals(
+                    result.certificateLineage.get(result.certificateLineage.size() - 1))) {
+                result.addWarning(ApkVerificationIssue.SOURCE_STAMP_POR_CERT_MISMATCH);
+            }
+        } catch (SecurityException e) {
+            result.addWarning(ApkVerificationIssue.SOURCE_STAMP_POR_DID_NOT_VERIFY);
+        } catch (IllegalArgumentException e) {
+            result.addWarning(ApkVerificationIssue.SOURCE_STAMP_POR_CERT_MISMATCH);
+        } catch (Exception e) {
+            result.addWarning(ApkVerificationIssue.SOURCE_STAMP_MALFORMED_LINEAGE);
         }
     }
 }

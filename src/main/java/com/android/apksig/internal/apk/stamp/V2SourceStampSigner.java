@@ -178,13 +178,10 @@ public abstract class V2SourceStampSigner {
     }
 
     private static byte[] encodeStampAttributes(Map<Integer, byte[]> stampAttributes) {
-        if (stampAttributes == null || stampAttributes.isEmpty()) {
-            return new byte[0];
-        }
-
         int payloadSize = 0;
         for (byte[] attributeValue : stampAttributes.values()) {
-            payloadSize += 4 + attributeValue.length;
+            // Pair size + Attribute ID + Attribute value
+            payloadSize += 4 + 4 + attributeValue.length;
         }
 
         // FORMAT (little endian):
@@ -195,6 +192,8 @@ public abstract class V2SourceStampSigner {
         result.order(ByteOrder.LITTLE_ENDIAN);
         result.putInt(payloadSize);
         for (Map.Entry<Integer, byte[]> stampAttribute : stampAttributes.entrySet()) {
+            // Pair size
+            result.putInt(4 + stampAttribute.getValue().length);
             result.putInt(stampAttribute.getKey());
             result.put(stampAttribute.getValue());
         }
