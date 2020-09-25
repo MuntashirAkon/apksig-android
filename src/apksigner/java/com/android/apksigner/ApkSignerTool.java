@@ -435,10 +435,12 @@ public class ApkSignerTool {
         boolean printCerts = false;
         boolean verbose = false;
         boolean warningsTreatedAsErrors = false;
+        boolean verifySourceStamp = false;
         File v4SignatureFile = null;
         OptionsParser optionsParser = new OptionsParser(params);
         String optionName;
         String optionOriginalForm = null;
+        String sourceCertDigest = null;
         while ((optionName = optionsParser.nextOption()) != null) {
             optionOriginalForm = optionsParser.getOptionOriginalForm();
             if ("min-sdk-version".equals(optionName)) {
@@ -461,6 +463,11 @@ public class ApkSignerTool {
                         "Input V4 Signature File"));
             } else if ("in".equals(optionName)) {
                 inputApk = new File(optionsParser.getRequiredValue("Input APK file"));
+            } else if ("verify-source-stamp".equals(optionName)) {
+                verifySourceStamp = optionsParser.getOptionalBooleanValue(true);
+            } else if ("stamp-cert-digest".equals(optionName)) {
+                sourceCertDigest = optionsParser.getRequiredValue(
+                        "Expected source stamp certificate digest");
             } else {
                 throw new ParameterException(
                         "Unsupported option: " + optionOriginalForm + ". See --help for supported"
@@ -513,7 +520,9 @@ public class ApkSignerTool {
         ApkVerifier apkVerifier = apkVerifierBuilder.build();
         ApkVerifier.Result result;
         try {
-            result = apkVerifier.verify();
+            result = verifySourceStamp
+                    ? apkVerifier.verifySourceStamp(sourceCertDigest)
+                    : apkVerifier.verify();
         } catch (MinSdkVersionException e) {
             String msg = e.getMessage();
             if (!msg.endsWith(".")) {
@@ -524,8 +533,9 @@ public class ApkSignerTool {
                             + ". Use --min-sdk-version to override",
                     e);
         }
-        boolean verified = result.isVerified();
 
+        boolean verified = result.isVerified();
+        ApkVerifier.Result.SourceStampInfo sourceStampInfo = result.getSourceStampInfo();
         boolean warningsEncountered = false;
         if (verified) {
             List<X509Certificate> signerCerts = result.getSignerCertificates();
@@ -544,13 +554,19 @@ public class ApkSignerTool {
                         "Verified using v4 scheme (APK Signature Scheme v4): "
                                 + result.isVerifiedUsingV4Scheme());
                 System.out.println("Verified for SourceStamp: " + result.isSourceStampVerified());
-                System.out.println("Number of signers: " + signerCerts.size());
+                if (!verifySourceStamp) {
+                    System.out.println("Number of signers: " + signerCerts.size());
+                }
             }
             if (printCerts) {
                 int signerNumber = 0;
                 for (X509Certificate signerCert : signerCerts) {
                     signerNumber++;
                     printCertificate(signerCert, "Signer #" + signerNumber, verbose);
+                }
+                if (sourceStampInfo != null) {
+                    printCertificate(sourceStampInfo.getCertificate(), "Source Stamp Signer",
+                            verbose);
                 }
             }
         } else {
@@ -602,7 +618,6 @@ public class ApkSignerTool {
             }
         }
 
-        ApkVerifier.Result.SourceStampInfo sourceStampInfo = result.getSourceStampInfo();
         if (sourceStampInfo != null) {
             for (ApkVerifier.IssueWithParams error : sourceStampInfo.getErrors()) {
                 System.err.println("ERROR: SourceStamp: " + error);
