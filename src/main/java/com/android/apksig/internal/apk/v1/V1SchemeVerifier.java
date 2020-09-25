@@ -82,9 +82,6 @@ import java.util.jar.Attributes;
  * @see <a href="https://docs.oracle.com/javase/8/docs/technotes/guides/jar/jar.html#Signed_JAR_File">Signed JAR File</a>
  */
 public abstract class V1SchemeVerifier {
-
-    private static final String MANIFEST_ENTRY_NAME = V1SchemeSigner.MANIFEST_ENTRY_NAME;
-
     private V1SchemeVerifier() {}
 
     /**
@@ -231,7 +228,8 @@ public abstract class V1SchemeVerifier {
                 if (!entryName.startsWith("META-INF/")) {
                     continue;
                 }
-                if ((manifestEntry == null) && (MANIFEST_ENTRY_NAME.equals(entryName))) {
+                if ((manifestEntry == null) && (V1SchemeConstants.MANIFEST_ENTRY_NAME.equals(
+                        entryName))) {
                     manifestEntry = cdRecord;
                     continue;
                 }
@@ -939,7 +937,7 @@ public abstract class V1SchemeVerifier {
                 if (!Arrays.equals(expected, actual)) {
                     mResult.addWarning(
                             Issue.JAR_SIG_ZIP_ENTRY_DIGEST_DID_NOT_VERIFY,
-                            V1SchemeSigner.MANIFEST_ENTRY_NAME,
+                            V1SchemeConstants.MANIFEST_ENTRY_NAME,
                             jcaDigestAlgorithm,
                             mSignatureFileEntry.getName(),
                             Base64.getEncoder().encodeToString(actual),
@@ -1049,7 +1047,7 @@ public abstract class V1SchemeVerifier {
                 Set<Integer> foundApkSigSchemeIds) {
             String signedWithApkSchemes =
                     sfMainSection.getAttributeValue(
-                            V1SchemeSigner.SF_ATTRIBUTE_NAME_ANDROID_APK_SIGNED_NAME_STR);
+                            V1SchemeConstants.SF_ATTRIBUTE_NAME_ANDROID_APK_SIGNED_NAME_STR);
             // This field contains a comma-separated list of APK signature scheme IDs which were
             // used to sign this APK. Android rejects APKs where an ID is known to the platform but
             // the APK didn't verify using that scheme.
@@ -1376,7 +1374,7 @@ public abstract class V1SchemeVerifier {
                             Issue.JAR_SIG_ZIP_ENTRY_DIGEST_DID_NOT_VERIFY,
                             entryName,
                             expectedDigest.jcaDigestAlgorithm,
-                            V1SchemeSigner.MANIFEST_ENTRY_NAME,
+                            V1SchemeConstants.MANIFEST_ENTRY_NAME,
                             Base64.getEncoder().encodeToString(actualDigest),
                             Base64.getEncoder().encodeToString(expectedDigest.digest));
                 }

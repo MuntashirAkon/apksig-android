@@ -1176,6 +1176,27 @@ public class ApkSigningBlockUtils {
     public static List<SupportedSignature> getSignaturesToVerify(
             List<SupportedSignature> signatures, int minSdkVersion, int maxSdkVersion)
             throws NoSupportedSignaturesException {
+        return getSignaturesToVerify(signatures, minSdkVersion, maxSdkVersion, false);
+    }
+
+    /**
+     * Returns the subset of signatures which are expected to be verified by at least one Android
+     * platform version in the {@code [minSdkVersion, maxSdkVersion]} range. The returned result is
+     * guaranteed to contain at least one signature.
+     *
+     * <p>{@code onlyRequireJcaSupport} can be set to true for cases that only require verifying a
+     * signature within the signing block using the standard JCA.
+     *
+     * <p>Each Android platform version typically verifies exactly one signature from the provided
+     * {@code signatures} set. This method returns the set of these signatures collected over all
+     * requested platform versions. As a result, the result may contain more than one signature.
+     *
+     * @throws NoSupportedSignaturesException if no supported signatures were
+     *         found for an Android platform version in the range.
+     */
+    public static List<SupportedSignature> getSignaturesToVerify(
+            List<SupportedSignature> signatures, int minSdkVersion, int maxSdkVersion,
+            boolean onlyRequireJcaSupport) throws NoSupportedSignaturesException {
         // Pick the signature with the strongest algorithm at all required SDK versions, to mimic
         // Android's behavior on those versions.
         //
@@ -1188,7 +1209,8 @@ public class ApkSigningBlockUtils {
         int minProvidedSignaturesVersion = Integer.MAX_VALUE;
         for (SupportedSignature sig : signatures) {
             SignatureAlgorithm sigAlgorithm = sig.algorithm;
-            int sigMinSdkVersion = sigAlgorithm.getMinSdkVersion();
+            int sigMinSdkVersion = onlyRequireJcaSupport ? sigAlgorithm.getJcaSigAlgMinSdkVersion()
+                    : sigAlgorithm.getMinSdkVersion();
             if (sigMinSdkVersion > maxSdkVersion) {
                 continue;
             }
