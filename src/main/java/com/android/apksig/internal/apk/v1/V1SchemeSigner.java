@@ -59,6 +59,8 @@ import java.util.jar.Manifest;
  * @see <a href="https://docs.oracle.com/javase/8/docs/technotes/guides/jar/jar.html#Signed_JAR_File">Signed JAR File</a>
  */
 public abstract class V1SchemeSigner {
+    public static final String MANIFEST_ENTRY_NAME = V1SchemeConstants.MANIFEST_ENTRY_NAME;
+
     private static final Attributes.Name ATTRIBUTE_NAME_CREATED_BY =
             new Attributes.Name("Created-By");
     private static final String ATTRIBUTE_VALUE_MANIFEST_VERSION = "1.0";
