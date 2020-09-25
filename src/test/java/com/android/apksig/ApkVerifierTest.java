@@ -61,7 +61,7 @@ public class ApkVerifierTest {
     private static final String[] EC_KEY_NAMES = {"p256", "p384", "p521"};
     private static final String[] RSA_KEY_NAMES = {"1024", "2048", "3072", "4096", "8192", "16384"};
     private static final String[] RSA_KEY_NAMES_2048_AND_LARGER = {
-        "2048", "3072", "4096", "8192", "16384"
+            "2048", "3072", "4096", "8192", "16384"
     };
 
     private static final String RSA_2048_CERT_SHA256_DIGEST =
@@ -1284,6 +1284,23 @@ public class ApkVerifierTest {
                 SourceStampVerificationStatus.CERT_DIGEST_MISMATCH);
         assertSourceStampVerificationFailure(verificationResult,
                 Issue.SOURCE_STAMP_EXPECTED_DIGEST_MISMATCH);
+    }
+
+    @Test
+    public void verifySourceStamp_validStampLineage() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("stamp-lineage-valid.apk");
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+    }
+
+    @Test
+    public void verifySourceStamp_invalidStampLineage() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("stamp-lineage-invalid.apk");
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
+        assertSourceStampVerificationFailure(verificationResult,
+                Issue.SOURCE_STAMP_POR_CERT_MISMATCH);
     }
 
     private ApkVerifier.Result verify(String apkFilenameInResources)

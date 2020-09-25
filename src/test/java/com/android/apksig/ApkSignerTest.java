@@ -1223,6 +1223,32 @@ public class ApkSignerTest {
         assertSourceStampVerified(signedApk, sourceStampVerificationResult);
     }
 
+    @Test
+    public void testSignApk_stampBlock_withStampLineage() throws Exception {
+        List<ApkSigner.SignerConfig> signersList =
+                Collections.singletonList(
+                        getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
+        ApkSigner.SignerConfig sourceStampSigner =
+                getDefaultSignerConfigFromResources(SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
+        SigningCertificateLineage sourceStampLineage =
+                Resources.toSigningCertificateLineage(
+                        getClass(), LINEAGE_RSA_2048_2_SIGNERS_RESOURCE_NAME);
+
+        File signedApk =
+                sign(
+                        "original.apk",
+                        new ApkSigner.Builder(signersList)
+                                .setV1SigningEnabled(true)
+                                .setV2SigningEnabled(true)
+                                .setV3SigningEnabled(true)
+                                .setSourceStampSignerConfig(sourceStampSigner)
+                                .setSourceStampSigningCertificateLineage(sourceStampLineage));
+
+        ApkVerifier.Result sourceStampVerificationResult =
+                verify(signedApk, /* minSdkVersion= */ null);
+        assertSourceStampVerified(signedApk, sourceStampVerificationResult);
+    }
+
     private RSAPublicKey getRSAPublicKeyFromSigningBlock(File apk, int signatureVersionId)
             throws Exception {
         int signatureVersionBlockId;
@@ -1272,7 +1298,7 @@ public class ApkSignerTest {
     private static SignatureInfo getSignatureInfoFromApk(
             File apkFile, int signatureVersionId, int signatureVersionBlockId)
             throws IOException, ZipFormatException,
-                    ApkSigningBlockUtils.SignatureNotFoundException {
+            ApkSigningBlockUtils.SignatureNotFoundException {
         try (RandomAccessFile f = new RandomAccessFile(apkFile, "r")) {
             DataSource apk = DataSources.asDataSource(f, 0, f.length());
             ApkUtils.ZipSections zipSections = ApkUtils.findZipSections(apk);
@@ -1300,7 +1326,7 @@ public class ApkSignerTest {
         if (out.length() > Integer.MAX_VALUE) {
             throw new RuntimeException("Output too large: " + out.length() + " bytes");
         }
-        byte[] outData = new byte[(int)out.length()];
+        byte[] outData = new byte[(int) out.length()];
         try (FileInputStream fis = new FileInputStream(out)) {
             fis.read(outData);
         }
@@ -1372,7 +1398,7 @@ public class ApkSignerTest {
 
     private static void assertSourceStampVerified(File signedApk, ApkVerifier.Result result)
             throws ApkSigningBlockUtils.SignatureNotFoundException, IOException,
-                    ZipFormatException {
+            ZipFormatException {
         SignatureInfo signatureInfo =
                 getSignatureInfoFromApk(
                         signedApk,

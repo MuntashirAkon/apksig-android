@@ -169,6 +169,21 @@ public class SourceStampVerifierTest {
                 ApkVerificationIssue.SOURCE_STAMP_CERT_DIGEST_AND_SIG_BLOCK_MISSING);
     }
 
+    @Test
+    public void verifySourceStamp_validStampLineage() throws Exception {
+        SourceStampVerifier.Result verificationResult = verifySourceStamp(
+                "stamp-lineage-valid.apk");
+        assertVerified(verificationResult);
+    }
+
+    @Test
+    public void verifySourceStamp_invalidStampLineage() throws Exception {
+        SourceStampVerifier.Result verificationResult = verifySourceStamp(
+                "stamp-lineage-invalid.apk");
+        assertSourceStampVerificationFailure(verificationResult,
+                ApkVerificationIssue.SOURCE_STAMP_POR_CERT_MISMATCH);
+    }
+
     private SourceStampVerifier.Result verifySourceStamp(String apkFilenameInResources)
             throws Exception {
         return verifySourceStamp(apkFilenameInResources, null, null, null);
