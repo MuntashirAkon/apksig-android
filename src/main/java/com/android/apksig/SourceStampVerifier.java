@@ -81,7 +81,7 @@ public class SourceStampVerifier {
     private SourceStampVerifier(
             File apkFile,
             DataSource apkDataSource,
-            Integer minSdkVersion,
+            int minSdkVersion,
             int maxSdkVersion) {
         mApkFile = apkFile;
         mApkDataSource = apkDataSource;
@@ -288,7 +288,7 @@ public class SourceStampVerifier {
             ByteBuffer apkSignatureSchemeBlock,
             int apkSigSchemeVersion,
             Map<ContentDigestAlgorithm, byte[]> apkContentDigests,
-            Result result) throws NoSuchAlgorithmException {
+            Result result) {
         boolean isV2Block = apkSigSchemeVersion == VERSION_APK_SIGNATURE_SCHEME_V2;
         // Both the V2 and V3 signature blocks contain the following:
         // * length-prefixed sequence of length-prefixed signers
@@ -354,7 +354,7 @@ public class SourceStampVerifier {
             CertificateFactory certFactory,
             Map<ContentDigestAlgorithm, byte[]> apkContentDigests,
             Result.SignerInfo signerInfo)
-            throws ApkFormatException, NoSuchAlgorithmException {
+            throws ApkFormatException {
         boolean isV2Signer = apkSigSchemeVersion == VERSION_APK_SIGNATURE_SCHEME_V2;
         // Both the V2 and V3 signer blocks contain the following:
         // * length-prefixed signed data
@@ -627,7 +627,7 @@ public class SourceStampVerifier {
              * should be set to false to ensure only errors trigger a failure verifying the source
              * stamp.
              */
-            private final boolean mWarningsAsErrors = true;
+            private static final boolean mWarningsAsErrors = true;
 
             private SourceStampInfo(ApkSignerInfo result) {
                 mCertificates = result.certs;
