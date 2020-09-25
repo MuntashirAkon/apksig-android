@@ -16,38 +16,16 @@
 
 package com.android.apksig;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.junit.Assume.assumeNoException;
 
-import com.android.apksig.apk.ApkFormatException;
-import com.android.apksig.internal.util.AndroidSdkVersion;
-import com.android.apksig.internal.util.HexEncoding;
 import com.android.apksig.internal.util.Resources;
 import com.android.apksig.util.DataSources;
 
-import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.security.InvalidKeyException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.PublicKey;
-import java.security.Security;
-import java.security.Signature;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
-import java.util.Collection;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @RunWith(JUnit4.class)
 public class SourceStampVerifierTest {
@@ -222,7 +200,7 @@ public class SourceStampVerifierTest {
         return builder.build().verifySourceStamp(expectedCertDigest);
     }
 
-    private void assertVerified(SourceStampVerifier.Result result) {
+    private static void assertVerified(SourceStampVerifier.Result result) {
         if (result.isVerified()) {
             return;
         }
