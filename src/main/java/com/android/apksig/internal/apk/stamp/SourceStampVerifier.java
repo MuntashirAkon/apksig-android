@@ -227,9 +227,19 @@ class SourceStampVerifier {
         try {
             signaturesToVerify =
                     ApkSigningBlockUtils.getSignaturesToVerify(
-                            supportedSignatures, minSdkVersion, maxSdkVersion);
+                            supportedSignatures, minSdkVersion, maxSdkVersion, true);
         } catch (ApkSigningBlockUtils.NoSupportedSignaturesException e) {
-            result.addWarning(ApkVerifier.Issue.SOURCE_STAMP_NO_SUPPORTED_SIGNATURE);
+            // To facilitate debugging capture the signature algorithms and resulting exception in
+            // the warning.
+            StringBuilder signatureAlgorithms = new StringBuilder();
+            for (ApkSigningBlockUtils.SupportedSignature supportedSignature : supportedSignatures) {
+                if (signatureAlgorithms.length() > 0) {
+                    signatureAlgorithms.append(", ");
+                }
+                signatureAlgorithms.append(supportedSignature.algorithm);
+            }
+            result.addWarning(ApkVerifier.Issue.SOURCE_STAMP_NO_SUPPORTED_SIGNATURE,
+                    signatureAlgorithms.toString(), e);
             return;
         }
         for (ApkSigningBlockUtils.SupportedSignature signature : signaturesToVerify) {
