@@ -57,6 +57,7 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -498,29 +499,38 @@ public class ApkVerifier {
 
         // If the targetSdkVersion has a minimum required signature scheme version then verify
         // that the APK was signed with at least that version.
-        if (androidManifest == null) {
-            androidManifest = getAndroidManifestFromApk(apk, zipSections);
+        try {
+            if (androidManifest == null) {
+                androidManifest = getAndroidManifestFromApk(apk, zipSections);
+            }
+        } catch (ApkFormatException e) {
+            // If the manifest is not available then skip the minimum signature scheme requirement
+            // to support bundle verification.
         }
-        int targetSdkVersion = getTargetSdkVersionFromBinaryAndroidManifest(
-                androidManifest.slice());
-        int minSchemeVersion = getMinimumSignatureSchemeVersionForTargetSdk(targetSdkVersion);
-        // The platform currently only enforces a single minimum signature scheme version, but when
-        // later platform versions support another minimum version this will need to be expanded to
-        // verify the minimum based on the target and maximum SDK version.
-        if (minSchemeVersion > VERSION_JAR_SIGNATURE_SCHEME && maxSdkVersion >= targetSdkVersion) {
-            switch(minSchemeVersion) {
-                case VERSION_APK_SIGNATURE_SCHEME_V2:
-                    if (result.isVerifiedUsingV2Scheme()) {
-                        break;
-                    }
-                    // Allow this case to fall through to the next as a signature satisfying a later
-                    // scheme version will also satisfy this requirement.
-                case VERSION_APK_SIGNATURE_SCHEME_V3:
-                    if (result.isVerifiedUsingV3Scheme()) {
-                        break;
-                    }
-                    result.addError(Issue.MIN_SIG_SCHEME_FOR_TARGET_SDK_NOT_MET, targetSdkVersion,
-                            minSchemeVersion);
+        if (androidManifest != null) {
+            int targetSdkVersion = getTargetSdkVersionFromBinaryAndroidManifest(
+                    androidManifest.slice());
+            int minSchemeVersion = getMinimumSignatureSchemeVersionForTargetSdk(targetSdkVersion);
+            // The platform currently only enforces a single minimum signature scheme version, but
+            // when later platform versions support another minimum version this will need to be
+            // expanded to verify the minimum based on the target and maximum SDK version.
+            if (minSchemeVersion > VERSION_JAR_SIGNATURE_SCHEME
+                    && maxSdkVersion >= targetSdkVersion) {
+                switch (minSchemeVersion) {
+                    case VERSION_APK_SIGNATURE_SCHEME_V2:
+                        if (result.isVerifiedUsingV2Scheme()) {
+                            break;
+                        }
+                        // Allow this case to fall through to the next as a signature satisfying a
+                        // later scheme version will also satisfy this requirement.
+                    case VERSION_APK_SIGNATURE_SCHEME_V3:
+                        if (result.isVerifiedUsingV3Scheme()) {
+                            break;
+                        }
+                        result.addError(Issue.MIN_SIG_SCHEME_FOR_TARGET_SDK_NOT_MET,
+                                targetSdkVersion,
+                                minSchemeVersion);
+                }
             }
         }
 
@@ -865,7 +875,7 @@ public class ApkVerifier {
             V3SchemeVerifier.parseSigners(signatureInfo.signatureBlock,
                     contentDigestsToVerify, result);
         }
-        apkContentDigests = new HashMap<>(result.signers.size());
+        apkContentDigests = new EnumMap<>(ContentDigestAlgorithm.class);
         for (ApkSigningBlockUtils.Result.SignerInfo signerInfo : result.signers) {
             for (ApkSigningBlockUtils.Result.SignerInfo.ContentDigest contentDigest :
                     signerInfo.contentDigests) {
@@ -915,7 +925,8 @@ public class ApkVerifier {
             ApkUtils.ZipSections zipSections)
             throws IOException, ApkFormatException {
         CentralDirectoryRecord manifestCdRecord = null;
-        Map<ContentDigestAlgorithm, byte[]> v1ContentDigest = new HashMap<>();
+        Map<ContentDigestAlgorithm, byte[]> v1ContentDigest = new EnumMap<>(
+                ContentDigestAlgorithm.class);
         for (CentralDirectoryRecord cdRecord : cdRecords) {
             if (MANIFEST_ENTRY_NAME.equals(cdRecord.getName())) {
                 manifestCdRecord = cdRecord;
@@ -1723,7 +1734,7 @@ public class ApkVerifier {
             private final List<IssueWithParams> mErrors;
             private final List<IssueWithParams> mWarnings;
 
-            private SourceStampVerificationStatus mSourceStampVerificationStatus;
+            private final SourceStampVerificationStatus mSourceStampVerificationStatus;
 
             private SourceStampInfo(ApkSigningBlockUtils.Result.SignerInfo result) {
                 mCertificates = result.certs;

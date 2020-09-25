@@ -57,6 +57,10 @@ import java.util.Map;
  *     it can prove the new siging certificate was signed by the old.
  */
 public abstract class V3SchemeSigner {
+    public static final int APK_SIGNATURE_SCHEME_V3_BLOCK_ID =
+            V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
+    public static final int PROOF_OF_ROTATION_ATTR_ID = V3SchemeConstants.PROOF_OF_ROTATION_ATTR_ID;
+
     /** Hidden constructor to prevent instantiation. */
     private V3SchemeSigner() {}
 
