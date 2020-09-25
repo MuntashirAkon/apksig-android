@@ -93,6 +93,25 @@ public class ApkVerificationIssue {
     public static final int UNEXPECTED_EXCEPTION = 29;
     /* The APK contains the certificate digest file but does not contain a stamp signature block */
     public static final int SOURCE_STAMP_SIG_MISSING = 30;
+    /* Source stamp block contains a malformed attribute. */
+    public static final int SOURCE_STAMP_MALFORMED_ATTRIBUTE = 31;
+    /* Source stamp block contains an unknown attribute. */
+    public static final int SOURCE_STAMP_UNKNOWN_ATTRIBUTE = 32;
+    /**
+     * Failed to parse the SigningCertificateLineage structure in the source stamp
+     * attributes section.
+     */
+    public static final int SOURCE_STAMP_MALFORMED_LINEAGE = 33;
+    /**
+     * The source stamp certificate does not match the terminal node in the provided
+     * proof-of-rotation structure describing the stamp certificate history.
+     */
+    public static final int SOURCE_STAMP_POR_CERT_MISMATCH = 34;
+    /**
+     * The source stamp SigningCertificateLineage attribute contains a proof-of-rotation record
+     * with signature(s) that did not verify.
+     */
+    public static final int SOURCE_STAMP_POR_DID_NOT_VERIFY = 35;
 
     private final int mIssueId;
     private final String mFormat;
