@@ -23,4 +23,5 @@ public class SourceStampConstants {
     public static final int V1_SOURCE_STAMP_BLOCK_ID = 0x2b09189e;
     public static final int V2_SOURCE_STAMP_BLOCK_ID = 0x6dff800d;
     public static final String SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME = "stamp-cert-sha256";
+    public static final int PROOF_OF_ROTATION_ATTR_ID = 0x9d6303f7;
 }
