@@ -23,6 +23,7 @@ import static org.junit.Assume.assumeNoException;
 
 import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.ApkVerifier.IssueWithParams;
+import com.android.apksig.ApkVerifier.Result.SourceStampInfo.SourceStampVerificationStatus;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.HexEncoding;
@@ -35,6 +36,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -60,8 +63,13 @@ public class ApkVerifierTest {
     private static final String[] EC_KEY_NAMES = {"p256", "p384", "p521"};
     private static final String[] RSA_KEY_NAMES = {"1024", "2048", "3072", "4096", "8192", "16384"};
     private static final String[] RSA_KEY_NAMES_2048_AND_LARGER = {
-        "2048", "3072", "4096", "8192", "16384"
+            "2048", "3072", "4096", "8192", "16384"
     };
+
+    private static final String RSA_2048_CERT_SHA256_DIGEST =
+            "fb5dbd3c669af9fc236c6991e6387b7f11ff0590997f22d0f5c74ff40e04fca8";
+    private static final String EC_P256_CERT_SHA256_DIGEST =
+            "6a8b96e278e58f62cfe3584022cec1d0527fcb85a9e5d2e1694eb0405be5b599";
 
     @Test
     public void testOriginalAccepted() throws Exception {
@@ -1064,10 +1072,45 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void verifySourceStamp_correctSignature() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("valid-stamp.apk");
+        // Since the API is only verifying the source stamp the result itself should be marked as
+        // verified.
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+
+        // The source stamp can also be verified by platform version; confirm the verification works
+        // using just the max signature scheme version supported by that platform version.
+        verificationResult = verifySourceStamp("valid-stamp.apk", 18, 18);
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+
+        verificationResult = verifySourceStamp("valid-stamp.apk", 24, 24);
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+
+        verificationResult = verifySourceStamp("valid-stamp.apk", 28, 28);
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+    }
+
+    @Test
     public void testSourceStampBlock_signatureMissing() throws Exception {
         ApkVerifier.Result verificationResult = verify("stamp-without-block.apk");
         // A broken stamp should not block a signing scheme verified APK.
         assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_SIG_MISSING);
+    }
+
+    @Test
+    public void verifySourceStamp_signatureMissing() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("stamp-without-block.apk");
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_NOT_VERIFIED);
         assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_SIG_MISSING);
     }
 
@@ -1082,10 +1125,92 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void verifySourceStamp_certificateMismatch() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("stamp-certificate-mismatch.apk");
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
+        assertSourceStampVerificationFailure(
+                verificationResult,
+                Issue.SOURCE_STAMP_CERTIFICATE_MISMATCH_BETWEEN_SIGNATURE_BLOCK_AND_APK);
+    }
+
+    @Test
+    public void testSourceStampBlock_v1OnlySignatureValidStamp() throws Exception {
+        ApkVerifier.Result verificationResult = verify("v1-only-with-stamp.apk");
+        assertVerified(verificationResult);
+        assertTrue(verificationResult.isSourceStampVerified());
+    }
+
+    @Test
+    public void verifySourceStamp_v1OnlySignatureValidStamp() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("v1-only-with-stamp.apk");
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+
+        // Confirm that the source stamp verification succeeds when specifying platform versions
+        // that supported later signature scheme versions.
+        verificationResult = verifySourceStamp("v1-only-with-stamp.apk", 28, 28);
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+
+        verificationResult = verifySourceStamp("v1-only-with-stamp.apk", 24, 24);
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+    }
+
+    @Test
+    public void testSourceStampBlock_v2OnlySignatureValidStamp() throws Exception {
+        ApkVerifier.Result verificationResult = verify("v2-only-with-stamp.apk");
+        assertVerified(verificationResult);
+        assertTrue(verificationResult.isSourceStampVerified());
+    }
+
+    @Test
+    public void verifySourceStamp_v2OnlySignatureValidStamp() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("v2-only-with-stamp.apk");
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+
+        // Confirm that the source stamp verification succeeds when specifying a platform version
+        // that supports a later signature scheme version.
+        verificationResult = verifySourceStamp("v2-only-with-stamp.apk", 28, 28);
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+    }
+
+    @Test
+    public void testSourceStampBlock_v3OnlySignatureValidStamp() throws Exception {
+        ApkVerifier.Result verificationResult = verify("v3-only-with-stamp.apk");
+        assertVerified(verificationResult);
+        assertTrue(verificationResult.isSourceStampVerified());
+    }
+
+    @Test
+    public void verifySourceStamp_v3OnlySignatureValidStamp() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("v3-only-with-stamp.apk");
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+    }
+
+    @Test
     public void testSourceStampBlock_apkHashMismatch_v1SignatureScheme() throws Exception {
         ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v1.apk");
         // A broken stamp should not block a signing scheme verified APK.
         assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void verifySourceStamp_apkHashMismatch_v1SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("stamp-apk-hash-mismatch-v1.apk");
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
         assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
     }
 
@@ -1098,10 +1223,26 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void verifySourceStamp_apkHashMismatch_v2SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("stamp-apk-hash-mismatch-v2.apk");
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
     public void testSourceStampBlock_apkHashMismatch_v3SignatureScheme() throws Exception {
         ApkVerifier.Result verificationResult = verify("stamp-apk-hash-mismatch-v3.apk");
         // A broken stamp should not block a signing scheme verified APK.
         assertVerified(verificationResult);
+        assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
+    public void verifySourceStamp_apkHashMismatch_v3SignatureScheme() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("stamp-apk-hash-mismatch-v3.apk");
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
         assertSourceStampVerificationFailure(verificationResult, Issue.SOURCE_STAMP_DID_NOT_VERIFY);
     }
 
@@ -1112,6 +1253,81 @@ public class ApkVerifierTest {
         assertVerified(verificationResult);
         assertSourceStampVerificationFailure(
                 verificationResult, Issue.SOURCE_STAMP_MALFORMED_SIGNATURE);
+    }
+
+    @Test
+    public void verifySourceStamp_malformedSignature() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("stamp-malformed-signature.apk");
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
+        assertSourceStampVerificationFailure(
+                verificationResult, Issue.SOURCE_STAMP_MALFORMED_SIGNATURE);
+    }
+
+    @Test
+    public void verifySourceStamp_expectedDigestMatchesActual() throws Exception {
+        // The ApkVerifier provides an API to specify the expected certificate digest; this test
+        // verifies that the test runs through to completion when the actual digest matches the
+        // provided value.
+        ApkVerifier.Result verificationResult = verifySourceStamp("v3-only-with-stamp.apk",
+                RSA_2048_CERT_SHA256_DIGEST);
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+    }
+
+    @Test
+    public void verifySourceStamp_expectedDigestMismatch() throws Exception {
+        // If the caller requests source stamp verification with an expected cert digest that does
+        // not match the actual digest in the APK the verifier should report the mismatch.
+        ApkVerifier.Result verificationResult = verifySourceStamp("v3-only-with-stamp.apk",
+                EC_P256_CERT_SHA256_DIGEST);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.CERT_DIGEST_MISMATCH);
+        assertSourceStampVerificationFailure(verificationResult,
+                Issue.SOURCE_STAMP_EXPECTED_DIGEST_MISMATCH);
+    }
+
+    @Test
+    public void verifySourceStamp_validStampLineage() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("stamp-lineage-valid.apk");
+        assertVerified(verificationResult);
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFIED);
+    }
+
+    @Test
+    public void verifySourceStamp_invalidStampLineage() throws Exception {
+        ApkVerifier.Result verificationResult = verifySourceStamp("stamp-lineage-invalid.apk");
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
+        assertSourceStampVerificationFailure(verificationResult,
+                Issue.SOURCE_STAMP_POR_CERT_MISMATCH);
+    }
+
+    @Test
+    public void apkVerificationIssueAdapter_verifyAllBaseIssuesMapped() throws Exception {
+        Field[] fields = ApkVerificationIssue.class.getFields();
+        StringBuilder msg = new StringBuilder();
+        for (Field field : fields) {
+            // All public static int fields in the ApkVerificationIssue class should be issue IDs;
+            // if any are added that are not intended as IDs a filter set should be applied to this
+            // test.
+            if (Modifier.isStatic(field.getModifiers()) && field.getType() == int.class) {
+                if (!ApkVerifier.ApkVerificationIssueAdapter
+                        .sVerificationIssueIdToIssue.containsKey(field.get(null))) {
+                    if (msg.length() > 0) {
+                        msg.append('\n');
+                    }
+                    msg.append(
+                            "A mapping is required from ApkVerificationIssue." + field.getName()
+                                    + " to an ApkVerifier.Issue in ApkVerificationIssueAdapter");
+                }
+            }
+        }
+        if (msg.length() > 0) {
+            fail(msg.toString());
+        }
     }
 
     private ApkVerifier.Result verify(String apkFilenameInResources)
@@ -1147,6 +1363,36 @@ public class ApkVerifierTest {
             builder.setMaxCheckedPlatformVersion(maxSdkVersionOverride);
         }
         return builder.build().verify();
+    }
+
+    private ApkVerifier.Result verifySourceStamp(String apkFilenameInResources) throws Exception {
+        return verifySourceStamp(apkFilenameInResources, null, null, null);
+    }
+
+    private ApkVerifier.Result verifySourceStamp(String apkFilenameInResources,
+            String expectedCertDigest) throws Exception {
+        return verifySourceStamp(apkFilenameInResources, expectedCertDigest, null, null);
+    }
+
+    private ApkVerifier.Result verifySourceStamp(String apkFilenameInResources,
+            Integer minSdkVersionOverride, Integer maxSdkVersionOverride) throws Exception {
+        return verifySourceStamp(apkFilenameInResources, null, minSdkVersionOverride,
+                maxSdkVersionOverride);
+    }
+
+    private ApkVerifier.Result verifySourceStamp(String apkFilenameInResources,
+            String expectedCertDigest, Integer minSdkVersionOverride, Integer maxSdkVersionOverride)
+            throws Exception {
+        byte[] apkBytes = Resources.toByteArray(getClass(), apkFilenameInResources);
+        ApkVerifier.Builder builder = new ApkVerifier.Builder(
+                DataSources.asDataSource(ByteBuffer.wrap(apkBytes)));
+        if (minSdkVersionOverride != null) {
+            builder.setMinCheckedPlatformVersion(minSdkVersionOverride);
+        }
+        if (maxSdkVersionOverride != null) {
+            builder.setMaxCheckedPlatformVersion(maxSdkVersionOverride);
+        }
+        return builder.build().verifySourceStamp(expectedCertDigest);
     }
 
     static void assertVerified(ApkVerifier.Result result) {
@@ -1342,6 +1588,12 @@ public class ApkVerifierTest {
                         + expectedIssue
                         + ", actual: "
                         + msg);
+    }
+
+    private static void assertSourceStampVerificationStatus(ApkVerifier.Result result,
+            SourceStampVerificationStatus verificationStatus) throws Exception {
+        assertEquals(verificationStatus,
+                result.getSourceStampInfo().getSourceStampVerificationStatus());
     }
 
     private void assertVerificationFailure(
