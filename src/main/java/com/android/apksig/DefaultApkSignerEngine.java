@@ -29,6 +29,7 @@ import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.stamp.V2SourceStampSigner;
 import com.android.apksig.internal.apk.v1.DigestAlgorithm;
+import com.android.apksig.internal.apk.v1.V1SchemeConstants;
 import com.android.apksig.internal.apk.v1.V1SchemeSigner;
 import com.android.apksig.internal.apk.v1.V1SchemeVerifier;
 import com.android.apksig.internal.apk.v2.V2SchemeSigner;
@@ -98,6 +99,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     private final String mCreatedBy;
     private final List<SignerConfig> mSignerConfigs;
     private final SignerConfig mSourceStampSignerConfig;
+    private final SigningCertificateLineage mSourceStampSigningCertificateLineage;
     private final int mMinSdkVersion;
     private final SigningCertificateLineage mSigningCertificateLineage;
 
@@ -160,6 +162,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     private DefaultApkSignerEngine(
             List<SignerConfig> signerConfigs,
             SignerConfig sourceStampSignerConfig,
+            SigningCertificateLineage sourceStampSigningCertificateLineage,
             int minSdkVersion,
             boolean v1SigningEnabled,
             boolean v2SigningEnabled,
@@ -190,6 +193,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         mCreatedBy = createdBy;
         mSignerConfigs = signerConfigs;
         mSourceStampSignerConfig = sourceStampSignerConfig;
+        mSourceStampSigningCertificateLineage = sourceStampSigningCertificateLineage;
         mMinSdkVersion = minSdkVersion;
         mSigningCertificateLineage = signingCertificateLineage;
 
@@ -307,13 +311,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
     }
 
-    private List<ApkSigningBlockUtils.SignerConfig> createV3SignerConfigs(
-            boolean apkSigningBlockPaddingSupported) throws InvalidKeyException {
-        List<ApkSigningBlockUtils.SignerConfig> rawConfigs =
-                createSigningBlockSignerConfigs(
-                        apkSigningBlockPaddingSupported,
-                        ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
-
+    private List<ApkSigningBlockUtils.SignerConfig> processV3Configs(
+            List<ApkSigningBlockUtils.SignerConfig> rawConfigs) throws InvalidKeyException {
         List<ApkSigningBlockUtils.SignerConfig> processedConfigs = new ArrayList<>();
 
         // we have our configs, now touch them up to appropriately cover all SDK levels since APK
@@ -361,26 +360,40 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     "Provided key algorithms not supported on all desired "
                             + "Android SDK versions");
         }
+
         return processedConfigs;
     }
 
-    private ApkSigningBlockUtils.SignerConfig createV4SignerConfig()
-            throws InvalidKeyException, IllegalStateException {
-        List<ApkSigningBlockUtils.SignerConfig> configs =
-                createSigningBlockSignerConfigs(
-                        true, ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4);
+    private List<ApkSigningBlockUtils.SignerConfig> createV3SignerConfigs(
+            boolean apkSigningBlockPaddingSupported) throws InvalidKeyException {
+        return processV3Configs(createSigningBlockSignerConfigs(apkSigningBlockPaddingSupported,
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3));
+    }
+
+    private ApkSigningBlockUtils.SignerConfig createV4SignerConfig() throws InvalidKeyException {
+        List<ApkSigningBlockUtils.SignerConfig> configs = createSigningBlockSignerConfigs(true,
+                ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4);
         if (configs.size() != 1) {
-            throw new IllegalStateException("Only accepting one signer config for V4 Signature.");
+            // V4 only uses signer config to connect back to v3. Use the same filtering logic.
+            configs = processV3Configs(configs);
+        }
+        if (configs.size() != 1) {
+            throw new InvalidKeyException("Only accepting one signer config for V4 Signature.");
         }
         return configs.get(0);
     }
 
     private ApkSigningBlockUtils.SignerConfig createSourceStampSignerConfig()
             throws InvalidKeyException {
-        return createSigningBlockSignerConfig(
+        ApkSigningBlockUtils.SignerConfig config = createSigningBlockSignerConfig(
                 mSourceStampSignerConfig,
                 /* apkSigningBlockPaddingSupported= */ false,
                 ApkSigningBlockUtils.VERSION_SOURCE_STAMP);
+        if (mSourceStampSigningCertificateLineage != null) {
+            config.mSigningCertificateLineage = mSourceStampSigningCertificateLineage.getSubLineage(
+                    config.certificates.get(0));
+        }
+        return config;
     }
 
     private int getMinSdkFromV3SignatureAlgorithms(List<SignatureAlgorithm> algorithms) {
@@ -549,7 +562,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             case OUTPUT:
                 return new InputJarEntryInstructions(InputJarEntryInstructions.OutputPolicy.OUTPUT);
             case OUTPUT_BY_ENGINE:
-                if (V1SchemeSigner.MANIFEST_ENTRY_NAME.equals(entryName)) {
+                if (V1SchemeConstants.MANIFEST_ENTRY_NAME.equals(entryName)) {
                     // We copy the main section of the JAR manifest from input to output. Thus, this
                     // invalidates v1 signature and we need to see the entry's data.
                     mInputJarManifestEntryDataRequest = new GetJarEntryDataRequest(entryName);
@@ -617,7 +630,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             // the entry's data is as output by the engine.
             invalidateV1Signature();
             GetJarEntryDataRequest dataRequest;
-            if (V1SchemeSigner.MANIFEST_ENTRY_NAME.equals(entryName)) {
+            if (V1SchemeConstants.MANIFEST_ENTRY_NAME.equals(entryName)) {
                 dataRequest = new GetJarEntryDataRequest(entryName);
                 mInputJarManifestEntryDataRequest = dataRequest;
             } else {
@@ -752,7 +765,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                     V1SchemeSigner.generateManifestFile(
                             mV1ContentDigestAlgorithm, mOutputJarEntryDigests, inputJarManifest);
             byte[] emittedSignatureManifest =
-                    mEmittedSignatureJarEntryData.get(V1SchemeSigner.MANIFEST_ENTRY_NAME);
+                    mEmittedSignatureJarEntryData.get(V1SchemeConstants.MANIFEST_ENTRY_NAME);
             if (!Arrays.equals(newManifest.contents, emittedSignatureManifest)) {
                 // Emitted v1 signature is no longer valid.
                 try {
@@ -1473,6 +1486,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
     public static class Builder {
         private List<SignerConfig> mSignerConfigs;
         private SignerConfig mStampSignerConfig;
+        private SigningCertificateLineage mSourceStampSigningCertificateLineage;
         private final int mMinSdkVersion;
 
         private boolean mV1SigningEnabled = true;
@@ -1564,6 +1578,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return new DefaultApkSignerEngine(
                     mSignerConfigs,
                     mStampSignerConfig,
+                    mSourceStampSigningCertificateLineage,
                     mMinSdkVersion,
                     mV1SigningEnabled,
                     mV2SigningEnabled,
@@ -1578,6 +1593,16 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         /** Sets the signer configuration for the SourceStamp to be embedded in the APK. */
         public Builder setStampSignerConfig(SignerConfig stampSignerConfig) {
             mStampSignerConfig = stampSignerConfig;
+            return this;
+        }
+
+        /**
+         * Sets the source stamp {@link SigningCertificateLineage}. This structure provides proof of
+         * signing certificate rotation for certificates previously used to sign source stamps.
+         */
+        public Builder setSourceStampSigningCertificateLineage(
+                SigningCertificateLineage sourceStampSigningCertificateLineage) {
+            mSourceStampSigningCertificateLineage = sourceStampSigningCertificateLineage;
             return this;
         }
 
