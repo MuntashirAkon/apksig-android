@@ -53,6 +53,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -228,7 +229,7 @@ public abstract class V3SchemeVerifier {
      * expected to be encountered on an Android platform version in the
      * {@code [minSdkVersion, maxSdkVersion]} range.
      */
-    private static void parseSigners(
+    public static void parseSigners(
             ByteBuffer apkSignatureSchemeV3Block,
             Set<ContentDigestAlgorithm> contentDigestsToVerify,
             ApkSigningBlockUtils.Result result) throws NoSuchAlgorithmException {
@@ -521,5 +522,4 @@ public abstract class V3SchemeVerifier {
             }
         }
     }
-
 }
