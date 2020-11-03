@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,14 @@
  * limitations under the License.
  */
 
-package com.android.apksig;
+package com.android.apksig.internal.apk;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
-
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    ApkSignerTest.class,
-    ApkVerifierTest.class,
-    SigningCertificateLineageTest.class,
-    SourceStampVerifierTest.class,
-    com.android.apksig.apk.AllTests.class,
-    com.android.apksig.internal.AllTests.class,
-    com.android.apksig.util.AllTests.class,
-})
-public class AllTests {}
+/**
+ * Base exception that is thrown when there are no signatures that support the full range of
+ * requested platform versions.
+ */
+public class NoApkSupportedSignaturesException extends Exception {
+    public NoApkSupportedSignaturesException(String message) {
+        super(message);
+    }
+}

@@ -30,10 +30,11 @@ import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.SignatureInfo;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.ByteBufferUtils;
-import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
+import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.RunnablesExecutor;
+
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -53,7 +54,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -68,9 +68,6 @@ import java.util.TreeMap;
  * @see <a href="https://source.android.com/security/apksigning/v2.html">APK Signature Scheme v2</a>
  */
 public abstract class V3SchemeVerifier {
-
-    private static final int APK_SIGNATURE_SCHEME_V3_BLOCK_ID = 0xf05368c0;
-
     /** Hidden constructor to prevent instantiation. */
     private V3SchemeVerifier() {}
 
@@ -105,7 +102,7 @@ public abstract class V3SchemeVerifier {
                 ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
         SignatureInfo signatureInfo =
                 ApkSigningBlockUtils.findSignature(apk, zipSections,
-                        APK_SIGNATURE_SCHEME_V3_BLOCK_ID, result);
+                        V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID, result);
 
         DataSource beforeApkSigningBlock = apk.slice(0, signatureInfo.apkSigningBlockOffset);
         DataSource centralDir =
@@ -494,7 +491,7 @@ public abstract class V3SchemeVerifier {
                 byte[] value = ByteBufferUtils.toByteArray(attribute);
                 result.additionalAttributes.add(
                         new ApkSigningBlockUtils.Result.SignerInfo.AdditionalAttribute(id, value));
-                if (id == V3SchemeSigner.PROOF_OF_ROTATION_ATTR_ID) {
+                if (id == V3SchemeConstants.PROOF_OF_ROTATION_ATTR_ID) {
                     try {
                         // SigningCertificateLineage is verified when built
                         result.signingCertificateLineage =

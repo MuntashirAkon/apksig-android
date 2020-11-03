@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,14 @@
  * limitations under the License.
  */
 
-package com.android.apksig;
+package com.android.apksig.internal.apk.stamp;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+/** Constants used for source stamp signing and verification. */
+public class SourceStampConstants {
+    private SourceStampConstants() {}
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    ApkSignerTest.class,
-    ApkVerifierTest.class,
-    SigningCertificateLineageTest.class,
-    SourceStampVerifierTest.class,
-    com.android.apksig.apk.AllTests.class,
-    com.android.apksig.internal.AllTests.class,
-    com.android.apksig.util.AllTests.class,
-})
-public class AllTests {}
+    public static final int V1_SOURCE_STAMP_BLOCK_ID = 0x2b09189e;
+    public static final int V2_SOURCE_STAMP_BLOCK_ID = 0x6dff800d;
+    public static final String SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME = "stamp-cert-sha256";
+    public static final int PROOF_OF_ROTATION_ATTR_ID = 0x9d6303f7;
+}

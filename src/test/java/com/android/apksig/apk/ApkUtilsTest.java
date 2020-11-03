@@ -90,6 +90,49 @@ public class ApkUtilsTest {
     }
 
     @Test
+    public void testGetTargetSdkVersionFromBinaryAndroidManifest() throws Exception {
+        ByteBuffer manifest = getAndroidManifest("v3-ec-p256-targetSdk-30.apk");
+        assertEquals(30, ApkUtils.getTargetSdkVersionFromBinaryAndroidManifest(manifest));
+    }
+
+    @Test
+    public void testGetTargetSdkVersion_noUsesSdkElement_returnsDefault() throws Exception {
+        ByteBuffer manifest = getAndroidManifest("v1-only-no-uses-sdk.apk");
+        assertEquals(1, ApkUtils.getTargetSdkVersionFromBinaryAndroidManifest(manifest));
+    }
+
+    @Test
+    public void testGetTargetSandboxVersionFromBinaryAndroidManifest() throws Exception {
+        ByteBuffer manifest = getAndroidManifest("targetSandboxVersion-2.apk");
+        assertEquals(2, ApkUtils.getTargetSandboxVersionFromBinaryAndroidManifest(manifest));
+    }
+
+    @Test
+    public void testGetTargetSandboxVersion_noTargetSandboxAttribute_returnsDefault()
+            throws Exception {
+        ByteBuffer manifest = getAndroidManifest("original.apk");
+        assertEquals(1, ApkUtils.getTargetSandboxVersionFromBinaryAndroidManifest(manifest));
+    }
+
+    @Test
+    public void testGetVersionCodeFromBinaryAndroidManifest() throws Exception {
+        ByteBuffer manifest = getAndroidManifest("original.apk");
+        assertEquals(10, ApkUtils.getVersionCodeFromBinaryAndroidManifest(manifest));
+    }
+
+    @Test
+    public void testGetVersionCode_withVersionCodeMajor_returnsOnlyVersionCode() throws Exception {
+        ByteBuffer manifest = getAndroidManifest("original-with-versionCodeMajor.apk");
+        assertEquals(25, ApkUtils.getVersionCodeFromBinaryAndroidManifest(manifest));
+    }
+
+    @Test
+    public void testGetLongVersionCodeFromBinaryAndroidManifest() throws Exception {
+        ByteBuffer manifest = getAndroidManifest("original-with-versionCodeMajor.apk");
+        assertEquals(4294967321L, ApkUtils.getLongVersionCodeFromBinaryAndroidManifest(manifest));
+    }
+
+    @Test
     public void testGetAndroidManifest() throws Exception {
         ByteBuffer manifest = getAndroidManifest("original.apk");
         MessageDigest md = MessageDigest.getInstance("SHA-256");
