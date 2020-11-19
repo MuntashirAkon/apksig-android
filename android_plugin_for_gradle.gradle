@@ -5,7 +5,7 @@ plugins {
 }
 
 dependencies {
-    testCompile libs.junit
+    testImplementation libs.junit
 }
 
 group = "com.android.tools.build"
