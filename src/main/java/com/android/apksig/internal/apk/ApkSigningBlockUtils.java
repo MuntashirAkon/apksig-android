@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2020 Muntashir Al-Islam
  * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,6 +42,7 @@ import com.android.apksig.internal.pkcs7.SignerInfo;
 import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.util.ChainedDataSource;
 import com.android.apksig.internal.util.Pair;
+import com.android.apksig.internal.util.SupplierCompat;
 import com.android.apksig.internal.util.VerityTreeBuilder;
 import com.android.apksig.internal.x509.RSAPublicKey;
 import com.android.apksig.internal.x509.SubjectPublicKeyInfo;
@@ -80,7 +82,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 
 import javax.security.auth.x500.X500Principal;
 
@@ -687,7 +688,7 @@ public class ApkSigningBlockUtils {
      * are NOT concatenated. Only the next call to get() will fetch from the
      * next {@link DataSource} in the input {@link DataSource} array.
      */
-    private static class ChunkSupplier implements Supplier<ChunkSupplier.Chunk> {
+    private static class ChunkSupplier implements SupplierCompat<ChunkSupplier.Chunk> {
         private final DataSource[] dataSources;
         private final int[] chunkCounts;
         private final int totalChunkCount;

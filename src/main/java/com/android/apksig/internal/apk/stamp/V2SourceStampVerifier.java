@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2020 Muntashir Al-Islam
  * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +16,6 @@
  */
 
 package com.android.apksig.internal.apk.stamp;
-
-import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes;
-import static com.android.apksig.internal.apk.stamp.V2SourceStampSigner.V2_SOURCE_STAMP_BLOCK_ID;
 
 import com.android.apksig.ApkVerifier;
 import com.android.apksig.apk.ApkFormatException;
@@ -36,10 +34,12 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes;
+import static com.android.apksig.internal.apk.stamp.V2SourceStampSigner.V2_SOURCE_STAMP_BLOCK_ID;
 
 /**
  * Source Stamp verifier.
@@ -146,7 +146,7 @@ public abstract class V2SourceStampVerifier {
                 apkContentDigests.entrySet()) {
             digests.add(Pair.of(apkContentDigest.getKey().getId(), apkContentDigest.getValue()));
         }
-        Collections.sort(digests, Comparator.comparing(Pair::getFirst));
+        Collections.sort(digests, (o1, o2) -> o1.getFirst().compareTo(o2.getFirst()));
         return digests;
     }
 }

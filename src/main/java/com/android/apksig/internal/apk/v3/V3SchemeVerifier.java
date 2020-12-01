@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2020 Muntashir Al-Islam
  * Copyright (C) 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +17,6 @@
 
 package com.android.apksig.internal.apk.v3;
 
-import static com.android.apksig.internal.apk.ApkSigningBlockUtils.getLengthPrefixedSlice;
-import static com.android.apksig.internal.apk.ApkSigningBlockUtils.readLengthPrefixedByteArray;
-
 import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.apk.ApkFormatException;
@@ -30,10 +28,11 @@ import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.SignatureInfo;
 import com.android.apksig.internal.util.AndroidSdkVersion;
 import com.android.apksig.internal.util.ByteBufferUtils;
-import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
+import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.RunnablesExecutor;
+
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -53,10 +52,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+
+import static com.android.apksig.internal.apk.ApkSigningBlockUtils.getLengthPrefixedSlice;
+import static com.android.apksig.internal.apk.ApkSigningBlockUtils.readLengthPrefixedByteArray;
 
 /**
  * APK Signature Scheme v3 verifier.

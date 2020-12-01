@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2020 Muntashir Al-Islam
  * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +16,8 @@
  */
 
 package com.android.apksig.internal.apk.v1;
+
+import android.util.Base64;
 
 import static com.android.apksig.internal.pkcs7.AlgorithmIdentifier.getSignerInfoDigestAlgorithmOid;
 import static com.android.apksig.internal.pkcs7.AlgorithmIdentifier.getSignerInfoSignatureAlgorithm;
@@ -41,7 +44,6 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -369,7 +371,7 @@ public abstract class V1SchemeSigner {
             Attributes entryAttrs = new Attributes();
             entryAttrs.putValue(
                     entryDigestAttributeName,
-                    Base64.getEncoder().encodeToString(entryDigest));
+                    Base64.encodeToString(entryDigest, Base64.DEFAULT));
             ByteArrayOutputStream sectionOut = new ByteArrayOutputStream();
             byte[] sectionBytes;
             try {
@@ -442,7 +444,7 @@ public abstract class V1SchemeSigner {
         MessageDigest md = getMessageDigestInstance(manifestDigestAlgorithm);
         mainAttrs.putValue(
                 getManifestDigestAttributeName(manifestDigestAlgorithm),
-                Base64.getEncoder().encodeToString(md.digest(manifest.contents)));
+                Base64.encodeToString(md.digest(manifest.contents), Base64.DEFAULT));
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
             SignatureFileWriter.writeMainSection(out, mainAttrs);
@@ -458,7 +460,7 @@ public abstract class V1SchemeSigner {
             Attributes attrs = new Attributes();
             attrs.putValue(
                     entryDigestAttributeName,
-                    Base64.getEncoder().encodeToString(sectionDigest));
+                    Base64.encodeToString(sectionDigest, Base64.DEFAULT));
 
             try {
                 SignatureFileWriter.writeIndividualSection(out, sectionName, attrs);
