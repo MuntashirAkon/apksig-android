@@ -1,39 +1,47 @@
 // Generic Gradle project
 
-apply plugin: 'java'
-apply plugin: 'com.google.protobuf'
+apply plugin: 'com.android.library'
 
-sourceCompatibility = '1.8'
+sourceCompatibility = "1.8"
+targetCompatibility = "1.8"
 
 repositories {
+    google()
     jcenter()
 }
 
 buildscript {
     repositories {
+        google()
         jcenter()
     }
     dependencies {
-        classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.11'
+        classpath 'com.android.tools.build:gradle:4.1.1'
     }
 }
 
 dependencies {
-    implementation 'com.google.protobuf:protobuf-javalite:3.8.0'
     testImplementation 'junit:junit:4.13'
 }
 
-protobuf {
-    protoc {
-        artifact = 'com.google.protobuf:protoc:3.8.0'
+android {
+    compileSdkVersion 29
+
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 29
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
     }
-    generateProtoTasks {
-        all().each { task ->
-            task.builtins {
-                java {
-                    option "lite"
-                }
-            }
+
+    buildTypes {
+        release {
+            minifyEnabled false
         }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 }
