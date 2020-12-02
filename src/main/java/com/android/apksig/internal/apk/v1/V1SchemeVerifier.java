@@ -943,8 +943,8 @@ public abstract class V1SchemeVerifier {
                             V1SchemeSigner.MANIFEST_ENTRY_NAME,
                             jcaDigestAlgorithm,
                             mSignatureFileEntry.getName(),
-                            Base64.encodeToString(actual, Base64.DEFAULT),
-                            Base64.encodeToString(expected, Base64.DEFAULT));
+                            Base64.encodeToString(actual, Base64.NO_WRAP),
+                            Base64.encodeToString(expected, Base64.NO_WRAP));
                     verified = false;
                 }
             }
@@ -985,8 +985,8 @@ public abstract class V1SchemeVerifier {
                             Issue.JAR_SIG_MANIFEST_MAIN_SECTION_DIGEST_DID_NOT_VERIFY,
                             jcaDigestAlgorithm,
                             mSignatureFileEntry.getName(),
-                            Base64.encodeToString(actual, Base64.DEFAULT),
-                            Base64.encodeToString(expected, Base64.DEFAULT));
+                            Base64.encodeToString(actual, Base64.NO_WRAP),
+                            Base64.encodeToString(expected, Base64.NO_WRAP));
                 }
             }
         }
@@ -1038,8 +1038,8 @@ public abstract class V1SchemeVerifier {
                             entryName,
                             jcaDigestAlgorithm,
                             mSignatureFileEntry.getName(),
-                            Base64.encodeToString(actual, Base64.DEFAULT),
-                            Base64.encodeToString(expected, Base64.DEFAULT));
+                            Base64.encodeToString(actual, Base64.NO_WRAP),
+                            Base64.encodeToString(expected, Base64.NO_WRAP));
                 }
             }
         }
@@ -1142,7 +1142,7 @@ public abstract class V1SchemeVerifier {
                     continue;
                 }
                 // Supported digest algorithm
-                result.add(new NamedDigest(alg, Base64.decode(digestBase64, Base64.DEFAULT)));
+                result.add(new NamedDigest(alg, Base64.decode(digestBase64, Base64.NO_WRAP)));
                 break;
             }
             // No supported digests found -- this will fail to verify on pre-JB MR2 Androids.
@@ -1161,7 +1161,7 @@ public abstract class V1SchemeVerifier {
                     // Attribute not found
                     continue;
                 }
-                byte[] digest = Base64.decode(digestBase64, Base64.DEFAULT);
+                byte[] digest = Base64.decode(digestBase64, Base64.NO_WRAP);
                 byte[] digestInResult = getDigest(result, alg);
                 if ((digestInResult == null) || (!Arrays.equals(digestInResult, digest))) {
                     result.add(new NamedDigest(alg, digest));
@@ -1377,8 +1377,8 @@ public abstract class V1SchemeVerifier {
                             entryName,
                             expectedDigest.jcaDigestAlgorithm,
                             V1SchemeSigner.MANIFEST_ENTRY_NAME,
-                            Base64.encodeToString(actualDigest, Base64.DEFAULT),
-                            Base64.encodeToString(expectedDigest.digest, Base64.DEFAULT));
+                            Base64.encodeToString(actualDigest, Base64.NO_WRAP),
+                            Base64.encodeToString(expectedDigest.digest, Base64.NO_WRAP));
                 }
             }
         }

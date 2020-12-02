@@ -371,7 +371,7 @@ public abstract class V1SchemeSigner {
             Attributes entryAttrs = new Attributes();
             entryAttrs.putValue(
                     entryDigestAttributeName,
-                    Base64.encodeToString(entryDigest, Base64.DEFAULT));
+                    Base64.encodeToString(entryDigest, Base64.NO_WRAP));
             ByteArrayOutputStream sectionOut = new ByteArrayOutputStream();
             byte[] sectionBytes;
             try {
@@ -444,7 +444,7 @@ public abstract class V1SchemeSigner {
         MessageDigest md = getMessageDigestInstance(manifestDigestAlgorithm);
         mainAttrs.putValue(
                 getManifestDigestAttributeName(manifestDigestAlgorithm),
-                Base64.encodeToString(md.digest(manifest.contents), Base64.DEFAULT));
+                Base64.encodeToString(md.digest(manifest.contents), Base64.NO_WRAP));
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
             SignatureFileWriter.writeMainSection(out, mainAttrs);
@@ -460,7 +460,7 @@ public abstract class V1SchemeSigner {
             Attributes attrs = new Attributes();
             attrs.putValue(
                     entryDigestAttributeName,
-                    Base64.encodeToString(sectionDigest, Base64.DEFAULT));
+                    Base64.encodeToString(sectionDigest, Base64.NO_WRAP));
 
             try {
                 SignatureFileWriter.writeIndividualSection(out, sectionName, attrs);

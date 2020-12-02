@@ -263,7 +263,7 @@ public class X509CertificateUtils {
                                 + "valid certificate footer");
             }
         }
-        byte[] derEncoding = Base64.decode(pemEncoding.toString(), Base64.DEFAULT);
+        byte[] derEncoding = Base64.decode(pemEncoding.toString(), Base64.NO_WRAP);
         // consume any trailing whitespace in the byte buffer
         int nextEncodedChar = certificateBuffer.position();
         while (certificateBuffer.hasRemaining()) {
