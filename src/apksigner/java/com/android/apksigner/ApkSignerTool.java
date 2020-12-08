@@ -1093,10 +1093,19 @@ public class ApkSignerTool {
             }
             Provider provider;
             if (constructorParam != null) {
-                // Single-arg Provider constructor
-                provider =
-                        (Provider) providerClass.getConstructor(String.class)
-                                .newInstance(constructorParam);
+                try {
+                    // Single-arg Provider constructor
+                    provider =
+                            (Provider) providerClass.getConstructor(String.class)
+                                    .newInstance(constructorParam);
+                } catch (NoSuchMethodException e) {
+                    // Starting from JDK 9 the single-arg constructor accepting the configuration
+                    // has been replaced by a configure(String) method to be invoked after
+                    // instantiating the Provider with the no-arg constructor.
+                    provider = (Provider) providerClass.getConstructor().newInstance();
+                    provider = (Provider) providerClass.getMethod("configure", String.class)
+                            .invoke(provider, constructorParam);
+                }
             } else {
                 // No-arg Provider constructor
                 provider = (Provider) providerClass.getConstructor().newInstance();
