@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,13 @@
  * limitations under the License.
  */
 
-package com.android.apksig;
+package com.android.apksig.internal.apk.v1;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+/** Constants used by the Jar Signing / V1 Signature Scheme signing and verification. */
+public class V1SchemeConstants {
+    private V1SchemeConstants() {}
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    ApkSignerTest.class,
-    ApkVerifierTest.class,
-    SigningCertificateLineageTest.class,
-    SourceStampVerifierTest.class,
-    com.android.apksig.apk.AllTests.class,
-    com.android.apksig.internal.AllTests.class,
-    com.android.apksig.util.AllTests.class,
-})
-public class AllTests {}
+    public static final String MANIFEST_ENTRY_NAME = "META-INF/MANIFEST.MF";
+    public static final String SF_ATTRIBUTE_NAME_ANDROID_APK_SIGNED_NAME_STR =
+            "X-Android-APK-Signed";
+}
