@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,12 @@
  * limitations under the License.
  */
 
-package com.android.apksig;
+package com.android.apksig.internal.apk.v2;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+/** Constants used by the V2 Signature Scheme signing and verification. */
+public class V2SchemeConstants {
+    private V2SchemeConstants() {}
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    ApkSignerTest.class,
-    ApkVerifierTest.class,
-    SigningCertificateLineageTest.class,
-    SourceStampVerifierTest.class,
-    com.android.apksig.apk.AllTests.class,
-    com.android.apksig.internal.AllTests.class,
-    com.android.apksig.util.AllTests.class,
-})
-public class AllTests {}
+    public static final int APK_SIGNATURE_SCHEME_V2_BLOCK_ID = 0x7109871a;
+    public static final int STRIPPING_PROTECTION_ATTR_ID = 0xbeeff00d;
+}

@@ -23,17 +23,22 @@ import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeAsLengt
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeAsSequenceOfLengthPrefixedElements;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes;
 
+import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils.SignerConfig;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.util.Pair;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -50,11 +55,12 @@ import java.util.Map;
  * <p>V2 of the source stamp allows signing the digests of more than one signature schemes.
  */
 public abstract class V2SourceStampSigner {
-
-    public static final int V2_SOURCE_STAMP_BLOCK_ID = 0x6dff800d;
+    public static final int V2_SOURCE_STAMP_BLOCK_ID =
+            SourceStampConstants.V2_SOURCE_STAMP_BLOCK_ID;
 
     /** Hidden constructor to prevent instantiation. */
-    private V2SourceStampSigner() {}
+    private V2SourceStampSigner() {
+    }
 
     public static Pair<byte[], Integer> generateSourceStampBlock(
             SignerConfig sourceStampSignerConfig,
@@ -81,7 +87,7 @@ public abstract class V2SourceStampSigner {
                 signatureSchemeDigestInfos,
                 sourceStampSignerConfig,
                 signatureSchemeDigests);
-        signatureSchemeDigests.sort(Comparator.comparing(Pair::getFirst));
+        Collections.sort(signatureSchemeDigests, Comparator.comparing(Pair::getFirst));
 
         SourceStampBlock sourceStampBlock = new SourceStampBlock();
 
@@ -95,23 +101,36 @@ public abstract class V2SourceStampSigner {
 
         sourceStampBlock.signedDigests = signatureSchemeDigests;
 
+        sourceStampBlock.stampAttributes = encodeStampAttributes(
+                generateStampAttributes(sourceStampSignerConfig.mSigningCertificateLineage));
+        sourceStampBlock.signedStampAttributes =
+                ApkSigningBlockUtils.generateSignaturesOverData(sourceStampSignerConfig,
+                        sourceStampBlock.stampAttributes);
+
         // FORMAT:
         // * length-prefixed bytes: X.509 certificate (ASN.1 DER encoded)
         // * length-prefixed sequence of length-prefixed signed signature scheme digests:
         //   * uint32: signature scheme id
         //   * length-prefixed bytes: signed digests for the respective signature scheme
+        // * length-prefixed bytes: encoded stamp attributes
+        // * length-prefixed sequence of length-prefixed signed stamp attributes:
+        //   * uint32: signature algorithm id
+        //   * length-prefixed bytes: signed stamp attributes for the respective signature algorithm
         byte[] sourceStampSignerBlock =
                 encodeAsSequenceOfLengthPrefixedElements(
-                        new byte[][] {
-                            sourceStampBlock.stampCertificate,
-                            encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(
-                                    sourceStampBlock.signedDigests),
+                        new byte[][]{
+                                sourceStampBlock.stampCertificate,
+                                encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(
+                                        sourceStampBlock.signedDigests),
+                                sourceStampBlock.stampAttributes,
+                                encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(
+                                        sourceStampBlock.signedStampAttributes),
                         });
 
         // FORMAT:
         // * length-prefixed stamp block.
-        return Pair.of(
-                encodeAsLengthPrefixedElement(sourceStampSignerBlock), V2_SOURCE_STAMP_BLOCK_ID);
+        return Pair.of(encodeAsLengthPrefixedElement(sourceStampSignerBlock),
+                SourceStampConstants.V2_SOURCE_STAMP_BLOCK_ID);
     }
 
     private static void getSignedDigestsFor(
@@ -130,7 +149,7 @@ public abstract class V2SourceStampSigner {
         for (Map.Entry<ContentDigestAlgorithm, byte[]> digest : digestInfo.entrySet()) {
             digests.add(Pair.of(digest.getKey().getId(), digest.getValue()));
         }
-        digests.sort(Comparator.comparing(Pair::getFirst));
+        Collections.sort(digests, Comparator.comparing(Pair::getFirst));
 
         // FORMAT:
         // * length-prefixed sequence of length-prefixed digests:
@@ -158,8 +177,43 @@ public abstract class V2SourceStampSigner {
                                 signedDigest)));
     }
 
+    private static byte[] encodeStampAttributes(Map<Integer, byte[]> stampAttributes) {
+        int payloadSize = 0;
+        for (byte[] attributeValue : stampAttributes.values()) {
+            // Pair size + Attribute ID + Attribute value
+            payloadSize += 4 + 4 + attributeValue.length;
+        }
+
+        // FORMAT (little endian):
+        // * length-prefixed bytes: pair
+        //   * uint32: ID
+        //   * bytes: value
+        ByteBuffer result = ByteBuffer.allocate(4 + payloadSize);
+        result.order(ByteOrder.LITTLE_ENDIAN);
+        result.putInt(payloadSize);
+        for (Map.Entry<Integer, byte[]> stampAttribute : stampAttributes.entrySet()) {
+            // Pair size
+            result.putInt(4 + stampAttribute.getValue().length);
+            result.putInt(stampAttribute.getKey());
+            result.put(stampAttribute.getValue());
+        }
+        return result.array();
+    }
+
+    private static Map<Integer, byte[]> generateStampAttributes(SigningCertificateLineage lineage) {
+        HashMap<Integer, byte[]> stampAttributes = new HashMap<>();
+        if (lineage != null) {
+            stampAttributes.put(SourceStampConstants.PROOF_OF_ROTATION_ATTR_ID,
+                    lineage.encodeSigningCertificateLineage());
+        }
+        return stampAttributes;
+    }
+
     private static final class SourceStampBlock {
         public byte[] stampCertificate;
         public List<Pair<Integer, byte[]>> signedDigests;
+        // Optional stamp attributes that are not required for verification.
+        public byte[] stampAttributes;
+        public List<Pair<Integer, byte[]>> signedStampAttributes;
     }
 }
