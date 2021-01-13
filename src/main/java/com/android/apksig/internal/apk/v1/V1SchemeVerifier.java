@@ -46,13 +46,13 @@ import com.android.apksig.internal.util.InclusiveIntRange;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.internal.zip.LocalFileRecord;
+import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSinks;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.zip.ZipFormatException;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -82,9 +82,6 @@ import java.util.jar.Attributes;
  * @see <a href="https://docs.oracle.com/javase/8/docs/technotes/guides/jar/jar.html#Signed_JAR_File">Signed JAR File</a>
  */
 public abstract class V1SchemeVerifier {
-
-    private static final String MANIFEST_ENTRY_NAME = V1SchemeSigner.MANIFEST_ENTRY_NAME;
-
     private V1SchemeVerifier() {}
 
     /**
@@ -231,7 +228,8 @@ public abstract class V1SchemeVerifier {
                 if (!entryName.startsWith("META-INF/")) {
                     continue;
                 }
-                if ((manifestEntry == null) && (MANIFEST_ENTRY_NAME.equals(entryName))) {
+                if ((manifestEntry == null) && (V1SchemeConstants.MANIFEST_ENTRY_NAME.equals(
+                        entryName))) {
                     manifestEntry = cdRecord;
                     continue;
                 }
@@ -939,7 +937,7 @@ public abstract class V1SchemeVerifier {
                 if (!Arrays.equals(expected, actual)) {
                     mResult.addWarning(
                             Issue.JAR_SIG_ZIP_ENTRY_DIGEST_DID_NOT_VERIFY,
-                            V1SchemeSigner.MANIFEST_ENTRY_NAME,
+                            V1SchemeConstants.MANIFEST_ENTRY_NAME,
                             jcaDigestAlgorithm,
                             mSignatureFileEntry.getName(),
                             Base64.getEncoder().encodeToString(actual),
@@ -1049,7 +1047,7 @@ public abstract class V1SchemeVerifier {
                 Set<Integer> foundApkSigSchemeIds) {
             String signedWithApkSchemes =
                     sfMainSection.getAttributeValue(
-                            V1SchemeSigner.SF_ATTRIBUTE_NAME_ANDROID_APK_SIGNED_NAME_STR);
+                            V1SchemeConstants.SF_ATTRIBUTE_NAME_ANDROID_APK_SIGNED_NAME_STR);
             // This field contains a comma-separated list of APK signature scheme IDs which were
             // used to sign this APK. Android rejects APKs where an ID is known to the platform but
             // the APK didn't verify using that scheme.
@@ -1239,40 +1237,7 @@ public abstract class V1SchemeVerifier {
             DataSource apk,
             ApkUtils.ZipSections apkSections)
                     throws IOException, ApkFormatException {
-        // Read the ZIP Central Directory
-        long cdSizeBytes = apkSections.getZipCentralDirectorySizeBytes();
-        if (cdSizeBytes > Integer.MAX_VALUE) {
-            throw new ApkFormatException("ZIP Central Directory too large: " + cdSizeBytes);
-        }
-        long cdOffset = apkSections.getZipCentralDirectoryOffset();
-        ByteBuffer cd = apk.getByteBuffer(cdOffset, (int) cdSizeBytes);
-        cd.order(ByteOrder.LITTLE_ENDIAN);
-
-        // Parse the ZIP Central Directory
-        int expectedCdRecordCount = apkSections.getZipCentralDirectoryRecordCount();
-        List<CentralDirectoryRecord> cdRecords = new ArrayList<>(expectedCdRecordCount);
-        for (int i = 0; i < expectedCdRecordCount; i++) {
-            CentralDirectoryRecord cdRecord;
-            int offsetInsideCd = cd.position();
-            try {
-                cdRecord = CentralDirectoryRecord.getRecord(cd);
-            } catch (ZipFormatException e) {
-                throw new ApkFormatException(
-                        "Malformed ZIP Central Directory record #" + (i + 1)
-                                + " at file offset " + (cdOffset + offsetInsideCd),
-                        e);
-            }
-            String entryName = cdRecord.getName();
-            if (entryName.endsWith("/")) {
-                // Ignore directory entries
-                continue;
-            }
-            cdRecords.add(cdRecord);
-        }
-        // There may be more data in Central Directory, but we don't warn or throw because Android
-        // ignores unused CD data.
-
-        return cdRecords;
+        return ZipUtils.parseZipCentralDirectory(apk, apkSections);
     }
 
     /**
@@ -1376,7 +1341,7 @@ public abstract class V1SchemeVerifier {
                             Issue.JAR_SIG_ZIP_ENTRY_DIGEST_DID_NOT_VERIFY,
                             entryName,
                             expectedDigest.jcaDigestAlgorithm,
-                            V1SchemeSigner.MANIFEST_ENTRY_NAME,
+                            V1SchemeConstants.MANIFEST_ENTRY_NAME,
                             Base64.getEncoder().encodeToString(actualDigest),
                             Base64.getEncoder().encodeToString(expectedDigest.digest));
                 }

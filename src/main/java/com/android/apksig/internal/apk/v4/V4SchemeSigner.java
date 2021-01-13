@@ -17,10 +17,9 @@
 package com.android.apksig.internal.apk.v4;
 
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodeCertificates;
-import static com.android.apksig.internal.apk.v2.V2SchemeSigner.APK_SIGNATURE_SCHEME_V2_BLOCK_ID;
-import static com.android.apksig.internal.apk.v3.V3SchemeSigner.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
+import static com.android.apksig.internal.apk.v2.V2SchemeConstants.APK_SIGNATURE_SCHEME_V2_BLOCK_ID;
+import static com.android.apksig.internal.apk.v3.V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
 
-import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils.SignerConfig;
@@ -324,8 +323,9 @@ public abstract class V4SchemeSigner {
                 return 1;
             case CHUNKED_SHA512:
                 return 2;
+            default:
+                return -1;
         }
-        return -1;
     }
 
     private static boolean isSupported(final ContentDigestAlgorithm contentDigestAlgorithm,

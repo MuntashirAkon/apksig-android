@@ -61,9 +61,6 @@ import java.util.Set;
  * @see <a href="https://source.android.com/security/apksigning/v2.html">APK Signature Scheme v2</a>
  */
 public abstract class V2SchemeVerifier {
-
-    private static final int APK_SIGNATURE_SCHEME_V2_BLOCK_ID = 0x7109871a;
-
     /** Hidden constructor to prevent instantiation. */
     private V2SchemeVerifier() {}
 
@@ -101,7 +98,7 @@ public abstract class V2SchemeVerifier {
                 ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2);
         SignatureInfo signatureInfo =
                 ApkSigningBlockUtils.findSignature(apk, zipSections,
-                        APK_SIGNATURE_SCHEME_V2_BLOCK_ID , result);
+                        V2SchemeConstants.APK_SIGNATURE_SCHEME_V2_BLOCK_ID , result);
 
         DataSource beforeApkSigningBlock = apk.slice(0, signatureInfo.apkSigningBlockOffset);
         DataSource centralDir =
@@ -247,8 +244,7 @@ public abstract class V2SchemeVerifier {
             Map<Integer, String> supportedApkSigSchemeNames,
             Set<Integer> foundApkSigSchemeIds,
             int minSdkVersion,
-            int maxSdkVersion)
-                    throws ApkFormatException, NoSuchAlgorithmException {
+            int maxSdkVersion) throws ApkFormatException, NoSuchAlgorithmException {
         ByteBuffer signedData = ApkSigningBlockUtils.getLengthPrefixedSlice(signerBlock);
         byte[] signedDataBytes = new byte[signedData.remaining()];
         signedData.get(signedDataBytes);
@@ -435,7 +431,7 @@ public abstract class V2SchemeVerifier {
                 result.additionalAttributes.add(
                         new ApkSigningBlockUtils.Result.SignerInfo.AdditionalAttribute(id, value));
                 switch (id) {
-                    case V2SchemeSigner.STRIPPING_PROTECTION_ATTR_ID:
+                    case V2SchemeConstants.STRIPPING_PROTECTION_ATTR_ID:
                         // stripping protection added when signing with a newer scheme
                         int foundId = ByteBuffer.wrap(value).order(
                                 ByteOrder.LITTLE_ENDIAN).getInt();
