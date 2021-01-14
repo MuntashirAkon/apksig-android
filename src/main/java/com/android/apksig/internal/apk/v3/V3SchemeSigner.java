@@ -57,8 +57,9 @@ import java.util.Map;
  *     it can prove the new siging certificate was signed by the old.
  */
 public abstract class V3SchemeSigner {
-
-    public static final int APK_SIGNATURE_SCHEME_V3_BLOCK_ID = 0xf05368c0;
+    public static final int APK_SIGNATURE_SCHEME_V3_BLOCK_ID =
+            V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
+    public static final int PROOF_OF_ROTATION_ATTR_ID = V3SchemeConstants.PROOF_OF_ROTATION_ATTR_ID;
 
     /** Hidden constructor to prevent instantiation. */
     private V3SchemeSigner() {}
@@ -141,6 +142,22 @@ public abstract class V3SchemeSigner {
                 digestInfo.getSecond());
     }
 
+    public static byte[] generateV3SignerAttribute(
+            SigningCertificateLineage signingCertificateLineage) {
+        // FORMAT (little endian):
+        // * length-prefixed bytes: attribute pair
+        //   * uint32: ID
+        //   * bytes: value - encoded V3 SigningCertificateLineage
+        byte[] encodedLineage = signingCertificateLineage.encodeSigningCertificateLineage();
+        int payloadSize = 4 + 4 + encodedLineage.length;
+        ByteBuffer result = ByteBuffer.allocate(payloadSize);
+        result.order(ByteOrder.LITTLE_ENDIAN);
+        result.putInt(4 + encodedLineage.length);
+        result.putInt(V3SchemeConstants.PROOF_OF_ROTATION_ATTR_ID);
+        result.put(encodedLineage);
+        return result.array();
+    }
+
     private static Pair<byte[], Integer> generateApkSignatureSchemeV3Block(
             List<SignerConfig> signerConfigs, Map<ContentDigestAlgorithm, byte[]> contentDigests)
             throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
@@ -166,7 +183,7 @@ public abstract class V3SchemeSigner {
                         new byte[][] {
                             encodeAsSequenceOfLengthPrefixedElements(signerBlocks),
                         }),
-                APK_SIGNATURE_SCHEME_V3_BLOCK_ID);
+                V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID);
     }
 
     private static byte[] generateSignerBlock(
@@ -284,13 +301,11 @@ public abstract class V3SchemeSigner {
         return result.array();
     }
 
-    public static final int PROOF_OF_ROTATION_ATTR_ID = 0x3ba06f8c;
-
     private static byte[] generateAdditionalAttributes(SignerConfig signerConfig) {
         if (signerConfig.mSigningCertificateLineage == null) {
             return new byte[0];
         }
-        return signerConfig.mSigningCertificateLineage.generateV3SignerAttribute();
+        return generateV3SignerAttribute(signerConfig.mSigningCertificateLineage);
     }
 
     private static final class V3SignatureSchemeBlock {
