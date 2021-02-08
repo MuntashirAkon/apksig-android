@@ -46,6 +46,8 @@ import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 import com.android.apksig.zip.ZipFormatException;
 
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -360,6 +362,15 @@ public class ApkSignerTest {
         signGolden(
                 "original.apk",
                 new File(outDir, "golden-rsa-verity-out.apk"),
+                new ApkSigner.Builder(rsa2048SignerConfig)
+                        .setV1SigningEnabled(true)
+                        .setV2SigningEnabled(true)
+                        .setV3SigningEnabled(true)
+                        .setVerityEnabled(true));
+
+        signGolden(
+                "pinsapp-unsigned.apk",
+                new File(outDir, "golden-pinsapp-signed.apk"),
                 new ApkSigner.Builder(rsa2048SignerConfig)
                         .setV1SigningEnabled(true)
                         .setV2SigningEnabled(true)
@@ -1247,6 +1258,41 @@ public class ApkSignerTest {
         ApkVerifier.Result sourceStampVerificationResult =
                 verify(signedApk, /* minSdkVersion= */ null);
         assertSourceStampVerified(signedApk, sourceStampVerificationResult);
+    }
+
+    @Test
+    public void testSignApk_Pinlist() throws Exception {
+        List<ApkSigner.SignerConfig> rsa2048SignerConfig =
+            Collections.singletonList(
+                getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
+        assertGolden(
+            "pinsapp-unsigned.apk",
+            "golden-pinsapp-signed.apk",
+            new ApkSigner.Builder(rsa2048SignerConfig)
+                .setV1SigningEnabled(true)
+                .setV2SigningEnabled(true)
+                .setV3SigningEnabled(true)
+                .setVerityEnabled(true));
+        assertTrue("pinlist.meta file must be in the signed APK.",
+            resourceZipFileContains("golden-pinsapp-signed.apk", "pinlist.meta"));
+    }
+
+    private static boolean resourceZipFileContains(String resourceName, String zipEntryName)
+        throws IOException {
+        ZipInputStream zip = new ZipInputStream(
+            Resources.toInputStream(ApkSignerTest.class, resourceName));
+        while (true) {
+            ZipEntry entry = zip.getNextEntry();
+            if (entry == null) {
+                break;
+            }
+
+            if (entry.getName().equals(zipEntryName)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private RSAPublicKey getRSAPublicKeyFromSigningBlock(File apk, int signatureVersionId)
