@@ -510,6 +510,28 @@ public class ApkSigner {
             }
         }
 
+        // Step 7.5. Generate pinlist.meta file if necessary.
+        // This has to be before the step 8 so that the file is signed.
+        if (pinByteRanges != null) {
+            // Covers JAR signature and zip central dir entry.
+            // The signature files don't have to be pinned, but pinning them isn't that wasteful
+            // since the total size is small.
+            pinByteRanges.add(new Hints.ByteRange(outputOffset, Long.MAX_VALUE));
+            String entryName = Hints.PIN_BYTE_RANGE_ZIP_ENTRY_NAME;
+            byte[] uncompressedData = Hints.encodeByteRangeList(pinByteRanges);
+
+            requestOutputEntryInspection(signerEngine, entryName, uncompressedData);
+            outputOffset +=
+                outputDataToOutputApk(
+                    entryName,
+                    uncompressedData,
+                    outputOffset,
+                    outputCdRecords,
+                    lastModifiedTimeForNewEntries,
+                    lastModifiedDateForNewEntries,
+                    outputApkOut);
+        }
+
         // Step 8. Generate and output JAR signatures, if necessary. This may output more Local File
         // Header + data entries and add to the list of output Central Directory records.
         ApkSignerEngine.OutputJarSignatureRequest outputJarSignatureRequest =
@@ -520,15 +542,7 @@ public class ApkSigner {
                 String entryName = entry.getName();
                 byte[] uncompressedData = entry.getData();
 
-                ApkSignerEngine.InspectJarEntryRequest inspectEntryRequest =
-                        signerEngine.outputJarEntry(entryName);
-                if (inspectEntryRequest != null) {
-                    inspectEntryRequest
-                            .getDataSink()
-                            .consume(uncompressedData, 0, uncompressedData.length);
-                    inspectEntryRequest.done();
-                }
-
+                requestOutputEntryInspection(signerEngine, entryName, uncompressedData);
                 outputOffset +=
                         outputDataToOutputApk(
                                 entryName,
@@ -540,21 +554,6 @@ public class ApkSigner {
                                 outputApkOut);
             }
             outputJarSignatureRequest.done();
-        }
-
-        if (pinByteRanges != null) {
-            pinByteRanges.add(new Hints.ByteRange(outputOffset, Long.MAX_VALUE)); // central dir
-            String entryName = Hints.PIN_BYTE_RANGE_ZIP_ENTRY_NAME;
-            byte[] uncompressedData = Hints.encodeByteRangeList(pinByteRanges);
-            outputOffset +=
-                    outputDataToOutputApk(
-                            entryName,
-                            uncompressedData,
-                            outputOffset,
-                            outputCdRecords,
-                            lastModifiedTimeForNewEntries,
-                            lastModifiedDateForNewEntries,
-                            outputApkOut);
         }
 
         // Step 9. Construct output ZIP Central Directory in an in-memory buffer
@@ -613,6 +612,20 @@ public class ApkSigner {
         // Step 13. Generate and output APK Signature Scheme v4 signatures, if necessary.
         if (mV4SigningEnabled) {
             signerEngine.signV4(outputApkIn, mOutputV4File, !mV4ErrorReportingEnabled);
+        }
+    }
+
+    private static void requestOutputEntryInspection(
+            ApkSignerEngine signerEngine,
+            String entryName,
+            byte[] uncompressedData)
+            throws IOException {
+        ApkSignerEngine.InspectJarEntryRequest inspectEntryRequest =
+                signerEngine.outputJarEntry(entryName);
+        if (inspectEntryRequest != null) {
+            inspectEntryRequest.getDataSink().consume(
+                    uncompressedData, 0, uncompressedData.length);
+            inspectEntryRequest.done();
         }
     }
 
