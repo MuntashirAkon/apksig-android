@@ -258,6 +258,7 @@ public class V3SigningCertificateLineage {
             this.flags = flags;
         }
 
+        @SuppressWarnings("EqualsHashCode")  // b/180537631
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
