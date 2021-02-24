@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * APK Signer Lineage.
@@ -272,6 +273,13 @@ public class V3SigningCertificateLineage {
 
             // we made it
             return true;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = Objects.hash(signingCert, parentSigAlgorithm, sigAlgorithm, flags);
+            result = 31 * result + Arrays.hashCode(signature);
+            return result;
         }
 
         /**
