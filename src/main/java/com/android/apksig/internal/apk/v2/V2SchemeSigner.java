@@ -86,7 +86,8 @@ public abstract class V2SchemeSigner {
      *     Signature Scheme v2
      */
     public static List<SignatureAlgorithm> getSuggestedSignatureAlgorithms(PublicKey signingKey,
-            int minSdkVersion, boolean verityEnabled) throws InvalidKeyException {
+            int minSdkVersion, boolean verityEnabled, boolean deterministicDsaSigning)
+            throws InvalidKeyException {
         String keyAlgorithm = signingKey.getAlgorithm();
         if ("RSA".equalsIgnoreCase(keyAlgorithm)) {
             // Use RSASSA-PKCS1-v1_5 signature scheme instead of RSASSA-PSS to guarantee
@@ -111,7 +112,10 @@ public abstract class V2SchemeSigner {
         } else if ("DSA".equalsIgnoreCase(keyAlgorithm)) {
             // DSA is supported only with SHA-256.
             List<SignatureAlgorithm> algorithms = new ArrayList<>();
-            algorithms.add(SignatureAlgorithm.DSA_WITH_SHA256);
+            algorithms.add(
+                    deterministicDsaSigning ?
+                            SignatureAlgorithm.DETDSA_WITH_SHA256 :
+                            SignatureAlgorithm.DSA_WITH_SHA256);
             if (verityEnabled) {
                 algorithms.add(SignatureAlgorithm.VERITY_DSA_WITH_SHA256);
             }

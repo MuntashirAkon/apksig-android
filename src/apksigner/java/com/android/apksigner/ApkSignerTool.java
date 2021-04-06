@@ -157,6 +157,7 @@ public class ApkSignerTool {
         String optionOriginalForm = null;
         boolean v4SigningFlagFound = false;
         boolean sourceStampFlagFound = false;
+        boolean deterministicDsaSigning = false;
         while ((optionName = optionsParser.nextOption()) != null) {
             optionOriginalForm = optionsParser.getOptionOriginalForm();
             if (("help".equals(optionName)) || ("h".equals(optionName))) {
@@ -257,6 +258,8 @@ public class ApkSignerTool {
                 File stampLineageFile = new File(
                         optionsParser.getRequiredValue("Stamp Lineage File"));
                 sourceStampLineage = getLineageFromInputFile(stampLineageFile);
+            } else if ("deterministic-dsa-signing".equals(optionName)) {
+                deterministicDsaSigning = optionsParser.getOptionalBooleanValue(false);
             } else {
                 throw new ParameterException(
                         "Unsupported option: " + optionOriginalForm + ". See --help for supported"
@@ -313,7 +316,8 @@ public class ApkSignerTool {
             for (SignerParams signer : signers) {
                 signerNumber++;
                 signer.setName("signer #" + signerNumber);
-                ApkSigner.SignerConfig signerConfig = getSignerConfig(signer, passwordRetriever);
+                ApkSigner.SignerConfig signerConfig = getSignerConfig(signer, passwordRetriever,
+                        deterministicDsaSigning);
                 if (signerConfig == null) {
                     return;
                 }
@@ -322,7 +326,8 @@ public class ApkSignerTool {
             if (sourceStampFlagFound) {
                 sourceStampSignerParams.setName("stamp signer");
                 sourceStampSignerConfig =
-                        getSignerConfig(sourceStampSignerParams, passwordRetriever);
+                        getSignerConfig(sourceStampSignerParams, passwordRetriever,
+                                deterministicDsaSigning);
                 if (sourceStampSignerConfig == null) {
                     return;
                 }
@@ -389,8 +394,8 @@ public class ApkSignerTool {
         }
     }
 
-    private static ApkSigner.SignerConfig getSignerConfig(
-            SignerParams signer, PasswordRetriever passwordRetriever) {
+    private static ApkSigner.SignerConfig getSignerConfig(SignerParams signer,
+            PasswordRetriever passwordRetriever, boolean deterministicDsaSigning) {
         try {
             signer.loadPrivateKeyAndCerts(passwordRetriever);
         } catch (ParameterException e) {
@@ -422,7 +427,8 @@ public class ApkSignerTool {
         }
         ApkSigner.SignerConfig signerConfig =
                 new ApkSigner.SignerConfig.Builder(
-                        v1SigBasename, signer.getPrivateKey(), signer.getCerts())
+                        v1SigBasename, signer.getPrivateKey(), signer.getCerts(),
+                        deterministicDsaSigning)
                         .build();
         return signerConfig;
     }
