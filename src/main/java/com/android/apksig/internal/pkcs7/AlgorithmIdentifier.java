@@ -77,7 +77,8 @@ public class AlgorithmIdentifier {
      * when signing with the specified key and digest algorithm.
      */
     public static Pair<String, AlgorithmIdentifier> getSignerInfoSignatureAlgorithm(
-            PublicKey publicKey, DigestAlgorithm digestAlgorithm) throws InvalidKeyException {
+            PublicKey publicKey, DigestAlgorithm digestAlgorithm, boolean deterministicDsaSigning)
+            throws InvalidKeyException {
         String keyAlgorithm = publicKey.getAlgorithm();
         String jcaDigestPrefixForSigAlg;
         switch (digestAlgorithm) {
@@ -115,7 +116,9 @@ public class AlgorithmIdentifier {
                     throw new IllegalArgumentException(
                             "Unexpected digest algorithm: " + digestAlgorithm);
             }
-            return Pair.of(jcaDigestPrefixForSigAlg + "withDSA", sigAlgId);
+            String signingAlgorithmName =
+                    jcaDigestPrefixForSigAlg + (deterministicDsaSigning ? "withDetDSA" : "withDSA");
+            return Pair.of(signingAlgorithmName, sigAlgId);
         } else if ("EC".equalsIgnoreCase(keyAlgorithm)) {
             return Pair.of(
                     jcaDigestPrefixForSigAlg + "withECDSA",
