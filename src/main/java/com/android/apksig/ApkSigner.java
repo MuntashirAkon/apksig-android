@@ -284,7 +284,8 @@ public class ApkSigner {
                         new DefaultApkSignerEngine.SignerConfig.Builder(
                                         signerConfig.getName(),
                                         signerConfig.getPrivateKey(),
-                                        signerConfig.getCertificates())
+                                        signerConfig.getCertificates(),
+                                        signerConfig.getDeterministicDsaSigning())
                                 .build());
             }
             DefaultApkSignerEngine.Builder signerEngineBuilder =
@@ -304,7 +305,8 @@ public class ApkSigner {
                         new DefaultApkSignerEngine.SignerConfig.Builder(
                                         mSourceStampSignerConfig.getName(),
                                         mSourceStampSignerConfig.getPrivateKey(),
-                                        mSourceStampSignerConfig.getCertificates())
+                                        mSourceStampSignerConfig.getCertificates(),
+                                        mSourceStampSignerConfig.getDeterministicDsaSigning())
                                 .build());
             }
             if (mSourceStampSigningCertificateLineage != null) {
@@ -967,14 +969,18 @@ public class ApkSigner {
         private final String mName;
         private final PrivateKey mPrivateKey;
         private final List<X509Certificate> mCertificates;
+        private boolean mDeterministicDsaSigning;
 
         private SignerConfig(
-                String name, PrivateKey privateKey, List<X509Certificate> certificates) {
+                String name,
+                PrivateKey privateKey,
+                List<X509Certificate> certificates,
+                boolean deterministicDsaSigning) {
             mName = name;
             mPrivateKey = privateKey;
             mCertificates = Collections.unmodifiableList(new ArrayList<>(certificates));
+            mDeterministicDsaSigning = deterministicDsaSigning;
         }
-
         /** Returns the name of this signer. */
         public String getName() {
             return mName;
@@ -993,11 +999,20 @@ public class ApkSigner {
             return mCertificates;
         }
 
+
+        /**
+         * If this signer is a DSA signer, whether or not the signing is done deterministically.
+         */
+        public boolean getDeterministicDsaSigning() {
+            return mDeterministicDsaSigning;
+        }
+
         /** Builder of {@link SignerConfig} instances. */
         public static class Builder {
             private final String mName;
             private final PrivateKey mPrivateKey;
             private final List<X509Certificate> mCertificates;
+            private final boolean mDeterministicDsaSigning;
 
             /**
              * Constructs a new {@code Builder}.
@@ -1008,13 +1023,36 @@ public class ApkSigner {
              * @param certificates list of one or more X.509 certificates. The subject public key of
              *     the first certificate must correspond to the {@code privateKey}.
              */
-            public Builder(String name, PrivateKey privateKey, List<X509Certificate> certificates) {
+            public Builder(
+                    String name,
+                    PrivateKey privateKey,
+                    List<X509Certificate> certificates) {
+                this(name, privateKey, certificates, false);
+            }
+
+            /**
+             * Constructs a new {@code Builder}.
+             *
+             * @param name signer's name. The name is reflected in the name of files comprising the
+             *     JAR signature of the APK.
+             * @param privateKey signing key
+             * @param certificates list of one or more X.509 certificates. The subject public key of
+             *     the first certificate must correspond to the {@code privateKey}.
+             * @param deterministicDsaSigning When signing using DSA, whether or not the
+             *     deterministic variant (RFC6979) should be used.
+             */
+            public Builder(
+                    String name,
+                    PrivateKey privateKey,
+                    List<X509Certificate> certificates,
+                    boolean deterministicDsaSigning) {
                 if (name.isEmpty()) {
                     throw new IllegalArgumentException("Empty name");
                 }
                 mName = name;
                 mPrivateKey = privateKey;
                 mCertificates = new ArrayList<>(certificates);
+                mDeterministicDsaSigning = deterministicDsaSigning;
             }
 
             /**
@@ -1022,7 +1060,8 @@ public class ApkSigner {
              * this builder.
              */
             public SignerConfig build() {
-                return new SignerConfig(mName, mPrivateKey, mCertificates);
+                return new SignerConfig(mName, mPrivateKey, mCertificates,
+                        mDeterministicDsaSigning);
             }
         }
     }

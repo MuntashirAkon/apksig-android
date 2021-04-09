@@ -74,11 +74,12 @@ public abstract class V4SchemeSigner {
      * Based on a public key, return a signing algorithm that supports verity.
      */
     public static List<SignatureAlgorithm> getSuggestedSignatureAlgorithms(PublicKey signingKey,
-            int minSdkVersion, boolean apkSigningBlockPaddingSupported)
+            int minSdkVersion, boolean apkSigningBlockPaddingSupported,
+            boolean deterministicDsaSigning)
             throws InvalidKeyException {
         List<SignatureAlgorithm> algorithms = V3SchemeSigner.getSuggestedSignatureAlgorithms(
                 signingKey, minSdkVersion,
-                apkSigningBlockPaddingSupported);
+                apkSigningBlockPaddingSupported, deterministicDsaSigning);
         // Keeping only supported algorithms.
         for (Iterator<SignatureAlgorithm> iter = algorithms.listIterator(); iter.hasNext(); ) {
             final SignatureAlgorithm algorithm = iter.next();

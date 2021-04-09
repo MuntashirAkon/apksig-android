@@ -48,6 +48,7 @@ import com.android.apksig.zip.ZipFormatException;
 
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -61,9 +62,11 @@ import java.io.RandomAccessFile;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.Security;
 import java.security.SignatureException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
@@ -714,6 +717,48 @@ public class ApkSignerTest {
         // Does not verify on API Level 20 because DSA with SHA-256 not supported
         assertVerificationFailure(
                 verifyForMinSdkVersion(out, 20), Issue.JAR_SIG_UNSUPPORTED_SIG_ALG);
+    }
+
+
+    @Test
+    public void testDeterministicDsaSignedVerifies() throws Exception {
+        Security.addProvider(new BouncyCastleProvider());
+        try {
+            List<ApkSigner.SignerConfig> signers =
+                    Collections.singletonList(getDeterministicDsaSignerConfigFromResources("dsa-2048"));
+            String in = "original.apk";
+
+            // Sign so that the APK is guaranteed to verify on API Level 1+
+            File out = sign(in, new ApkSigner.Builder(signers).setMinSdkVersion(1));
+            assertVerified(verifyForMinSdkVersion(out, 1));
+
+            // Sign so that the APK is guaranteed to verify on API Level 21+
+            out = sign(in, new ApkSigner.Builder(signers).setMinSdkVersion(21));
+            assertVerified(verifyForMinSdkVersion(out, 21));
+            // Does not verify on API Level 20 because DSA with SHA-256 not supported
+            assertVerificationFailure(
+                    verifyForMinSdkVersion(out, 20), Issue.JAR_SIG_UNSUPPORTED_SIG_ALG);
+        } finally {
+            Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
+        }
+    }
+
+    @Test
+    public void testDeterministicDsaSigningIsDeterministic() throws Exception {
+        Security.addProvider(new BouncyCastleProvider());
+        try {
+            List<ApkSigner.SignerConfig> signers =
+                    Collections.singletonList(getDeterministicDsaSignerConfigFromResources("dsa-2048"));
+            String in = "original.apk";
+
+            ApkSigner.Builder apkSignerBuilder = new ApkSigner.Builder(signers).setMinSdkVersion(1);
+            File first = sign(in, apkSignerBuilder);
+            File second = sign(in, apkSignerBuilder);
+
+            assertFileContentsEqual(first, second);
+        } finally {
+            Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
+        }
     }
 
     @Test
@@ -1458,13 +1503,24 @@ public class ApkSignerTest {
         ApkVerifierTest.assertVerificationFailure(result, expectedIssue);
     }
 
+    private void assertFileContentsEqual(File first, File second) throws IOException {
+        assertArrayEquals(Files.readAllBytes(Paths.get(first.getPath())),
+                Files.readAllBytes(Paths.get(second.getPath())));
+    }
+
     private static ApkSigner.SignerConfig getDefaultSignerConfigFromResources(
             String keyNameInResources) throws Exception {
+        return getDefaultSignerConfigFromResources(keyNameInResources, false);
+    }
+
+    private static ApkSigner.SignerConfig getDefaultSignerConfigFromResources(
+            String keyNameInResources, boolean deterministicDsaSigning) throws Exception {
         PrivateKey privateKey =
                 Resources.toPrivateKey(ApkSignerTest.class, keyNameInResources + ".pk8");
         List<X509Certificate> certs =
                 Resources.toCertificateChain(ApkSignerTest.class, keyNameInResources + ".x509.pem");
-        return new ApkSigner.SignerConfig.Builder(keyNameInResources, privateKey, certs).build();
+        return new ApkSigner.SignerConfig.Builder(keyNameInResources, privateKey, certs,
+                deterministicDsaSigning).build();
     }
 
     private static ApkSigner.SignerConfig getDefaultSignerConfigFromResources(
@@ -1474,5 +1530,10 @@ public class ApkSignerTest {
         List<X509Certificate> certs =
                 Resources.toCertificateChain(ApkSignerTest.class, certNameInResources);
         return new ApkSigner.SignerConfig.Builder(keyNameInResources, privateKey, certs).build();
+    }
+
+    private static ApkSigner.SignerConfig getDeterministicDsaSignerConfigFromResources(
+            String keyNameInResources) throws Exception {
+        return getDefaultSignerConfigFromResources(keyNameInResources, true);
     }
 }
