@@ -255,6 +255,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             v1SignerConfig.privateKey = signerConfig.getPrivateKey();
             v1SignerConfig.certificates = certificates;
             v1SignerConfig.signatureDigestAlgorithm = v1SignatureDigestAlgorithm;
+            v1SignerConfig.deterministicDsaSigning = signerConfig.getDeterministicDsaSigning();
             // For digesting contents of APK entries and of MANIFEST.MF, pick the algorithm
             // of comparable strength to the digest algorithm used for computing the signature.
             // When there are multiple signers, pick the strongest digest algorithm out of their
@@ -441,7 +442,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                         V2SchemeSigner.getSuggestedSignatureAlgorithms(
                                 publicKey,
                                 mMinSdkVersion,
-                                apkSigningBlockPaddingSupported && mVerityEnabled);
+                                apkSigningBlockPaddingSupported && mVerityEnabled,
+                                signerConfig.getDeterministicDsaSigning());
                 break;
             case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3:
                 try {
@@ -449,7 +451,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                             V3SchemeSigner.getSuggestedSignatureAlgorithms(
                                     publicKey,
                                     mMinSdkVersion,
-                                    apkSigningBlockPaddingSupported && mVerityEnabled);
+                                    apkSigningBlockPaddingSupported && mVerityEnabled,
+                                    signerConfig.getDeterministicDsaSigning());
                 } catch (InvalidKeyException e) {
 
                     // It is possible for a signer used for v1/v2 signing to not be allowed for use
@@ -463,7 +466,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 try {
                     newSignerConfig.signatureAlgorithms =
                             V4SchemeSigner.getSuggestedSignatureAlgorithms(
-                                    publicKey, mMinSdkVersion, apkSigningBlockPaddingSupported);
+                                    publicKey, mMinSdkVersion, apkSigningBlockPaddingSupported,
+                                    signerConfig.getDeterministicDsaSigning());
                 } catch (InvalidKeyException e) {
                     // V4 is an optional signing schema, ok to proceed without.
                     newSignerConfig.signatureAlgorithms = null;
@@ -1422,12 +1426,15 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         private final String mName;
         private final PrivateKey mPrivateKey;
         private final List<X509Certificate> mCertificates;
+        private final boolean mDeterministicDsaSigning;
 
         private SignerConfig(
-                String name, PrivateKey privateKey, List<X509Certificate> certificates) {
+                String name, PrivateKey privateKey, List<X509Certificate> certificates,
+                boolean deterministicDsaSigning) {
             mName = name;
             mPrivateKey = privateKey;
             mCertificates = Collections.unmodifiableList(new ArrayList<>(certificates));
+            mDeterministicDsaSigning = deterministicDsaSigning;
         }
 
         /** Returns the name of this signer. */
@@ -1448,11 +1455,19 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return mCertificates;
         }
 
+        /**
+         * If this signer is a DSA signer, whether or not the signing is done deterministically.
+         */
+        public boolean getDeterministicDsaSigning() {
+            return mDeterministicDsaSigning;
+        }
+
         /** Builder of {@link SignerConfig} instances. */
         public static class Builder {
             private final String mName;
             private final PrivateKey mPrivateKey;
             private final List<X509Certificate> mCertificates;
+            private final boolean mDeterministicDsaSigning;
 
             /**
              * Constructs a new {@code Builder}.
@@ -1464,12 +1479,29 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
              *     the first certificate must correspond to the {@code privateKey}.
              */
             public Builder(String name, PrivateKey privateKey, List<X509Certificate> certificates) {
+                this(name, privateKey, certificates, false);
+            }
+
+            /**
+             * Constructs a new {@code Builder}.
+             *
+             * @param name signer's name. The name is reflected in the name of files comprising the
+             *     JAR signature of the APK.
+             * @param privateKey signing key
+             * @param certificates list of one or more X.509 certificates. The subject public key of
+             *     the first certificate must correspond to the {@code privateKey}.
+             * @param deterministicDsaSigning When signing using DSA, whether or not the
+             * deterministic signing algorithm variant (RFC6979) should be used.
+             */
+            public Builder(String name, PrivateKey privateKey, List<X509Certificate> certificates,
+                    boolean deterministicDsaSigning) {
                 if (name.isEmpty()) {
                     throw new IllegalArgumentException("Empty name");
                 }
                 mName = name;
                 mPrivateKey = privateKey;
                 mCertificates = new ArrayList<>(certificates);
+                mDeterministicDsaSigning = deterministicDsaSigning;
             }
 
             /**
@@ -1477,7 +1509,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
              * this builder.
              */
             public SignerConfig build() {
-                return new SignerConfig(mName, mPrivateKey, mCertificates);
+                return new SignerConfig(mName, mPrivateKey, mCertificates,
+                        mDeterministicDsaSigning);
             }
         }
     }

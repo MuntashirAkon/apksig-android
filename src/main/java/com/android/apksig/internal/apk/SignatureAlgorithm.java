@@ -102,6 +102,18 @@ public enum SignatureAlgorithm {
             AndroidSdkVersion.INITIAL_RELEASE),
 
     /**
+     * DSA with SHA2-256 digest, content digested using SHA2-256 in 1 MB chunks. Signing is done
+     * deterministically according to RFC 6979.
+     */
+    DETDSA_WITH_SHA256(
+            0x0301,
+            ContentDigestAlgorithm.CHUNKED_SHA256,
+            "DSA",
+            Pair.of("SHA256withDetDSA", null),
+            AndroidSdkVersion.N,
+            AndroidSdkVersion.INITIAL_RELEASE),
+
+    /**
      * RSASSA-PKCS1-v1_5 with SHA2-256 digest, content digested using SHA2-256 in 4 KB chunks, in
      * the same way fsverity operates. This digest and the content length (before digestion, 8 bytes
      * in little endian) construct the final digest.

@@ -411,7 +411,8 @@ public class SigningCertificateLineage {
 
         // TODO switch to one signature algorithm selection, or add support for multiple algorithms
         List<SignatureAlgorithm> algorithms = V3SchemeSigner.getSuggestedSignatureAlgorithms(
-                publicKey, mMinSdkVersion, false /* padding support */);
+                publicKey, mMinSdkVersion, false /* verityEnabled */,
+                false /* deterministicDsaSigning */);
         return algorithms.get(0);
     }
 
