@@ -90,6 +90,10 @@ certificate.
                       can also be specified; the lineage will then be read from
                       the signed data in the APK.
 
+--deterministic-dsa-signing  When signing with the DSA signature algorithm,
+                      whether to use the deterministic version as specified in
+                      RFC 6979.
+
 -h, --help            Show help about this command and exit
 
 
