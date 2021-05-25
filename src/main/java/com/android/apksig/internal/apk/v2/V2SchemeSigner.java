@@ -142,13 +142,27 @@ public abstract class V2SchemeSigner {
     }
 
     public static ApkSigningBlockUtils.SigningSchemeBlockAndDigests
+            generateApkSignatureSchemeV2Block(RunnablesExecutor executor,
+                DataSource beforeCentralDir,
+                DataSource centralDir,
+                DataSource eocd,
+                List<SignerConfig> signerConfigs,
+                boolean v3SigningEnabled)
+                throws IOException, InvalidKeyException, NoSuchAlgorithmException,
+                SignatureException {
+        return generateApkSignatureSchemeV2Block(executor, beforeCentralDir, centralDir, eocd,
+                signerConfigs, v3SigningEnabled, null);
+    }
+
+    public static ApkSigningBlockUtils.SigningSchemeBlockAndDigests
             generateApkSignatureSchemeV2Block(
                     RunnablesExecutor executor,
                     DataSource beforeCentralDir,
                     DataSource centralDir,
                     DataSource eocd,
                     List<SignerConfig> signerConfigs,
-                    boolean v3SigningEnabled)
+                    boolean v3SigningEnabled,
+                    List<byte[]> preservedV2SignerBlocks)
                     throws IOException, InvalidKeyException, NoSuchAlgorithmException,
                             SignatureException {
         Pair<List<SignerConfig>, Map<ContentDigestAlgorithm, byte[]>> digestInfo =
@@ -156,19 +170,24 @@ public abstract class V2SchemeSigner {
                         executor, beforeCentralDir, centralDir, eocd, signerConfigs);
         return new ApkSigningBlockUtils.SigningSchemeBlockAndDigests(
                 generateApkSignatureSchemeV2Block(
-                        digestInfo.getFirst(), digestInfo.getSecond(), v3SigningEnabled),
+                        digestInfo.getFirst(), digestInfo.getSecond(), v3SigningEnabled,
+                        preservedV2SignerBlocks),
                 digestInfo.getSecond());
     }
 
     private static Pair<byte[], Integer> generateApkSignatureSchemeV2Block(
             List<SignerConfig> signerConfigs,
             Map<ContentDigestAlgorithm, byte[]> contentDigests,
-            boolean v3SigningEnabled)
+            boolean v3SigningEnabled,
+            List<byte[]> preservedV2SignerBlocks)
             throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
         // FORMAT:
         // * length-prefixed sequence of length-prefixed signer blocks.
 
         List<byte[]> signerBlocks = new ArrayList<>(signerConfigs.size());
+        if (preservedV2SignerBlocks != null && preservedV2SignerBlocks.size() > 0) {
+            signerBlocks.addAll(preservedV2SignerBlocks);
+        }
         int signerNumber = 0;
         for (SignerConfig signerConfig : signerConfigs) {
             signerNumber++;
