@@ -94,6 +94,14 @@ certificate.
                       whether to use the deterministic version as specified in
                       RFC 6979.
 
+--append-signature    Appends the current signature to any signatures that
+                      already exist within the APK. This option can be used
+                      when an APK is signed by multiple independent signers to
+                      allow each to add their own signature without needing to
+                      share their private key. This option can also be used to
+                      preserve existing key / value blocks that exist within the
+                      APK signing block.
+
 -h, --help            Show help about this command and exit
 
 
