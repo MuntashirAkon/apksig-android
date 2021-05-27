@@ -160,6 +160,7 @@ public class ApkSignerTool {
         boolean v4SigningFlagFound = false;
         boolean sourceStampFlagFound = false;
         boolean deterministicDsaSigning = false;
+        boolean otherSignersSignaturesPreserved = false;
         while ((optionName = optionsParser.nextOption()) != null) {
             optionOriginalForm = optionsParser.getOptionOriginalForm();
             if (("help".equals(optionName)) || ("h".equals(optionName))) {
@@ -262,6 +263,8 @@ public class ApkSignerTool {
                 sourceStampLineage = getLineageFromInputFile(stampLineageFile);
             } else if ("deterministic-dsa-signing".equals(optionName)) {
                 deterministicDsaSigning = optionsParser.getOptionalBooleanValue(false);
+            } else if ("append-signature".equals(optionName)) {
+                otherSignersSignaturesPreserved = optionsParser.getOptionalBooleanValue(true);
             } else {
                 throw new ParameterException(
                         "Unsupported option: " + optionOriginalForm + ". See --help for supported"
@@ -350,7 +353,7 @@ public class ApkSignerTool {
                 new ApkSigner.Builder(signerConfigs)
                         .setInputApk(inputApk)
                         .setOutputApk(tmpOutputApk)
-                        .setOtherSignersSignaturesPreserved(false)
+                        .setOtherSignersSignaturesPreserved(otherSignersSignaturesPreserved)
                         .setV1SigningEnabled(v1SigningEnabled)
                         .setV2SigningEnabled(v2SigningEnabled)
                         .setV3SigningEnabled(v3SigningEnabled)
