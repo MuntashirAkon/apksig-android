@@ -39,8 +39,10 @@ import com.android.apksig.internal.pkcs7.SignerIdentifier;
 import com.android.apksig.internal.pkcs7.SignerInfo;
 import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.util.ChainedDataSource;
+import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.internal.util.VerityTreeBuilder;
+import com.android.apksig.internal.util.X509CertificateUtils;
 import com.android.apksig.internal.x509.RSAPublicKey;
 import com.android.apksig.internal.x509.SubjectPublicKeyInfo;
 import com.android.apksig.internal.zip.ZipUtils;
@@ -65,6 +67,7 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.InvalidKeySpecException;
@@ -91,7 +94,7 @@ public class ApkSigningBlockUtils {
               0x41, 0x50, 0x4b, 0x20, 0x53, 0x69, 0x67, 0x20,
               0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x20, 0x34, 0x32,
           };
-    private static final int VERITY_PADDING_BLOCK_ID = 0x42726577;
+    public static final int VERITY_PADDING_BLOCK_ID = 0x42726577;
 
     private static final ContentDigestAlgorithm[] V4_CONTENT_DIGEST_ALGORITHMS =
             {CHUNKED_SHA512, VERITY_CHUNKED_SHA256, CHUNKED_SHA256};
@@ -843,7 +846,7 @@ public class ApkSigningBlockUtils {
         //     uint64:           size (excluding this field)
         //     uint32:           ID
         //     (size - 4) bytes: value
-        // (extra placeholder ID-value for padding to make block size a multiple of 4096 bytes)
+        // (extra verity ID-value for padding to make block size a multiple of 4096 bytes)
         // uint64:  size (same as the one above)
         // uint128: magic
 
@@ -877,7 +880,6 @@ public class ApkSigningBlockUtils {
         long blockSizeFieldValue = resultSize - 8L;
         result.putLong(blockSizeFieldValue);
 
-
         for (Pair<byte[], Integer> schemeBlockPair : apkSignatureSchemeBlockPairs) {
             byte[] apkSignatureSchemeBlock = schemeBlockPair.getFirst();
             int apkSignatureSchemeId = schemeBlockPair.getSecond();
@@ -895,6 +897,116 @@ public class ApkSigningBlockUtils {
         result.put(APK_SIGNING_BLOCK_MAGIC);
 
         return result.array();
+    }
+
+    /**
+     * Returns the individual APK signature blocks within the provided {@code apkSigningBlock} in a
+     * {@code List} of {@code Pair} instances where the first element in the {@code Pair} is the
+     * contents / value of the signature block and the second element is the ID of the block.
+     *
+     * @throws IOException if an error is encountered reading the provided {@code apkSigningBlock}
+     */
+    public static List<Pair<byte[], Integer>> getApkSignatureBlocks(
+            DataSource apkSigningBlock) throws IOException {
+        // FORMAT:
+        // uint64:  size (excluding this field)
+        // repeated ID-value pairs:
+        //     uint64:           size (excluding this field)
+        //     uint32:           ID
+        //     (size - 4) bytes: value
+        // (extra verity ID-value for padding to make block size a multiple of 4096 bytes)
+        // uint64:  size (same as the one above)
+        // uint128: magic
+        long apkSigningBlockSize = apkSigningBlock.size();
+        if (apkSigningBlock.size() > Integer.MAX_VALUE || apkSigningBlockSize < 32) {
+            throw new IllegalArgumentException(
+                    "APK signing block size out of range: " + apkSigningBlockSize);
+        }
+        // Remove the header and footer from the signing block to iterate over only the repeated
+        // ID-value pairs.
+        ByteBuffer apkSigningBlockBuffer = apkSigningBlock.getByteBuffer(8,
+                (int) apkSigningBlock.size() - 32);
+        apkSigningBlockBuffer.order(ByteOrder.LITTLE_ENDIAN);
+        List<Pair<byte[], Integer>> signatureBlocks = new ArrayList<>();
+        while (apkSigningBlockBuffer.hasRemaining()) {
+            long blockLength = apkSigningBlockBuffer.getLong();
+            if (blockLength > Integer.MAX_VALUE || blockLength < 4) {
+                throw new IllegalArgumentException(
+                        "Block index " + (signatureBlocks.size() + 1) + " size out of range: "
+                                + blockLength);
+            }
+            int blockId = apkSigningBlockBuffer.getInt();
+            // Since the block ID has already been read from the signature block read the next
+            // blockLength - 4 bytes as the value.
+            byte[] blockValue = new byte[(int) blockLength - 4];
+            apkSigningBlockBuffer.get(blockValue);
+            signatureBlocks.add(Pair.of(blockValue, blockId));
+        }
+        return signatureBlocks;
+    }
+
+    /**
+     * Returns the individual APK signers within the provided {@code signatureBlock} in a {@code
+     * List} of {@code Pair} instances where the first element is a {@code List} of {@link
+     * X509Certificate}s and the second element is a byte array of the individual signer's block.
+     *
+     * <p>This method supports any signature block that adheres to the following format up to the
+     * signing certificate(s):
+     * <pre>
+     * * length-prefixed sequence of length-prefixed signers
+     *   * length-prefixed signed data
+     *     * length-prefixed sequence of length-prefixed digests:
+     *       * uint32: signature algorithm ID
+     *       * length-prefixed bytes: digest of contents
+     *     * length-prefixed sequence of certificates:
+     *       * length-prefixed bytes: X.509 certificate (ASN.1 DER encoded).
+     * </pre>
+     *
+     * <p>Note, this is a convenience method to obtain any signers from an existing signature block;
+     * the signature of each signer will not be verified.
+     *
+     * @throws ApkFormatException if an error is encountered while parsing the provided {@code
+     * signatureBlock}
+     * @throws CertificateException if the signing certificate(s) within an individual signer block
+     * cannot be parsed
+     */
+    public static List<Pair<List<X509Certificate>, byte[]>> getApkSignatureBlockSigners(
+            byte[] signatureBlock) throws ApkFormatException, CertificateException {
+        ByteBuffer signatureBlockBuffer = ByteBuffer.wrap(signatureBlock);
+        signatureBlockBuffer.order(ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer signersBuffer = getLengthPrefixedSlice(signatureBlockBuffer);
+        List<Pair<List<X509Certificate>, byte[]>> signers = new ArrayList<>();
+        while (signersBuffer.hasRemaining()) {
+            // Parse the next signer block, save all of its bytes for the resulting List, and
+            // rewind the buffer to allow the signing certificate(s) to be parsed.
+            ByteBuffer signer = getLengthPrefixedSlice(signersBuffer);
+            byte[] signerBytes = new byte[signer.remaining()];
+            signer.get(signerBytes);
+            signer.rewind();
+
+            ByteBuffer signedData = getLengthPrefixedSlice(signer);
+            // The first length prefixed slice is the sequence of digests which are not required
+            // when obtaining the signing certificate(s).
+            getLengthPrefixedSlice(signedData);
+            ByteBuffer certificatesBuffer = getLengthPrefixedSlice(signedData);
+            List<X509Certificate> certificates = new ArrayList<>();
+            while (certificatesBuffer.hasRemaining()) {
+                int certLength = certificatesBuffer.getInt();
+                byte[] certBytes = new byte[certLength];
+                if (certLength > certificatesBuffer.remaining()) {
+                    throw new IllegalArgumentException(
+                            "Cert index " + (certificates.size() + 1) + " under signer index "
+                                    + (signers.size() + 1) + " size out of range: " + certLength);
+                }
+                certificatesBuffer.get(certBytes);
+                GuaranteedEncodedFormX509Certificate signerCert =
+                        new GuaranteedEncodedFormX509Certificate(
+                                X509CertificateUtils.generateCertificate(certBytes), certBytes);
+                certificates.add(signerCert);
+            }
+            signers.add(Pair.of(certificates, signerBytes));
+        }
+        return signers;
     }
 
     /**
