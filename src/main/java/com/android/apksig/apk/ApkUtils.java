@@ -97,6 +97,27 @@ public abstract class ApkUtils {
     }
 
     /**
+     * Returns the APK Signing Block of the provided {@code apk}.
+     *
+     * @throws ApkFormatException if the APK is not a valid ZIP archive
+     * @throws IOException if an I/O error occurs
+     * @throws ApkSigningBlockNotFoundException if there is no APK Signing Block in the APK
+     *
+     * @see <a href="https://source.android.com/security/apksigning/v2.html">APK Signature Scheme v2
+     * </a>
+     */
+    public static ApkSigningBlock findApkSigningBlock(DataSource apk)
+            throws ApkFormatException, IOException, ApkSigningBlockNotFoundException {
+        ApkUtils.ZipSections inputZipSections;
+        try {
+            inputZipSections = ApkUtils.findZipSections(apk);
+        } catch (ZipFormatException e) {
+            throw new ApkFormatException("Malformed APK: not a ZIP archive", e);
+        }
+        return findApkSigningBlock(apk, inputZipSections);
+    }
+
+    /**
      * Returns the APK Signing Block of the provided APK.
      *
      * @throws IOException if an I/O error occurs
