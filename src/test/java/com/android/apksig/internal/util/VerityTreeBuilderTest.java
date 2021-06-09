@@ -79,7 +79,7 @@ public final class VerityTreeBuilderTest {
         return DataSources.asDataSource(ByteBuffer.wrap(data.getBytes(UTF_8)));
     }
 
-    @Test public void generateVerityTreeRootHashFromDummyDataSource() throws Exception {
+    @Test public void generateVerityTreeRootHashFromPlaceholderDataSource() throws Exception {
         // This sample was taken from src/test/resources/com/android/apksig/original.apk.
         byte[] sampleEoCDFromDisk = new byte[] {
             0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x06, 0x00, 0x79, 0x01,
