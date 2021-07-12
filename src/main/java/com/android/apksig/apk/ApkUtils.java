@@ -97,6 +97,17 @@ public abstract class ApkUtils {
     }
 
     /**
+     * Updates the length of EOCD comment.
+     *
+     * @param zipEndOfCentralDirectory APK's ZIP End of Central Directory record
+     */
+    public static void updateZipEocdCommentLen(ByteBuffer zipEndOfCentralDirectory) {
+        ByteBuffer eocd = zipEndOfCentralDirectory.slice();
+        eocd.order(ByteOrder.LITTLE_ENDIAN);
+        ZipUtils.updateZipEocdCommentLen(eocd);
+    }
+
+    /**
      * Returns the APK Signing Block of the provided {@code apk}.
      *
      * @throws ApkFormatException if the APK is not a valid ZIP archive
