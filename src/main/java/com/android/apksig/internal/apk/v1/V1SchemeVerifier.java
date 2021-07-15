@@ -26,6 +26,7 @@ import com.android.apksig.ApkVerifier.Issue;
 import com.android.apksig.ApkVerifier.IssueWithParams;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
+import com.android.apksig.internal.apk.ApkSigningBlockUtils;
 import com.android.apksig.internal.asn1.Asn1BerParser;
 import com.android.apksig.internal.asn1.Asn1Class;
 import com.android.apksig.internal.asn1.Asn1DecodingException;
@@ -54,13 +55,17 @@ import com.android.apksig.zip.ZipFormatException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
+import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.Principal;
+import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -677,7 +682,27 @@ public abstract class V1SchemeVerifier {
             String jcaSignatureAlgorithm =
                     getJcaSignatureAlgorithm(digestAlgorithmOid, signatureAlgorithmOid);
             Signature s = Signature.getInstance(jcaSignatureAlgorithm);
-            s.initVerify(signingCertificate.getPublicKey());
+            PublicKey publicKey = signingCertificate.getPublicKey();
+            try {
+                s.initVerify(publicKey);
+            } catch (InvalidKeyException e) {
+                // An InvalidKeyException could be caught if the PublicKey in the certificate is not
+                // properly encoded; attempt to resolve any encoding errors, generate a new public
+                // key, and reattempt the initVerify with the newly encoded key.
+                try {
+                    byte[] encodedPublicKey = ApkSigningBlockUtils.encodePublicKey(publicKey);
+                    publicKey = KeyFactory.getInstance(publicKey.getAlgorithm()).generatePublic(
+                            new X509EncodedKeySpec(encodedPublicKey));
+                } catch (InvalidKeySpecException ikse) {
+                    // If an InvalidKeySpecException is caught then throw the original Exception
+                    // since the key couldn't be properly re-encoded, and the original Exception
+                    // will have more useful debugging info.
+                    throw e;
+                }
+                s = Signature.getInstance(jcaSignatureAlgorithm);
+                s.initVerify(publicKey);
+            }
+
             if (signerInfo.signedAttrs != null) {
                 // Signed attributes present -- verify signature against the ASN.1 DER encoded form
                 // of signed attributes. This verifies integrity of the signature file because
