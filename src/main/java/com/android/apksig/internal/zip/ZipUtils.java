@@ -70,6 +70,20 @@ public abstract class ZipUtils {
     }
 
     /**
+     * Sets the length of EOCD comment.
+     *
+     * <p>NOTE: Byte order of {@code zipEndOfCentralDirectory} must be little-endian.
+     */
+    public static void updateZipEocdCommentLen(ByteBuffer zipEndOfCentralDirectory) {
+        assertByteOrderLittleEndian(zipEndOfCentralDirectory);
+        int commentLen = zipEndOfCentralDirectory.remaining() - ZIP_EOCD_REC_MIN_SIZE;
+        setUnsignedInt16(
+                zipEndOfCentralDirectory,
+                zipEndOfCentralDirectory.position() + ZIP_EOCD_COMMENT_LENGTH_FIELD_OFFSET,
+                commentLen);
+    }
+
+    /**
      * Returns the offset of the start of the ZIP Central Directory in the archive.
      *
      * <p>NOTE: Byte order of {@code zipEndOfCentralDirectory} must be little-endian.
