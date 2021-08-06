@@ -16,6 +16,7 @@
 
 package com.android.apksig.internal.apk;
 
+import static com.android.apksig.Constants.OID_RSA_ENCRYPTION;
 import static com.android.apksig.internal.apk.ContentDigestAlgorithm.CHUNKED_SHA256;
 import static com.android.apksig.internal.apk.ContentDigestAlgorithm.CHUNKED_SHA512;
 import static com.android.apksig.internal.apk.ContentDigestAlgorithm.VERITY_CHUNKED_SHA256;
@@ -666,7 +667,8 @@ public class ApkSigningBlockUtils {
         if ("X.509".equals(publicKey.getFormat())) {
             encodedPublicKey = publicKey.getEncoded();
             // if the key is an RSA key check for a negative modulus
-            if ("RSA".equals(publicKey.getAlgorithm())) {
+            String keyAlgorithm = publicKey.getAlgorithm();
+            if ("RSA".equals(keyAlgorithm) || OID_RSA_ENCRYPTION.equals(keyAlgorithm)) {
                 try {
                     // Parse the encoded public key into the separate elements of the
                     // SubjectPublicKeyInfo to obtain the SubjectPublicKey.

@@ -16,6 +16,7 @@
 
 package com.android.apksig.internal.pkcs7;
 
+import static com.android.apksig.Constants.OID_RSA_ENCRYPTION;
 import static com.android.apksig.internal.asn1.Asn1DerEncoder.ASN1_DER_NULL;
 import static com.android.apksig.internal.oid.OidConstants.OID_DIGEST_SHA1;
 import static com.android.apksig.internal.oid.OidConstants.OID_DIGEST_SHA256;
@@ -92,7 +93,7 @@ public class AlgorithmIdentifier {
                 throw new IllegalArgumentException(
                         "Unexpected digest algorithm: " + digestAlgorithm);
         }
-        if ("RSA".equalsIgnoreCase(keyAlgorithm)) {
+        if ("RSA".equalsIgnoreCase(keyAlgorithm) || OID_RSA_ENCRYPTION.equals(keyAlgorithm)) {
             return Pair.of(
                     jcaDigestPrefixForSigAlg + "withRSA",
                     new AlgorithmIdentifier(OID_SIG_RSA, ASN1_DER_NULL));
