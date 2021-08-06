@@ -16,6 +16,7 @@
 
 package com.android.apksig.internal.apk.v1;
 
+import static com.android.apksig.Constants.OID_RSA_ENCRYPTION;
 import static com.android.apksig.internal.pkcs7.AlgorithmIdentifier.getSignerInfoDigestAlgorithmOid;
 import static com.android.apksig.internal.pkcs7.AlgorithmIdentifier.getSignerInfoSignatureAlgorithm;
 
@@ -111,7 +112,7 @@ public abstract class V1SchemeSigner {
     public static DigestAlgorithm getSuggestedSignatureDigestAlgorithm(
             PublicKey signingKey, int minSdkVersion) throws InvalidKeyException {
         String keyAlgorithm = signingKey.getAlgorithm();
-        if ("RSA".equalsIgnoreCase(keyAlgorithm)) {
+        if ("RSA".equalsIgnoreCase(keyAlgorithm) || OID_RSA_ENCRYPTION.equals((keyAlgorithm))) {
             // Prior to API Level 18, only SHA-1 can be used with RSA.
             if (minSdkVersion < 18) {
                 return DigestAlgorithm.SHA1;
