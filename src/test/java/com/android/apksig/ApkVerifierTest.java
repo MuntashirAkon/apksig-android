@@ -30,6 +30,7 @@ import com.android.apksig.internal.util.HexEncoding;
 import com.android.apksig.internal.util.Resources;
 import com.android.apksig.util.DataSources;
 
+import java.security.Provider;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -1327,6 +1328,23 @@ public class ApkVerifierTest {
         }
         if (msg.length() > 0) {
             fail(msg.toString());
+        }
+    }
+
+    @Test
+    public void verifySignature_negativeModulusConscryptProvider() throws Exception {
+        Provider conscryptProvider = null;
+        try {
+            conscryptProvider = new org.conscrypt.OpenSSLProvider();
+            Security.insertProviderAt(conscryptProvider, 1);
+            assertVerified(verify("v1v2v3-rsa-2048-negmod-in-cert.apk"));
+        } catch (UnsatisfiedLinkError e) {
+            // If the library for conscrypt is not available then skip this test.
+            return;
+        } finally {
+            if (conscryptProvider != null) {
+                Security.removeProvider(conscryptProvider.getName());
+            }
         }
     }
 
