@@ -47,4 +47,6 @@ public class Constants {
             SourceStampConstants.V1_SOURCE_STAMP_BLOCK_ID;
     public static final int V2_SOURCE_STAMP_BLOCK_ID =
             SourceStampConstants.V2_SOURCE_STAMP_BLOCK_ID;
+
+    public static final String OID_RSA_ENCRYPTION = "1.2.840.113549.1.1.1";
 }
