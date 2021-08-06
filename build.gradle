@@ -22,6 +22,7 @@ dependencies {
     implementation 'com.google.protobuf:protobuf-javalite:3.8.0'
     testImplementation 'junit:junit:4.13'
     testImplementation 'org.bouncycastle:bcprov-jdk15on:1.68'
+    testImplementation 'org.conscrypt:conscrypt-openjdk-uber:2.5.1'
 }
 
 protobuf {
