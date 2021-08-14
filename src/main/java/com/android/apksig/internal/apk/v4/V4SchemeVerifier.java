@@ -93,7 +93,7 @@ public abstract class V4SchemeVerifier {
         V4Signature.SigningInfo signingInfo = V4Signature.SigningInfo.fromByteArray(
                 signature.signingInfo);
 
-        final byte[] signedData = V4Signature.getSigningData(apk.size(), hashingInfo, signingInfo);
+        final byte[] signedData = V4Signature.getSignedData(apk.size(), hashingInfo, signingInfo);
 
         // First, verify the signature over signedData.
         ApkSigningBlockUtils.Result.SignerInfo signerInfo = parseAndVerifySignatureBlock(
