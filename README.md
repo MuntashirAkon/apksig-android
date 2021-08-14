@@ -1,11 +1,15 @@
-# apksig
+# apksig for Android
+
+Android port of [apksig](https://android.googlesource.com/platform/tools/apksig) library.
+
+[![](https://jitpack.io/v/MuntashirAkon/apksig-android.svg)](https://jitpack.io/#MuntashirAkon/apksig-android)
 
 apksig is a project which aims to simplify APK signing and checking whether APK signatures are
 expected to verify on Android. apksig supports
 [JAR signing](https://docs.oracle.com/javase/8/docs/technotes/guides/jar/jar.html#Signed_JAR_File)
 (used by Android since day one) and
 [APK Signature Scheme v2](https://source.android.com/security/apksigning/v2.html) (supported since
-Android Nougat, API Level 24). apksig is meant to be used outside of Android devices.
+Android Nougat, API Level 24).
 
 The key feature of apksig is that it knows about differences in APK signature verification logic
 between different versions of the Android platform. apksig thus thoroughly checks whether an APK's
@@ -13,14 +17,22 @@ signature is expected to verify on all Android platform versions supported by th
 an APK, apksig chooses the most appropriate cryptographic algorithms based on the Android platform
 versions supported by the APK being signed.
 
-The project consists of two subprojects:
+## Quick start
+apksig for Android is available via JitPack.
 
-  * apksig -- a pure Java library, and
-  * apksigner -- a pure Java command-line tool based on the apksig library.
+```groovy
+// Top level build file
+repositories {
+    maven { url "https://jitpack.io" }
+}
 
+// Add to dependencies section
+dependencies {
+    implementation 'com.github.MuntashirAkon:apksig-android:4.1.1'
+}
+```
 
-## apksig library
-
+## Features
 apksig library offers three primitives:
 
   * `ApkSigner` which signs the provided APK so that it verifies on all Android platform versions
@@ -35,17 +47,3 @@ apksig library offers three primitives:
 _NOTE: Some public classes of the library are in packages having the word "internal" in their name.
 These are not public API of the library. Do not use \*.internal.\* classes directly because these
 classes may change any time without regard to existing clients outside of `apksig` and `apksigner`._
-
-
-## apksigner command-line tool
-
-apksigner command-line tool offers two operations:
-
-  * sign the provided APK so that it verifies on all Android platforms supported by the APK. Run
-    `apksigner sign` for usage information.
-  * check whether the provided APK's signatures are expected to verify on all Android platforms
-    supported by the APK. Run `apksigner verify` for usage information.
-
-The tool determines the range of Android platform versions (API Levels) supported by the APK by
-inspecting the APK's AndroidManifest.xml. This behavior can be overridden by specifying the range
-of platform versions on the command-line.

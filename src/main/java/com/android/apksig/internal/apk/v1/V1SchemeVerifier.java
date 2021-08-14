@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2020 Muntashir Al-Islam
  * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +16,8 @@
  */
 
 package com.android.apksig.internal.apk.v1;
+
+import android.util.Base64;
 
 import static com.android.apksig.internal.oid.OidConstants.getSigAlgSupportedApiLevels;
 import static com.android.apksig.internal.pkcs7.AlgorithmIdentifier.getJcaDigestAlgorithm;
@@ -68,8 +71,6 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
-import java.util.Base64.Decoder;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -965,8 +966,8 @@ public abstract class V1SchemeVerifier {
                             V1SchemeConstants.MANIFEST_ENTRY_NAME,
                             jcaDigestAlgorithm,
                             mSignatureFileEntry.getName(),
-                            Base64.getEncoder().encodeToString(actual),
-                            Base64.getEncoder().encodeToString(expected));
+                            Base64.encodeToString(actual, Base64.NO_WRAP),
+                            Base64.encodeToString(expected, Base64.NO_WRAP));
                     verified = false;
                 }
             }
@@ -1007,8 +1008,8 @@ public abstract class V1SchemeVerifier {
                             Issue.JAR_SIG_MANIFEST_MAIN_SECTION_DIGEST_DID_NOT_VERIFY,
                             jcaDigestAlgorithm,
                             mSignatureFileEntry.getName(),
-                            Base64.getEncoder().encodeToString(actual),
-                            Base64.getEncoder().encodeToString(expected));
+                            Base64.encodeToString(actual, Base64.NO_WRAP),
+                            Base64.encodeToString(expected, Base64.NO_WRAP));
                 }
             }
         }
@@ -1060,8 +1061,8 @@ public abstract class V1SchemeVerifier {
                             entryName,
                             jcaDigestAlgorithm,
                             mSignatureFileEntry.getName(),
-                            Base64.getEncoder().encodeToString(actual),
-                            Base64.getEncoder().encodeToString(expected));
+                            Base64.encodeToString(actual, Base64.NO_WRAP),
+                            Base64.encodeToString(expected, Base64.NO_WRAP));
                 }
             }
         }
@@ -1136,7 +1137,6 @@ public abstract class V1SchemeVerifier {
             String digestAttrSuffix,
             int minSdkVersion,
             int maxSdkVersion) {
-        Decoder base64Decoder = Base64.getDecoder();
         List<NamedDigest> result = new ArrayList<>(1);
         if (minSdkVersion < AndroidSdkVersion.JELLY_BEAN_MR2) {
             // Prior to JB MR2, Android platform's logic for picking a digest algorithm to verify is
@@ -1165,7 +1165,7 @@ public abstract class V1SchemeVerifier {
                     continue;
                 }
                 // Supported digest algorithm
-                result.add(new NamedDigest(alg, base64Decoder.decode(digestBase64)));
+                result.add(new NamedDigest(alg, Base64.decode(digestBase64, Base64.NO_WRAP)));
                 break;
             }
             // No supported digests found -- this will fail to verify on pre-JB MR2 Androids.
@@ -1184,7 +1184,7 @@ public abstract class V1SchemeVerifier {
                     // Attribute not found
                     continue;
                 }
-                byte[] digest = base64Decoder.decode(digestBase64);
+                byte[] digest = Base64.decode(digestBase64, Base64.NO_WRAP);
                 byte[] digestInResult = getDigest(result, alg);
                 if ((digestInResult == null) || (!Arrays.equals(digestInResult, digest))) {
                     result.add(new NamedDigest(alg, digest));
@@ -1367,8 +1367,8 @@ public abstract class V1SchemeVerifier {
                             entryName,
                             expectedDigest.jcaDigestAlgorithm,
                             V1SchemeConstants.MANIFEST_ENTRY_NAME,
-                            Base64.getEncoder().encodeToString(actualDigest),
-                            Base64.getEncoder().encodeToString(expectedDigest.digest));
+                            Base64.encodeToString(actualDigest, Base64.NO_WRAP),
+                            Base64.encodeToString(expectedDigest.digest, Base64.NO_WRAP));
                 }
             }
         }

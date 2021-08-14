@@ -27,14 +27,14 @@ import java.security.MessageDigest;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 import com.android.apksig.ApkSigner;
 import com.android.apksig.internal.util.HexEncoding;
 import com.android.apksig.internal.util.Resources;
 import com.android.apksig.util.DataSources;
 
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public class ApkUtilsTest {
 
     @Test

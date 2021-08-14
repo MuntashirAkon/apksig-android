@@ -34,7 +34,7 @@ import com.android.apksig.util.DataSource;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
 import java.nio.ByteBuffer;
@@ -48,7 +48,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public class SigningCertificateLineageTest {
 
     // createLineageWithSignersFromResources and updateLineageWithSignerFromResources will add the

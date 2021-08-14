@@ -30,13 +30,13 @@ import com.android.apksig.util.DataSources;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 import java.nio.ByteBuffer;
 import java.security.cert.X509Certificate;
 import java.util.List;
 
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public class SourceStampVerifierTest {
     private static final String RSA_2048_CERT_SHA256_DIGEST =
             "fb5dbd3c669af9fc236c6991e6387b7f11ff0590997f22d0f5c74ff40e04fca8";

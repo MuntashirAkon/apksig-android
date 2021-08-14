@@ -22,13 +22,13 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 /**
  * Tests for the {@link DataSink} returned by
  * {@link DataSinks#asDataSink(java.io.RandomAccessFile)}.
  */
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public class DataSinkFromRAFTest extends DataSinkTestBase<RandomAccessFileDataSink> {
 
     @Override

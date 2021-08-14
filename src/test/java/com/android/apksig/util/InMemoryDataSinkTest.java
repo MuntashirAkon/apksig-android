@@ -19,12 +19,12 @@ package com.android.apksig.util;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 /**
  * Tests for the {@link DataSink} returned by {@link DataSinks#newInMemoryDataSink()}.
  */
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public class InMemoryDataSinkTest extends DataSinkTestBase<ReadableDataSink> {
 
     @Override

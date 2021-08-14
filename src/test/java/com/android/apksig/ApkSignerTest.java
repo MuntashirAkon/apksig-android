@@ -54,7 +54,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -78,7 +78,7 @@ import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public class ApkSignerTest {
 
     /**

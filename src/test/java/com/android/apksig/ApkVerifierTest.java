@@ -34,7 +34,7 @@ import java.security.Provider;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -55,7 +55,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public class ApkVerifierTest {
 
     private static final String[] DSA_KEY_NAMES = {"1024", "2048", "3072"};

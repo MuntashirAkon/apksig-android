@@ -21,12 +21,12 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 /**
  * Tests for the {@link DataSource} returned by {@link DataSources#asDataSource(ByteBuffer)}.
  */
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public class DataSourceFromByteBufferTest extends DataSourceTestBase {
 
     @Test

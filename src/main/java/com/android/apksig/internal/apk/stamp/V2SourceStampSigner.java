@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2020 Muntashir Al-Islam
  * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -87,7 +88,7 @@ public abstract class V2SourceStampSigner {
                 signatureSchemeDigestInfos,
                 sourceStampSignerConfig,
                 signatureSchemeDigests);
-        Collections.sort(signatureSchemeDigests, Comparator.comparing(Pair::getFirst));
+        Collections.sort(signatureSchemeDigests, (o1, o2) -> o1.getFirst().compareTo(o2.getFirst()));
 
         SourceStampBlock sourceStampBlock = new SourceStampBlock();
 
@@ -149,7 +150,7 @@ public abstract class V2SourceStampSigner {
         for (Map.Entry<ContentDigestAlgorithm, byte[]> digest : digestInfo.entrySet()) {
             digests.add(Pair.of(digest.getKey().getId(), digest.getValue()));
         }
-        Collections.sort(digests, Comparator.comparing(Pair::getFirst));
+        Collections.sort(digests, (o1, o2) -> o1.getFirst().compareTo(o2.getFirst()));
 
         // FORMAT:
         // * length-prefixed sequence of length-prefixed digests:

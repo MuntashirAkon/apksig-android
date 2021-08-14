@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2020 Muntashir Al-Islam
  * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +17,6 @@
 
 package com.android.apksig.internal.util;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-
 import com.android.apksig.internal.zip.ZipUtils;
 import com.android.apksig.util.DataSink;
 import com.android.apksig.util.DataSource;
@@ -28,13 +27,13 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Phaser;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * VerityTreeBuilder is used to generate the root hash of verity tree built from the input file.
@@ -208,7 +207,7 @@ public class VerityTreeBuilder implements AutoCloseable {
         levelOffset[0] = 0;
         for (int i = 0; i < levelSize.size(); i++) {
             // We don't support verity tree if it is larger then Integer.MAX_VALUE.
-            levelOffset[i + 1] = levelOffset[i] + Math.toIntExact(
+            levelOffset[i + 1] = levelOffset[i] + MathCompat.toIntExact(
                     levelSize.get(levelSize.size() - i - 1));
         }
         return levelOffset;

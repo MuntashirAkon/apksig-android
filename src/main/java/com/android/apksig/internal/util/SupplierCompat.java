@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2020 Muntashir Al-Islam
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,9 @@
  * limitations under the License.
  */
 
-package com.android.apksig.util;
+package com.android.apksig.internal.util;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
-
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-    DataSinkFromOutputStreamTest.class,
-    DataSinkFromRAFTest.class,
-    DataSourceFromByteBufferTest.class,
-    DataSourceFromRAFChunkTest.class,
-    DataSourceFromRAFTest.class,
-    InMemoryDataSinkDataSourceTest.class,
-    InMemoryDataSinkTest.class,
-})
-public class AllTests {}
+@FunctionalInterface
+public interface SupplierCompat<T> {
+    T get();
+}

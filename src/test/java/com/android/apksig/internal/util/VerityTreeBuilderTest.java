@@ -26,7 +26,7 @@ import com.android.apksig.util.DataSources;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -34,7 +34,7 @@ import java.security.NoSuchAlgorithmException;
 
 
 /** Unit tests for {@link VerityTreeBuilder}. */
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public final class VerityTreeBuilderTest {
 
     @Test public void SHA256RootHashMatch() throws Exception {

@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2020 Muntashir Al-Islam
  * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +32,6 @@ import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -65,7 +65,7 @@ public abstract class V1SourceStampSigner {
         for (Map.Entry<ContentDigestAlgorithm, byte[]> digest : digestInfo.entrySet()) {
             digests.add(Pair.of(digest.getKey().getId(), digest.getValue()));
         }
-        Collections.sort(digests, Comparator.comparing(Pair::getFirst));
+        Collections.sort(digests, (o1, o2) -> o1.getFirst().compareTo(o2.getFirst()));
 
         SourceStampBlock sourceStampBlock = new SourceStampBlock();
 

@@ -27,12 +27,12 @@ import com.android.apksig.util.ReadableDataSink;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 import java.nio.ByteBuffer;
 
 /** Unit tests for {@link ChainedDataSource}. */
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public final class ChainedDataSourceTest {
 
     private ChainedDataSource mChain;

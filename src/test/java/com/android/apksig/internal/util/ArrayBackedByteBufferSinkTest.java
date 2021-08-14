@@ -18,9 +18,9 @@ package com.android.apksig.internal.util;
 
 import java.nio.ByteBuffer;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public class ArrayBackedByteBufferSinkTest extends ByteBufferSinkTestBase {
     @Override
     protected ByteBuffer createBuffer(int size) {

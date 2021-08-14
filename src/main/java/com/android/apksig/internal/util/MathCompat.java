@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2020 Muntashir Al-Islam
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,19 @@
 
 package com.android.apksig.internal.util;
 
-import java.nio.ByteBuffer;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-
-@RunWith(RobolectricTestRunner.class)
-public class DirectByteBufferSinkTest extends ByteBufferSinkTestBase {
-    @Override
-    protected ByteBuffer createBuffer(int size) {
-        return ByteBuffer.allocateDirect(size);
+public class MathCompat {
+    /**
+     * Returns the value of the {@code long} argument;
+     * throwing an exception if the value overflows an {@code int}.
+     *
+     * @param value the long value
+     * @return the argument as an int
+     * @throws ArithmeticException if the {@code argument} overflows an int
+     */
+    public static int toIntExact(long value) {
+        if ((int) value != value) {
+            throw new ArithmeticException("integer overflow");
+        }
+        return (int) value;
     }
 }

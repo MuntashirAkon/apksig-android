@@ -21,7 +21,7 @@ import static org.junit.Assert.fail;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.robolectric.RobolectricTestRunner;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -36,7 +36,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-@RunWith(JUnit4.class)
+@RunWith(RobolectricTestRunner.class)
 public class X509CertificateUtilsTest {
     // The PEM and DER encodings of a certificate without redundant length bytes; since the
     // certificates are the same they have the same hex encoding of their digest.

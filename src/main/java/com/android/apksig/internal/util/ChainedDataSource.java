@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2020 Muntashir Al-Islam
  * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +22,6 @@ import com.android.apksig.util.DataSource;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 
 /** Pseudo {@link DataSource} that chains the given {@link DataSource} as a continuous one. */
 public class ChainedDataSource implements DataSource {
@@ -31,7 +31,9 @@ public class ChainedDataSource implements DataSource {
 
     public ChainedDataSource(DataSource... sources) {
         mSources = sources;
-        mTotalSize = Arrays.stream(sources).mapToLong(src -> src.size()).sum();
+        long totalSize = 0;
+        if (sources != null) for (DataSource source : sources) totalSize += source.size();
+        mTotalSize = totalSize;
     }
 
     @Override
@@ -86,7 +88,7 @@ public class ChainedDataSource implements DataSource {
         ByteBuffer buffer = ByteBuffer.allocate(size);
         for (; i < mSources.length && buffer.hasRemaining(); i++) {
             long sizeToCopy = Math.min(mSources[i].size() - offset, buffer.remaining());
-            mSources[i].copyTo(offset, Math.toIntExact(sizeToCopy), buffer);
+            mSources[i].copyTo(offset, MathCompat.toIntExact(sizeToCopy), buffer);
             offset = 0;  // may not be zero for the first source, but reset after that.
         }
         buffer.rewind();
