@@ -56,4 +56,13 @@ public abstract class AndroidSdkVersion {
 
     /** Android R. */
     public static final int R = 30;
+
+    /** Android S. */
+    public static final int S = 31;
+
+    /** Android Sv2. */
+    public static final int Sv2 = 32;
+
+    /** Android T. */
+    public static final int T = 33;
 }

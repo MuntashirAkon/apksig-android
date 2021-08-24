@@ -24,6 +24,7 @@ import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_S
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_JAR_SIGNATURE_SCHEME;
 import static com.android.apksig.internal.apk.v1.V1SchemeConstants.MANIFEST_ENTRY_NAME;
+import static com.android.apksig.internal.apk.v3.V3SchemeConstants.MIN_SDK_WITH_V31_SUPPORT;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
@@ -201,23 +202,58 @@ public class ApkVerifier {
         Set<Integer> foundApkSigSchemeIds = new HashSet<>(2);
         if (maxSdkVersion >= AndroidSdkVersion.N) {
             RunnablesExecutor executor = RunnablesExecutor.SINGLE_THREADED;
-            // Android P and newer attempts to verify APKs using APK Signature Scheme v3
-            if (maxSdkVersion >= AndroidSdkVersion.P) {
+            // Android T and newer attempts to verify APKs using APK Signature Scheme V3.1. v3.0
+            // also includes stripping protection for the minimum SDK version on which the rotated
+            // signing key should be used.
+            int rotationMinSdkVersion = 0;
+            if (maxSdkVersion >= MIN_SDK_WITH_V31_SUPPORT) {
                 try {
-                    ApkSigningBlockUtils.Result v3Result =
-                            V3SchemeVerifier.verify(
-                                    executor,
-                                    apk,
-                                    zipSections,
-                                    Math.max(minSdkVersion, AndroidSdkVersion.P),
-                                    maxSdkVersion);
+                    ApkSigningBlockUtils.Result v31Result = new V3SchemeVerifier.Builder(apk,
+                            zipSections, Math.max(minSdkVersion, MIN_SDK_WITH_V31_SUPPORT),
+                            maxSdkVersion)
+                            .setRunnablesExecutor(executor)
+                            .setBlockId(V3SchemeConstants.APK_SIGNATURE_SCHEME_V31_BLOCK_ID)
+                            .build()
+                            .verify();
+                    foundApkSigSchemeIds.add(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V31);
+                    rotationMinSdkVersion = v31Result.signers.stream().mapToInt(
+                            signer -> signer.minSdkVersion).min().orElse(0);
+                    result.mergeFrom(v31Result);
+                    signatureSchemeApkContentDigests.put(
+                            ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V31,
+                            getApkContentDigestsFromSigningSchemeResult(v31Result));
+                } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
+                    // v3.1 signature not required
+                }
+                if (result.containsErrors()) {
+                    return result;
+                }
+            }
+            // Android P and newer attempts to verify APKs using APK Signature Scheme v3
+            if (minSdkVersion < MIN_SDK_WITH_V31_SUPPORT || foundApkSigSchemeIds.isEmpty()) {
+                try {
+                    V3SchemeVerifier.Builder builder = new V3SchemeVerifier.Builder(apk,
+                            zipSections, Math.max(minSdkVersion, AndroidSdkVersion.P),
+                            maxSdkVersion)
+                            .setRunnablesExecutor(executor)
+                            .setBlockId(V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID);
+                    if (rotationMinSdkVersion > 0) {
+                        builder.setRotationMinSdkVersion(rotationMinSdkVersion);
+                    }
+                    ApkSigningBlockUtils.Result v3Result = builder.build().verify();
                     foundApkSigSchemeIds.add(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
                     result.mergeFrom(v3Result);
                     signatureSchemeApkContentDigests.put(
                             ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3,
                             getApkContentDigestsFromSigningSchemeResult(v3Result));
                 } catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
-                    // v3 signature not required
+                    // v3 signature not required unless a v3.1 signature was found as a v3.1
+                    // signature is intended to support key rotation on T+ with the v3 signature
+                    // containing the original signing key.
+                    if (foundApkSigSchemeIds.contains(
+                            ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V31)) {
+                        result.addError(Issue.V31_BLOCK_FOUND_WITHOUT_V3_BLOCK);
+                    }
                 }
                 if (result.containsErrors()) {
                     return result;
@@ -1005,6 +1041,7 @@ public class ApkVerifier {
         private final List<V1SchemeSignerInfo> mV1SchemeIgnoredSigners = new ArrayList<>();
         private final List<V2SchemeSignerInfo> mV2SchemeSigners = new ArrayList<>();
         private final List<V3SchemeSignerInfo> mV3SchemeSigners = new ArrayList<>();
+        private final List<V3SchemeSignerInfo> mV31SchemeSigners = new ArrayList<>();
         private final List<V4SchemeSignerInfo> mV4SchemeSigners = new ArrayList<>();
         private SourceStampInfo mSourceStampInfo;
 
@@ -1012,6 +1049,7 @@ public class ApkVerifier {
         private boolean mVerifiedUsingV1Scheme;
         private boolean mVerifiedUsingV2Scheme;
         private boolean mVerifiedUsingV3Scheme;
+        private boolean mVerifiedUsingV31Scheme;
         private boolean mVerifiedUsingV4Scheme;
         private boolean mSourceStampVerified;
         private boolean mWarningsAsErrors;
@@ -1047,6 +1085,13 @@ public class ApkVerifier {
          */
         public boolean isVerifiedUsingV3Scheme() {
             return mVerifiedUsingV3Scheme;
+        }
+
+        /**
+         * Returns {@code true} if the APK's APK Signature Scheme v3.1 signature verified.
+         */
+        public boolean isVerifiedUsingV31Scheme() {
+            return mVerifiedUsingV31Scheme;
         }
 
         /**
@@ -1113,6 +1158,18 @@ public class ApkVerifier {
          */
         public List<V3SchemeSignerInfo> getV3SchemeSigners() {
             return mV3SchemeSigners;
+        }
+
+        /**
+         * Returns information about APK Signature Scheme v3.1 signers associated with the APK's
+         * signature.
+         *
+         * <note> Multiple signers represent different targeted platform versions, not
+         * a signing identity of multiple signers.  APK Signature Scheme v3.1 only supports single
+         * signer identities.</note>
+         */
+        public List<V3SchemeSignerInfo> getV31SchemeSigners() {
+            return mV31SchemeSigners;
         }
 
         private List<V4SchemeSignerInfo> getV4SchemeSigners() {
@@ -1209,6 +1266,13 @@ public class ApkVerifier {
                     mVerifiedUsingV3Scheme = source.verified;
                     for (ApkSigningBlockUtils.Result.SignerInfo signer : source.signers) {
                         mV3SchemeSigners.add(new V3SchemeSignerInfo(signer));
+                    }
+                    mSigningCertificateLineage = source.signingCertificateLineage;
+                    break;
+                case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V31:
+                    mVerifiedUsingV31Scheme = source.verified;
+                    for (ApkSigningBlockUtils.Result.SignerInfo signer : source.signers) {
+                        mV31SchemeSigners.add(new V3SchemeSignerInfo(signer));
                     }
                     mSigningCertificateLineage = source.signingCertificateLineage;
                     break;
@@ -1497,6 +1561,8 @@ public class ApkVerifier {
             private final List<IssueWithParams> mWarnings;
             private final List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest>
                     mContentDigests;
+            private final int mMinSdkVersion;
+            private final int mMaxSdkVersion;
 
             private V3SchemeSignerInfo(ApkSigningBlockUtils.Result.SignerInfo result) {
                 mIndex = result.index;
@@ -1504,6 +1570,8 @@ public class ApkVerifier {
                 mErrors = result.getErrors();
                 mWarnings = result.getWarnings();
                 mContentDigests = result.contentDigests;
+                mMinSdkVersion = result.minSdkVersion;
+                mMaxSdkVersion = result.maxSdkVersion;
             }
 
             /**
@@ -1548,6 +1616,20 @@ public class ApkVerifier {
 
             public List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> getContentDigests() {
                 return mContentDigests;
+            }
+
+            /**
+             * Returns the minimum SDK version on which this signer should be verified.
+             */
+            public int getMinSdkVersion() {
+                return mMinSdkVersion;
+            }
+
+            /**
+             * Returns the maximum SDK version on which this signer should be verified.
+             */
+            public int getMaxSdkVersion() {
+                return mMaxSdkVersion;
             }
         }
 
@@ -2525,6 +2607,51 @@ public class ApkVerifier {
          */
         V3_INCONSISTENT_LINEAGES("SigningCertificateLineages targeting different platform versions"
                 + " using APK Signature Scheme v3 are not all a part of the same overall lineage."),
+
+        /**
+         * The v3 stripping protection attribute for rotation is present, but a v3.1 signing block
+         * was not found.
+         *
+         * <ul>
+         * <li>Parameter 1: min SDK version supporting rotation from attribute ({@code Integer})
+         * </ul>
+         */
+        V31_BLOCK_MISSING(
+                "The v3 signer indicates key rotation should be supported starting from SDK "
+                        + "version %1$s, but a v3.1 block was not found"),
+
+        /**
+         * The v3 stripping protection attribute for rotation does not match the minimum SDK version
+         * targeting rotation in the v3.1 signer block.
+         *
+         * <ul>
+         * <li>Parameter 1: min SDK version supporting rotation from attribute ({@code Integer})
+         * <li>Parameter 2: min SDK version supporting rotation from v3.1 block ({@code Integer})
+         * </ul>
+         */
+        V31_ROTATION_MIN_SDK_MISMATCH(
+                "The v3 signer indicates key rotation should be supported starting from SDK "
+                        + "version %1$s, but the v3.1 block targets %2$s for rotation"),
+
+        /**
+         * The APK supports key rotation with SDK version targeting using v3.1, but the rotation min
+         * SDK version stripping protection attribute was not written to the v3 signer.
+         *
+         * <ul>
+         * <li>Parameter 1: min SDK version supporting rotation from v3.1 block ({@code Integer})
+         * </ul>
+         */
+        V31_ROTATION_MIN_SDK_ATTR_MISSING(
+                "APK supports key rotation starting from SDK version %1$s, but the v3 signer does"
+                        + " not contain the attribute to detect if this signature is stripped"),
+
+        /**
+         * The APK contains a v3.1 signing block without a v3.0 block. The v3.1 block should only
+         * be used for targeting rotation for a later SDK version; if an APK's minSdkVersion is the
+         * same as the SDK version for rotation then this should be written to a v3.0 block.
+         */
+        V31_BLOCK_FOUND_WITHOUT_V3_BLOCK(
+                "The APK contains a v3.1 signing block without a v3.0 base block"),
 
         /**
          * APK Signing Block contains an unknown entry.

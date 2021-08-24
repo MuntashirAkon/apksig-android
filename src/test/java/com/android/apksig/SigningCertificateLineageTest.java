@@ -397,6 +397,21 @@ public class SigningCertificateLineageTest {
         assertLineageContainsExpectedSigners(lineageFromApk, expectedSigners);
     }
 
+    @Test
+    public void testLineageFromAPKWithV31BlockContainsExpectedSigners() throws Exception {
+        SignerConfig firstSigner = getSignerConfigFromResources(
+                FIRST_RSA_2048_SIGNER_RESOURCE_NAME);
+        SignerConfig secondSigner = getSignerConfigFromResources(
+                SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
+        List<SignerConfig> expectedSigners = Arrays.asList(firstSigner, secondSigner);
+        DataSource apkDataSource = Resources.toDataSource(getClass(),
+                "v31-rsa-2048_2-tgt-34-1-tgt-28.apk");
+        SigningCertificateLineage lineageFromApk = SigningCertificateLineage.readFromApkDataSource(
+                apkDataSource);
+        assertLineageContainsExpectedSigners(lineageFromApk, expectedSigners);
+
+    }
+
     @Test(expected = ApkFormatException.class)
     public void testLineageFromAPKWithInvalidZipCDSizeFails() throws Exception {
         // This test verifies that attempting to read the lineage from an APK where the zip
