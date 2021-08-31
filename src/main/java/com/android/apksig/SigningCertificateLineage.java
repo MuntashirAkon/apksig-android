@@ -191,41 +191,62 @@ public class SigningCertificateLineage {
      */
     public static SigningCertificateLineage readFromApkDataSource(DataSource apk)
             throws IOException, ApkFormatException {
-        SignatureInfo signatureInfo;
+        ApkUtils.ZipSections zipSections;
         try {
-            ApkUtils.ZipSections zipSections = ApkUtils.findZipSections(apk);
-            ApkSigningBlockUtils.Result result = new ApkSigningBlockUtils.Result(
-                    ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
-            signatureInfo =
-                    ApkSigningBlockUtils.findSignature(apk, zipSections,
-                            V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID, result);
+            zipSections = ApkUtils.findZipSections(apk);
         } catch (ZipFormatException e) {
             throw new ApkFormatException(e.getMessage());
-        } catch (ApkSigningBlockUtils.SignatureNotFoundException e) {
+        }
+
+        List<SignatureInfo> signatureInfoList = new ArrayList<>();
+        try {
+            ApkSigningBlockUtils.Result result = new ApkSigningBlockUtils.Result(
+                    ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V31);
+            signatureInfoList.add(
+                    ApkSigningBlockUtils.findSignature(apk, zipSections,
+                            V3SchemeConstants.APK_SIGNATURE_SCHEME_V31_BLOCK_ID, result));
+        }
+        catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
+            // This could be expected if there's only a V3 signature block.
+        }
+        try {
+            ApkSigningBlockUtils.Result result = new ApkSigningBlockUtils.Result(
+                    ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3);
+            signatureInfoList.add(
+                    ApkSigningBlockUtils.findSignature(apk, zipSections,
+                            V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID, result));
+        }
+        catch (ApkSigningBlockUtils.SignatureNotFoundException ignored) {
+            // This could be expected if the provided APK is not signed with the v3 signature scheme
+        }
+        if (signatureInfoList.isEmpty()) {
             throw new IllegalArgumentException(
                     "The provided APK does not contain a valid V3 signature block.");
         }
 
-        // FORMAT:
-        // * length-prefixed sequence of length-prefixed signers:
-        //   * length-prefixed signed data
-        //   * minSDK
-        //   * maxSDK
-        //   * length-prefixed sequence of length-prefixed signatures
-        //   * length-prefixed public key
-        ByteBuffer signers = getLengthPrefixedSlice(signatureInfo.signatureBlock);
         List<SigningCertificateLineage> lineages = new ArrayList<>(1);
-        while (signers.hasRemaining()) {
-            ByteBuffer signer = getLengthPrefixedSlice(signers);
-            ByteBuffer signedData = getLengthPrefixedSlice(signer);
-            try {
-                SigningCertificateLineage lineage = readFromSignedData(signedData);
-                lineages.add(lineage);
-            } catch (IllegalArgumentException ignored) {
-                // The current signer block does not contain a valid lineage, but it is possible
-                // another block will.
+        for (SignatureInfo signatureInfo : signatureInfoList) {
+            // FORMAT:
+            // * length-prefixed sequence of length-prefixed signers:
+            //   * length-prefixed signed data
+            //   * minSDK
+            //   * maxSDK
+            //   * length-prefixed sequence of length-prefixed signatures
+            //   * length-prefixed public key
+            ByteBuffer signers = getLengthPrefixedSlice(signatureInfo.signatureBlock);
+            while (signers.hasRemaining()) {
+                ByteBuffer signer = getLengthPrefixedSlice(signers);
+                ByteBuffer signedData = getLengthPrefixedSlice(signer);
+                try {
+                    SigningCertificateLineage lineage = readFromSignedData(signedData);
+                    lineages.add(lineage);
+                } catch (IllegalArgumentException ignored) {
+                    // The current signer block does not contain a valid lineage, but it is possible
+                    // another block will.
+                }
             }
         }
+
         SigningCertificateLineage result;
         if (lineages.isEmpty()) {
             throw new IllegalArgumentException(

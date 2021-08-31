@@ -22,6 +22,7 @@ import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkSigningBlockNotFoundException;
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.apk.MinSdkVersionException;
+import com.android.apksig.internal.apk.v3.V3SchemeConstants;
 import com.android.apksig.internal.util.ByteBufferDataSource;
 import com.android.apksig.internal.zip.CentralDirectoryRecord;
 import com.android.apksig.internal.zip.EocdRecord;
@@ -89,6 +90,7 @@ public class ApkSigner {
     private final SigningCertificateLineage mSourceStampSigningCertificateLineage;
     private final boolean mForceSourceStampOverwrite;
     private final Integer mMinSdkVersion;
+    private final int mRotationMinSdkVersion;
     private final boolean mV1SigningEnabled;
     private final boolean mV2SigningEnabled;
     private final boolean mV3SigningEnabled;
@@ -118,6 +120,7 @@ public class ApkSigner {
             SigningCertificateLineage sourceStampSigningCertificateLineage,
             boolean forceSourceStampOverwrite,
             Integer minSdkVersion,
+            int rotationMinSdkVersion,
             boolean v1SigningEnabled,
             boolean v2SigningEnabled,
             boolean v3SigningEnabled,
@@ -141,6 +144,7 @@ public class ApkSigner {
         mSourceStampSigningCertificateLineage = sourceStampSigningCertificateLineage;
         mForceSourceStampOverwrite = forceSourceStampOverwrite;
         mMinSdkVersion = minSdkVersion;
+        mRotationMinSdkVersion = rotationMinSdkVersion;
         mV1SigningEnabled = v1SigningEnabled;
         mV2SigningEnabled = v2SigningEnabled;
         mV3SigningEnabled = v3SigningEnabled;
@@ -296,7 +300,8 @@ public class ApkSigner {
                             .setVerityEnabled(mVerityEnabled)
                             .setDebuggableApkPermitted(mDebuggableApkPermitted)
                             .setOtherSignersSignaturesPreserved(mOtherSignersSignaturesPreserved)
-                            .setSigningCertificateLineage(mSigningCertificateLineage);
+                            .setSigningCertificateLineage(mSigningCertificateLineage)
+                            .setMinSdkVersionForRotation(mRotationMinSdkVersion);
             if (mCreatedBy != null) {
                 signerEngineBuilder.setCreatedBy(mCreatedBy);
             }
@@ -1093,6 +1098,7 @@ public class ApkSigner {
         private boolean mOtherSignersSignaturesPreserved;
         private String mCreatedBy;
         private Integer mMinSdkVersion;
+        private int mRotationMinSdkVersion = V3SchemeConstants.DEFAULT_ROTATION_MIN_SDK_VERSION;
 
         private final ApkSignerEngine mSignerEngine;
 
@@ -1297,6 +1303,28 @@ public class ApkSigner {
         public Builder setMinSdkVersion(int minSdkVersion) {
             checkInitializedWithoutEngine();
             mMinSdkVersion = minSdkVersion;
+            return this;
+        }
+
+        /**
+         * Sets the minimum Android platform version (API Level) for which an APK's rotated signing
+         * key should be used to produce the APK's signature. The original signing key for the APK
+         * will be used for all previous platform versions. If a rotated key with signing lineage is
+         * not provided then this method is a noop. This method is useful for overriding the
+         * default behavior where Android T is set as the minimum API level for rotation.
+         *
+         * <p><em>Note:</em>Specifying a {@code minSdkVersion} value <= 32 (Android Sv2) will result
+         * in the original V3 signing block being used without platform targeting.
+         *
+         * <p><em>Note:</em> This method may only be invoked when this builder is not initialized
+         * with an {@link ApkSignerEngine}.
+         *
+         * @throws IllegalStateException if this builder was initialized with an {@link
+         *     ApkSignerEngine}
+         */
+        public Builder setMinSdkVersionForRotation(int minSdkVersion) {
+            checkInitializedWithoutEngine();
+            mRotationMinSdkVersion = minSdkVersion;
             return this;
         }
 
@@ -1538,6 +1566,7 @@ public class ApkSigner {
                     mSourceStampSigningCertificateLineage,
                     mForceSourceStampOverwrite,
                     mMinSdkVersion,
+                    mRotationMinSdkVersion,
                     mV1SigningEnabled,
                     mV2SigningEnabled,
                     mV3SigningEnabled,
