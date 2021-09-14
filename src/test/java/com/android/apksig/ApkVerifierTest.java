@@ -1407,11 +1407,38 @@ public class ApkVerifierTest {
     }
 
     @Test
-    public void verify31_v31BlockWithoutV3Block_reportsError() throws Exception {
+    public void verifyV31_v31BlockWithoutV3Block_reportsError() throws Exception {
         // A v3.1 block must always exist alongside a v3.0 block; if an APK's minSdkVersion is the
         // same as the version supporting rotation then it should be written to a v3.0 block.
         ApkVerifier.Result result = verify("v31-tgt-33-no-v3-block.apk");
         assertVerificationFailure(result, Issue.V31_BLOCK_FOUND_WITHOUT_V3_BLOCK);
+    }
+
+    @Test
+    public void verifyV31_rotationTargetsDevRelease_resultReportsDevReleaseFlag() throws Exception {
+        // Development releases use the SDK version of the previous release until the SDK is
+        // finalized. In order to only target the development release and later, the v3.1 signature
+        // scheme supports targeting development releases such that the SDK version X will install
+        // on a device running X with the system property ro.build.version.codename set to a new
+        // development codename (eg T); a release platform will have this set to "REL", and the
+        // platform will ignore the v3.1 signer if the minSdkVersion is X and the codename is "REL".
+        ApkVerifier.Result result = verify("v31-rsa-2048_2-tgt-34-dev-release.apk");
+
+        assertVerified(result);
+        assertV31SignerTargetsMinApiLevel(result, SECOND_RSA_2048_SIGNER_RESOURCE_NAME, 34);
+        assertResultContainsSigners(result, true, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
+                SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
+    }
+
+    @Test
+    public void verifyV3_v3RotatedSignerTargetsDevRelease_warningReported() throws Exception {
+        // While a v3.1 signer can target a development release, v3.0 does not support the same
+        // attribute since it is only intended for v3.1 with v3.0 using the original signer. This
+        // test verifies a warning is reported if an APK has this flag set on a v3.0 signer since it
+        // will be ignored by the platform.
+        ApkVerifier.Result result = verify("v3-rsa-2048_2-tgt-dev-release.apk");
+
+        assertVerificationWarning(result, Issue.V31_ROTATION_TARGETS_DEV_RELEASE_ATTR_ON_V3_SIGNER);
     }
 
     private ApkVerifier.Result verify(String apkFilenameInResources)

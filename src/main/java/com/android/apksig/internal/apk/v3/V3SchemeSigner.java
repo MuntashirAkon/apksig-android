@@ -31,6 +31,7 @@ import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.RunnablesExecutor;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -70,6 +71,7 @@ public class V3SchemeSigner {
     private final List<SignerConfig> mSignerConfigs;
     private final int mBlockId;
     private final OptionalInt mOptionalRotationMinSdkVersion;
+    private final boolean mRotationTargetsDevRelease;
 
     private V3SchemeSigner(DataSource beforeCentralDir,
             DataSource centralDir,
@@ -77,7 +79,8 @@ public class V3SchemeSigner {
             List<SignerConfig> signerConfigs,
             RunnablesExecutor executor,
             int blockId,
-            OptionalInt optionalRotationMinSdkVersion) {
+            OptionalInt optionalRotationMinSdkVersion,
+            boolean rotationTargetsDevRelease) {
         mBeforeCentralDir = beforeCentralDir;
         mCentralDir = centralDir;
         mEocd = eocd;
@@ -85,6 +88,7 @@ public class V3SchemeSigner {
         mExecutor = executor;
         mBlockId = blockId;
         mOptionalRotationMinSdkVersion = optionalRotationMinSdkVersion;
+        mRotationTargetsDevRelease = rotationTargetsDevRelease;
     }
 
     /**
@@ -194,6 +198,19 @@ public class V3SchemeSigner {
         result.putInt(payloadSize - 4);
         result.putInt(V3SchemeConstants.ROTATION_MIN_SDK_VERSION_ATTR_ID);
         result.putInt(rotationMinSdkVersion);
+        return result.array();
+    }
+
+    private static byte[] generateV31RotationTargetsDevReleaseAttribute() {
+        // FORMAT (little endian):
+        // * length-prefixed bytes: attribute pair
+        //   * uint32: ID
+        //   * bytes: value - No value is used for this attribute
+        int payloadSize = 4 + 4;
+        ByteBuffer result = ByteBuffer.allocate(payloadSize);
+        result.order(ByteOrder.LITTLE_ENDIAN);
+        result.putInt(payloadSize - 4);
+        result.putInt(V3SchemeConstants.ROTATION_ON_DEV_RELEASE_ATTR_ID);
         return result.array();
     }
 
@@ -362,7 +379,19 @@ public class V3SchemeSigner {
 
     private byte[] generateAdditionalAttributes(SignerConfig signerConfig) {
         if (signerConfig.mSigningCertificateLineage != null) {
-            return generateV3SignerAttribute(signerConfig.mSigningCertificateLineage);
+            byte[] lineageAttr = generateV3SignerAttribute(signerConfig.mSigningCertificateLineage);
+            // If this rotation is not targeting a development release, or if this is not a v3.1
+            // signer block then just return the lineage attribute.
+            if (!mRotationTargetsDevRelease
+                    || mBlockId != V3SchemeConstants.APK_SIGNATURE_SCHEME_V31_BLOCK_ID) {
+                return lineageAttr;
+            }
+            byte[] devReleaseRotationAttr = generateV31RotationTargetsDevReleaseAttribute();
+            byte[] attributes = new byte[lineageAttr.length + devReleaseRotationAttr.length];
+            System.arraycopy(lineageAttr, 0, attributes, 0, lineageAttr.length);
+            System.arraycopy(devReleaseRotationAttr, 0, attributes, lineageAttr.length,
+                    devReleaseRotationAttr.length);
+            return attributes;
         } else if (mOptionalRotationMinSdkVersion.isPresent()) {
             return generateV3RotationMinSdkVersionStrippingProtectionAttribute(
                     mOptionalRotationMinSdkVersion.getAsInt());
@@ -398,6 +427,7 @@ public class V3SchemeSigner {
         private RunnablesExecutor mExecutor = RunnablesExecutor.MULTI_THREADED;
         private int mBlockId = V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
         private OptionalInt mOptionalRotationMinSdkVersion = OptionalInt.empty();
+        private boolean mRotationTargetsDevRelease = false;
 
         /**
          * Instantiates a new {@code Builder} with an APK's {@code beforeCentralDir}, {@code
@@ -445,6 +475,26 @@ public class V3SchemeSigner {
         }
 
         /**
+         * Sets whether the minimum SDK version of a signer is intended to target a development
+         * release; this is primarily required after the T SDK is finalized, and an APK needs to
+         * target U during its development cycle for rotation.
+         *
+         * <p>This is only required after the T SDK is finalized since S and earlier releases do
+         * not know about the V3.1 block ID, but once T is released and work begins on U, U will
+         * use the SDK version of T during development. A signer with a minimum SDK version of T's
+         * SDK version along with setting {@code enabled} to true will allow an APK to use the
+         * rotated key on a device running U while causing this to be bypassed for T.
+         *
+         * <p><em>Note:</em>If the rotation-min-sdk-version is less than or equal to 32 (Android
+         * Sv2), then the rotated signing key will be used in the v3.0 signing block and this call
+         * will be a noop.
+         */
+        public Builder setRotationTargetsDevRelease(boolean enabled) {
+            mRotationTargetsDevRelease = enabled;
+            return this;
+        }
+
+        /**
          * Returns a new {@link V3SchemeSigner} built with the configuration provided to this
          * {@code Builder}.
          */
@@ -455,7 +505,8 @@ public class V3SchemeSigner {
                     mSignerConfigs,
                     mExecutor,
                     mBlockId,
-                    mOptionalRotationMinSdkVersion);
+                    mOptionalRotationMinSdkVersion,
+                    mRotationTargetsDevRelease);
         }
     }
 }

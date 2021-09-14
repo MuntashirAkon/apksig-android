@@ -584,6 +584,13 @@ public class V3SchemeVerifier {
                             result.addError(Issue.V31_BLOCK_MISSING, attrRotationMinSdkVersion);
                         }
                     }
+                } else if (id == V3SchemeConstants.ROTATION_ON_DEV_RELEASE_ATTR_ID) {
+                    // This attribute should only be used by a v3.1 signer to indicate rotation
+                    // is targeting the development release that is using the SDK version of the
+                    // previously released platform version.
+                    if (mBlockId != V3SchemeConstants.APK_SIGNATURE_SCHEME_V31_BLOCK_ID) {
+                        result.addWarning(Issue.V31_ROTATION_TARGETS_DEV_RELEASE_ATTR_ON_V3_SIGNER);
+                    }
                 } else {
                     result.addWarning(Issue.V3_SIG_UNKNOWN_ADDITIONAL_ATTRIBUTE, id);
                 }

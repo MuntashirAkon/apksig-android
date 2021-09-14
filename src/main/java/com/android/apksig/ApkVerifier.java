@@ -1563,6 +1563,7 @@ public class ApkVerifier {
                     mContentDigests;
             private final int mMinSdkVersion;
             private final int mMaxSdkVersion;
+            private final boolean mRotationTargetsDevRelease;
 
             private V3SchemeSignerInfo(ApkSigningBlockUtils.Result.SignerInfo result) {
                 mIndex = result.index;
@@ -1572,6 +1573,9 @@ public class ApkVerifier {
                 mContentDigests = result.contentDigests;
                 mMinSdkVersion = result.minSdkVersion;
                 mMaxSdkVersion = result.maxSdkVersion;
+                mRotationTargetsDevRelease = result.additionalAttributes.stream().mapToInt(
+                        attribute -> attribute.getId()).anyMatch(
+                        attrId -> attrId == V3SchemeConstants.ROTATION_ON_DEV_RELEASE_ATTR_ID);
             }
 
             /**
@@ -1630,6 +1634,19 @@ public class ApkVerifier {
              */
             public int getMaxSdkVersion() {
                 return mMaxSdkVersion;
+            }
+
+            /**
+             * Returns whether rotation is targeting a development release.
+             *
+             * <p>A development release uses the SDK version of the previously released platform
+             * until the SDK of the development release is finalized. To allow rotation to target
+             * a development release after T, this attribute must be set to ensure rotation is
+             * used on the development release but ignored on the released platform with the same
+             * API level.
+             */
+            public boolean getRotationTargetsDevRelease() {
+                return mRotationTargetsDevRelease;
             }
         }
 
@@ -2652,6 +2669,16 @@ public class ApkVerifier {
          */
         V31_BLOCK_FOUND_WITHOUT_V3_BLOCK(
                 "The APK contains a v3.1 signing block without a v3.0 base block"),
+
+        /**
+         * The APK contains a v3.0 signing block with a rotation-targets-dev-release attribute in
+         * the signer; this attribute is only intended for v3.1 signers to indicate they should be
+         * targeting the next development release that is using the SDK version of the previously
+         * released platform SDK version.
+         */
+        V31_ROTATION_TARGETS_DEV_RELEASE_ATTR_ON_V3_SIGNER(
+                "The rotation-targets-dev-release attribute is only supported on v3.1 signers; "
+                        + "this attribute will be ignored by the platform in a v3.0 signer"),
 
         /**
          * APK Signing Block contains an unknown entry.

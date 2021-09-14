@@ -1582,8 +1582,11 @@ public class ApkSignerTest {
         assertTrue(resultMinRotationT.isVerifiedUsingV31Scheme());
         assertResultContainsSigners(resultMinRotationT, true, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
             SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
+        // Since T is still under development, it is using the SDK version of the previous platform
+        // release, so to test v3.1 on T the rotation-min-sdk-version must target the SDK version
+        // of S.
         assertV31SignerTargetsMinApiLevel(resultMinRotationT, SECOND_RSA_2048_SIGNER_RESOURCE_NAME,
-            AndroidSdkVersion.T);
+            V3SchemeConstants.DEV_RELEASE_ROTATION_MIN_SDK_VERSION);
         assertVerified(resultMinRotationU);
         assertTrue(resultMinRotationU.isVerifiedUsingV31Scheme());
         assertResultContainsSigners(resultMinRotationU, true, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
@@ -1674,11 +1677,56 @@ public class ApkSignerTest {
                         .setSourceStampSignerConfig(rsa2048OriginalSignerConfig));
         ApkVerifier.Result result = verify(signedApk, null);
 
+        // Since T is still under development, it is using the SDK version of the previous platform
+        // release, so to test v3.1 on T the rotation-min-sdk-version must target the SDK version
+        // of S.
         assertResultContainsSigners(result, true, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
                 SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
         assertV31SignerTargetsMinApiLevel(result, SECOND_RSA_2048_SIGNER_RESOURCE_NAME,
-                AndroidSdkVersion.T);
+                V3SchemeConstants.DEV_RELEASE_ROTATION_MIN_SDK_VERSION);
         assertSourceStampVerified(signedApk, result);
+    }
+
+    @Test
+    public void testSetRotationTargetsDevRelease_target34_v30SignerTargetsAtLeast34()
+            throws Exception {
+        // During development of a new platform release the new platform will use the SDK version
+        // of the previously released platform, so in order to test rotation on a new platform
+        // release it must target the SDK version of the previous platform. However an APK signed
+        // with the v3.1 signature scheme and targeting rotation on the previous platform release X
+        // would still use rotation if that APK were installed on a device running release version
+        // X. To support targeting rotation on the main branch, the v3.1 signature scheme supports
+        // a rotation-targets-dev-release attribute; this allows the APK to use the v3.1 signer
+        // block on a development platform with SDK version X while a release platform X will
+        // skip this signer block when it sees this additional attribute. To ensure that the APK
+        // will still target the released platform X, the v3.0 signer must have a maxSdkVersion
+        // of at least X for the signer.
+        List<ApkSigner.SignerConfig> rsa2048SignerConfigWithLineage =
+                Arrays.asList(
+                        getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME),
+                        getDefaultSignerConfigFromResources(SECOND_RSA_2048_SIGNER_RESOURCE_NAME));
+        SigningCertificateLineage lineage =
+                Resources.toSigningCertificateLineage(
+                        ApkSignerTest.class, LINEAGE_RSA_2048_2_SIGNERS_RESOURCE_NAME);
+        int rotationMinSdkVersion = V3SchemeConstants.MIN_SDK_WITH_V31_SUPPORT + 1;
+
+        File signedApk = sign("original.apk",
+                new ApkSigner.Builder(rsa2048SignerConfigWithLineage)
+                        .setV1SigningEnabled(true)
+                        .setV2SigningEnabled(true)
+                        .setV3SigningEnabled(true)
+                        .setV4SigningEnabled(false)
+                        .setMinSdkVersionForRotation(rotationMinSdkVersion)
+                        .setSigningCertificateLineage(lineage)
+                        .setRotationTargetsDevRelease(true));
+        ApkVerifier.Result result = verify(signedApk, null);
+
+        assertVerified(result);
+        assertTrue(result.isVerifiedUsingV31Scheme());
+        assertTrue(result.getV31SchemeSigners().get(0).getRotationTargetsDevRelease());
+        assertResultContainsSigners(result, true, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
+                SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
+        assertTrue(result.getV3SchemeSigners().get(0).getMaxSdkVersion() >= rotationMinSdkVersion);
     }
 
     /**

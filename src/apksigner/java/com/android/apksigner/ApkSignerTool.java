@@ -149,6 +149,7 @@ public class ApkSignerTool {
         boolean minSdkVersionSpecified = false;
         int maxSdkVersion = Integer.MAX_VALUE;
         int rotationMinSdkVersion = V3SchemeConstants.DEFAULT_ROTATION_MIN_SDK_VERSION;
+        boolean rotationTargetsDevRelease = false;
         List<SignerParams> signers = new ArrayList<>(1);
         SignerParams signerParams = new SignerParams();
         SigningCertificateLineage lineage = null;
@@ -180,7 +181,10 @@ public class ApkSignerTool {
             } else if ("rotation-min-sdk-version".equals(optionName)) {
                 rotationMinSdkVersion = optionsParser.getRequiredIntValue(
                         "Minimum API Level for Rotation");
-            } else if ("v1-signing-enabled".equals(optionName)) {
+            } else if ("rotation-targets-dev-release".equals(optionName)) {
+                rotationTargetsDevRelease = optionsParser.getOptionalBooleanValue(true);
+            }
+            else if ("v1-signing-enabled".equals(optionName)) {
                 v1SigningEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("v2-signing-enabled".equals(optionName)) {
                 v2SigningEnabled = optionsParser.getOptionalBooleanValue(true);
@@ -368,7 +372,8 @@ public class ApkSignerTool {
                         .setV4ErrorReportingEnabled(v4SigningEnabled && v4SigningFlagFound)
                         .setDebuggableApkPermitted(debuggableApkPermitted)
                         .setSigningCertificateLineage(lineage)
-                        .setMinSdkVersionForRotation(rotationMinSdkVersion);
+                        .setMinSdkVersionForRotation(rotationMinSdkVersion)
+                        .setRotationTargetsDevRelease(rotationTargetsDevRelease);
         if (minSdkVersionSpecified) {
             apkSignerBuilder.setMinSdkVersion(minSdkVersion);
         }
@@ -589,9 +594,13 @@ public class ApkSignerTool {
                 // signing key can still be used with v3.0; if a v3.1 block is present then also
                 // include the target SDK versions for both rotation and the original signing key.
                 if (result.isVerifiedUsingV31Scheme()) {
-                    for (ApkVerifier.Result.V3SchemeSignerInfo signer : result.getV31SchemeSigners()) {
+                    for (ApkVerifier.Result.V3SchemeSignerInfo signer :
+                            result.getV31SchemeSigners()) {
+
                         printCertificate(signer.getCertificate(),
                                 "Signer (minSdkVersion=" + signer.getMinSdkVersion()
+                                        + (signer.getRotationTargetsDevRelease()
+                                        ? " (dev release=true)" : "")
                                         + ", maxSdkVersion=" + signer.getMaxSdkVersion() + ")",
                                 verbose);
                     }

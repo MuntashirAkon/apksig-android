@@ -91,6 +91,7 @@ public class ApkSigner {
     private final boolean mForceSourceStampOverwrite;
     private final Integer mMinSdkVersion;
     private final int mRotationMinSdkVersion;
+    private final boolean mRotationTargetsDevRelease;
     private final boolean mV1SigningEnabled;
     private final boolean mV2SigningEnabled;
     private final boolean mV3SigningEnabled;
@@ -121,6 +122,7 @@ public class ApkSigner {
             boolean forceSourceStampOverwrite,
             Integer minSdkVersion,
             int rotationMinSdkVersion,
+            boolean rotationTargetsDevRelease,
             boolean v1SigningEnabled,
             boolean v2SigningEnabled,
             boolean v3SigningEnabled,
@@ -145,6 +147,7 @@ public class ApkSigner {
         mForceSourceStampOverwrite = forceSourceStampOverwrite;
         mMinSdkVersion = minSdkVersion;
         mRotationMinSdkVersion = rotationMinSdkVersion;
+        mRotationTargetsDevRelease = rotationTargetsDevRelease;
         mV1SigningEnabled = v1SigningEnabled;
         mV2SigningEnabled = v2SigningEnabled;
         mV3SigningEnabled = v3SigningEnabled;
@@ -301,7 +304,8 @@ public class ApkSigner {
                             .setDebuggableApkPermitted(mDebuggableApkPermitted)
                             .setOtherSignersSignaturesPreserved(mOtherSignersSignaturesPreserved)
                             .setSigningCertificateLineage(mSigningCertificateLineage)
-                            .setMinSdkVersionForRotation(mRotationMinSdkVersion);
+                            .setMinSdkVersionForRotation(mRotationMinSdkVersion)
+                            .setRotationTargetsDevRelease(mRotationTargetsDevRelease);
             if (mCreatedBy != null) {
                 signerEngineBuilder.setCreatedBy(mCreatedBy);
             }
@@ -1099,6 +1103,7 @@ public class ApkSigner {
         private String mCreatedBy;
         private Integer mMinSdkVersion;
         private int mRotationMinSdkVersion = V3SchemeConstants.DEFAULT_ROTATION_MIN_SDK_VERSION;
+        private boolean mRotationTargetsDevRelease = false;
 
         private final ApkSignerEngine mSignerEngine;
 
@@ -1325,6 +1330,30 @@ public class ApkSigner {
         public Builder setMinSdkVersionForRotation(int minSdkVersion) {
             checkInitializedWithoutEngine();
             mRotationMinSdkVersion = minSdkVersion;
+            return this;
+        }
+
+        /**
+         * Sets whether the rotation-min-sdk-version is intended to target a development release;
+         * this is primarily required after the T SDK is finalized, and an APK needs to target U
+         * during its development cycle for rotation.
+         *
+         * <p>This is only required after the T SDK is finalized since S and earlier releases do
+         * not know about the V3.1 block ID, but once T is released and work begins on U, U will
+         * use the SDK version of T during development. Specifying a rotation-min-sdk-version of T's
+         * SDK version along with setting {@code enabled} to true will allow an APK to use the
+         * rotated key on a device running U while causing this to be bypassed for T.
+         *
+         * <p><em>Note:</em>If the rotation-min-sdk-version is less than or equal to 32 (Android
+         * Sv2), then the rotated signing key will be used in the v3.0 signing block and this call
+         * will be a noop.
+         *
+         * <p><em>Note:</em> This method may only be invoked when this builder is not initialized
+         * with an {@link ApkSignerEngine}.
+         */
+        public Builder setRotationTargetsDevRelease(boolean enabled) {
+            checkInitializedWithoutEngine();
+            mRotationTargetsDevRelease = enabled;
             return this;
         }
 
@@ -1567,6 +1596,7 @@ public class ApkSigner {
                     mForceSourceStampOverwrite,
                     mMinSdkVersion,
                     mRotationMinSdkVersion,
+                    mRotationTargetsDevRelease,
                     mV1SigningEnabled,
                     mV2SigningEnabled,
                     mV3SigningEnabled,
