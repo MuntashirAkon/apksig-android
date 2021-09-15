@@ -70,6 +70,15 @@ certificate.
                       rotated signing keys will be used with the V3.1 signing
                       block which supports Android T+.
 
+--rotation-targets-dev-release  The specified rotation-min-sdk-version is intended
+                      for a platform release under development. During development
+                      of a new platform, the API Level of the previously released
+                      platform is used as the API Level of the development
+                      platform until the SDK is finalized. This flag allows
+                      targeting signing key rotation to a development platform
+                      with API Level X while preventing the rotated key from being
+                      used on the latest release platform with API Level X.
+
 --debuggable-apk-permitted  Whether to permit signing android:debuggable="true"
                       APKs. Android disables some of its security protections
                       for such apps. For example, anybody with ADB shell access
