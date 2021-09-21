@@ -39,6 +39,11 @@ java_library_host {
         "src/main/java/**/*.java",
     ],
     java_version: "1.8",
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
 }
 
 // apksigner command-line tool for signing APKs and verifying their signatures
@@ -53,6 +58,14 @@ java_binary_host {
         "apksig",
         "conscrypt-unbundled",
     ],
-    jni_libs: ["libconscrypt_openjdk_jni"],
     java_version: "1.8",
+    target: {
+        not_windows: {
+            jni_libs: ["libconscrypt_openjdk_jni"],
+        },
+        windows: {
+            enabled: true,
+            wrapper: "etc/apksigner.bat",
+        },
+    },
 }
