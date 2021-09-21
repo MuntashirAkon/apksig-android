@@ -1267,7 +1267,10 @@ public class ApkVerifier {
                     for (ApkSigningBlockUtils.Result.SignerInfo signer : source.signers) {
                         mV3SchemeSigners.add(new V3SchemeSignerInfo(signer));
                     }
-                    mSigningCertificateLineage = source.signingCertificateLineage;
+                    // Do not overwrite a previously set lineage from a v3.1 signing block.
+                    if (mSigningCertificateLineage == null) {
+                        mSigningCertificateLineage = source.signingCertificateLineage;
+                    }
                     break;
                 case ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V31:
                     mVerifiedUsingV31Scheme = source.verified;

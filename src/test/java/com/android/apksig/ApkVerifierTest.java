@@ -21,6 +21,7 @@ import static com.android.apksig.ApkSignerTest.SECOND_RSA_2048_SIGNER_RESOURCE_N
 import static com.android.apksig.ApkSignerTest.assertResultContainsSigners;
 import static com.android.apksig.ApkSignerTest.assertV31SignerTargetsMinApiLevel;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeNoException;
@@ -1439,6 +1440,19 @@ public class ApkVerifierTest {
         ApkVerifier.Result result = verify("v3-rsa-2048_2-tgt-dev-release.apk");
 
         assertVerificationWarning(result, Issue.V31_ROTATION_TARGETS_DEV_RELEASE_ATTR_ON_V3_SIGNER);
+    }
+
+    @Test
+    public void verifyV31_rotationTargets34_resultContainsExpectedLineage() throws Exception {
+        // During verification of the v3.1 and v3.0 signing blocks, ApkVerifier will set the
+        // signing certificate lineage in the Result object; this test verifies a null lineage from
+        // a v3.0 signer does not overwrite a valid lineage from a v3.1 signer.
+        ApkVerifier.Result result = verify("v31-rsa-2048_2-tgt-34-1-tgt-28.apk");
+
+        assertNotNull(result.getSigningCertificateLineage());
+        SigningCertificateLineageTest.assertLineageContainsExpectedSigners(
+                result.getSigningCertificateLineage(), FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
+                SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
     }
 
     private ApkVerifier.Result verify(String apkFilenameInResources)
