@@ -26,7 +26,6 @@ import com.android.apksig.internal.apk.ApkSignerInfo;
 import com.android.apksig.internal.apk.ApkSupportedSignature;
 import com.android.apksig.internal.apk.NoApkSupportedSignaturesException;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
-import com.android.apksig.internal.apk.v3.V3SigningCertificateLineage;
 import com.android.apksig.internal.util.ByteBufferUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 

@@ -148,7 +148,12 @@ public abstract class V2SourceStampVerifier {
                 apkContentDigests.entrySet()) {
             digests.add(Pair.of(apkContentDigest.getKey().getId(), apkContentDigest.getValue()));
         }
-        Collections.sort(digests, Comparator.comparing(Pair::getFirst));
+        Collections.sort(digests, new Comparator<Pair<Integer, byte[]>>() {
+            @Override
+            public int compare(Pair<Integer, byte[]> pair1, Pair<Integer, byte[]> pair2) {
+                return pair1.getFirst() - pair2.getFirst();
+            }
+        });
         return digests;
     }
 }
