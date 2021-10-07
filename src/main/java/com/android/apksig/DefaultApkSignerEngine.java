@@ -24,6 +24,7 @@ import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_S
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_JAR_SIGNATURE_SCHEME;
 import static com.android.apksig.internal.apk.v3.V3SchemeConstants.DEV_RELEASE_ROTATION_MIN_SDK_VERSION;
 import static com.android.apksig.internal.apk.v3.V3SchemeConstants.MIN_SDK_WITH_V31_SUPPORT;
+import static com.android.apksig.internal.apk.v3.V3SchemeConstants.MIN_SDK_WITH_V3_SUPPORT;
 
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.ApkUtils;
@@ -1806,6 +1807,13 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                                 + " v3 without an accompanying SigningCertificateLineage");
             }
 
+            if (mRotationMinSdkVersion == MIN_SDK_WITH_V31_SUPPORT) {
+                // To ensure the APK will install on the currently released platform with the
+                // original signing key, also set the rotation to target a dev release to ensure
+                // the original signing key block targets up through 31.
+                mRotationTargetsDevRelease = true;
+            }
+
             return new DefaultApkSignerEngine(
                     mSignerConfigs,
                     mStampSignerConfig,
@@ -1950,7 +1958,13 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
          * in the original V3 signing block being used without platform targeting.
          */
         public Builder setMinSdkVersionForRotation(int minSdkVersion) {
-            mRotationMinSdkVersion = minSdkVersion;
+            // If the provided SDK version does not support v3.1, then use the default SDK version
+            // with rotation support.
+            if (minSdkVersion < MIN_SDK_WITH_V31_SUPPORT) {
+                mRotationMinSdkVersion = MIN_SDK_WITH_V3_SUPPORT;
+            } else {
+                mRotationMinSdkVersion = minSdkVersion;
+            }
             return this;
         }
 

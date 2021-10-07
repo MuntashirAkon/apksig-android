@@ -54,6 +54,9 @@ public abstract class AndroidSdkVersion {
     /** Android P. */
     public static final int P = 28;
 
+    /** Android Q. */
+    public static final int Q = 29;
+
     /** Android R. */
     public static final int R = 30;
 
