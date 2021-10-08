@@ -1172,7 +1172,11 @@ public class ApkVerifier {
             return mV31SchemeSigners;
         }
 
-        private List<V4SchemeSignerInfo> getV4SchemeSigners() {
+        /**
+         * Returns information about APK Signature Scheme v4 signers associated with the APK's
+         * signature.
+         */
+        public List<V4SchemeSignerInfo> getV4SchemeSigners() {
             return mV4SchemeSigners;
         }
 
