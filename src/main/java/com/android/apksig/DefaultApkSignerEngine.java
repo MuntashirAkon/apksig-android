@@ -1086,7 +1086,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 zipCentralDirectory, eocd, v3SignerConfigs)
                 .setRunnablesExecutor(mExecutor)
                 .setBlockId(V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID);
-            if (mRotationMinSdkVersion >= MIN_SDK_WITH_V31_SUPPORT
+            if (mSigningCertificateLineage != null
+                    && mRotationMinSdkVersion >= MIN_SDK_WITH_V31_SUPPORT
                     && mMinSdkVersion < mRotationMinSdkVersion) {
                 builder.setRotationMinSdkVersion(rotationMinSdkVersion);
             }

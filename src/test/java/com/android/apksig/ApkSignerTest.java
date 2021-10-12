@@ -1804,6 +1804,31 @@ public class ApkSignerTest {
     }
 
     @Test
+    public void testV31_rotationMinSdkVersionTWithoutLineage_v30VerificationSucceeds()
+            throws Exception {
+        // apksig allows setting a rotation-min-sdk-version without providing a rotated signing
+        // key / lineage; however in the absence of rotation, the rotation-min-sdk-version should
+        // be a no-op, and the stripping protection attribute should not be written to the v3.0
+        // signer.
+        List<ApkSigner.SignerConfig> rsa2048SignerConfig =
+                Collections.singletonList(
+                        getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
+
+        File signedApk = sign("original.apk",
+                new ApkSigner.Builder(rsa2048SignerConfig)
+                        .setV1SigningEnabled(true)
+                        .setV2SigningEnabled(true)
+                        .setV3SigningEnabled(true)
+                        .setV4SigningEnabled(false)
+                        .setMinSdkVersionForRotation(V3SchemeConstants.MIN_SDK_WITH_V31_SUPPORT));
+        ApkVerifier.Result result = verify(signedApk, null);
+
+        assertVerified(result);
+        assertFalse(result.isVerifiedUsingV31Scheme());
+        assertTrue(result.isVerifiedUsingV3Scheme());
+    }
+
+    @Test
     public void testV4_rotationMinSdkVersionLessThanT_signatureOnlyHasRotatedSigner()
             throws Exception {
         // To support SDK version targeting in the v3.1 signature scheme, apksig added a
