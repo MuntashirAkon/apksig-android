@@ -490,9 +490,6 @@ public class ApkVerifier {
         // The apkDigest field in the v4 signature should match the selected v2/v3.
         if (result.isVerifiedUsingV4Scheme()) {
             List<Result.V4SchemeSignerInfo> v4Signers = result.getV4SchemeSigners();
-            if (v4Signers.size() != 1) {
-                result.addError(Issue.V4_SIG_MULTIPLE_SIGNERS);
-            }
 
             List<ApkSigningBlockUtils.Result.SignerInfo.ContentDigest> digestsFromV4 =
                     v4Signers.get(0).getContentDigests();
@@ -502,21 +499,22 @@ public class ApkVerifier {
             final byte[] digestFromV4 = digestsFromV4.get(0).getValue();
 
             if (result.isVerifiedUsingV3Scheme()) {
-                List<Result.V3SchemeSignerInfo> v3Signers = result.getV3SchemeSigners();
-                if (v3Signers.size() != 1) {
+                int expectedSize = result.isVerifiedUsingV31Scheme() ? 2 : 1;
+                if (v4Signers.size() != expectedSize) {
                     result.addError(Issue.V4_SIG_MULTIPLE_SIGNERS);
                 }
 
-                // Compare certificates.
-                checkV4Certificate(v4Signers.get(0).mCerts, v3Signers.get(0).mCerts, result);
-
-                // Compare digests.
-                final byte[] digestFromV3 = pickBestDigestForV4(
-                        v3Signers.get(0).getContentDigests());
-                if (!Arrays.equals(digestFromV4, digestFromV3)) {
-                    result.addError(Issue.V4_SIG_V2_V3_DIGESTS_MISMATCH);
+                checkV4Signer(result.getV3SchemeSigners(), v4Signers.get(0).mCerts, digestFromV4,
+                        result);
+                if (result.isVerifiedUsingV31Scheme()) {
+                    checkV4Signer(result.getV31SchemeSigners(), v4Signers.get(1).mCerts,
+                            digestFromV4, result);
                 }
             } else if (result.isVerifiedUsingV2Scheme()) {
+                if (v4Signers.size() != 1) {
+                    result.addError(Issue.V4_SIG_MULTIPLE_SIGNERS);
+                }
+
                 List<Result.V2SchemeSignerInfo> v2Signers = result.getV2SchemeSigners();
                 if (v2Signers.size() != 1) {
                     result.addError(Issue.V4_SIG_MULTIPLE_SIGNERS);
@@ -929,6 +927,22 @@ public class ApkVerifier {
         }
         sigSchemeApkContentDigests.put(apkSigSchemeVersion, apkContentDigests);
         return result;
+    }
+
+    private static void checkV4Signer(List<Result.V3SchemeSignerInfo> v3Signers,
+            List<X509Certificate> v4Certs, byte[] digestFromV4, Result result) {
+        if (v3Signers.size() != 1) {
+            result.addError(Issue.V4_SIG_MULTIPLE_SIGNERS);
+        }
+
+        // Compare certificates.
+        checkV4Certificate(v4Certs, v3Signers.get(0).mCerts, result);
+
+        // Compare digests.
+        final byte[] digestFromV3 = pickBestDigestForV4(v3Signers.get(0).getContentDigests());
+        if (!Arrays.equals(digestFromV4, digestFromV3)) {
+            result.addError(Issue.V4_SIG_V2_V3_DIGESTS_MISMATCH);
+        }
     }
 
     private static void checkV4Certificate(List<X509Certificate> v4Certs,

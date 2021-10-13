@@ -339,18 +339,43 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
     }
 
-    private List<ApkSigningBlockUtils.SignerConfig> processV3Configs(
-            List<ApkSigningBlockUtils.SignerConfig> rawConfigs) throws InvalidKeyException {
-        List<ApkSigningBlockUtils.SignerConfig> processedConfigs = new ArrayList<>();
-
+    private int getDevReleaseRotationMinSdkVersion() {
         // TODO (b/199793805): Once the T SDK is finalized and T development releases are using
         // the new SDK version, this should be removed and mRotationMinSdkVersion should be used
         // as is for rotation SDK version targeting.
         // To support targeting the development release use the API level of the previous
         // platform release as this is the value returned from Build.Version.SDK_INT until
         // the SDK is finalized.
-        int rotationMinSdkVersion = mRotationMinSdkVersion == MIN_SDK_WITH_V31_SUPPORT
+        return mRotationMinSdkVersion == MIN_SDK_WITH_V31_SUPPORT
                 ? DEV_RELEASE_ROTATION_MIN_SDK_VERSION : mRotationMinSdkVersion;
+    }
+
+    private boolean signingLineageHas31Support() {
+        return mSigningCertificateLineage != null
+                && mRotationMinSdkVersion >= MIN_SDK_WITH_V31_SUPPORT
+                && mMinSdkVersion < mRotationMinSdkVersion;
+    }
+
+    private List<ApkSigningBlockUtils.SignerConfig> processV3Configs(
+            List<ApkSigningBlockUtils.SignerConfig> rawConfigs) throws InvalidKeyException {
+        // While the V3 signature scheme supports rotation, it is possible for a caller to specify
+        // a minimum SDK version for rotation that is >= the first SDK version that supports V3.1;
+        // in this case the V3.1 signing block will contain the rotated key, and the V3.0 block
+        // will use the original signing key.
+        if (signingLineageHas31Support()) {
+            SigningCertificateLineage subLineage = mSigningCertificateLineage
+                    .getSubLineage(mSignerConfigs.get(0).mCertificates.get(0));
+            if (subLineage.size() != 1) {
+                throw new IllegalArgumentException(
+                        "v3.1 signing enabled but the oldest signer in the SigningCertificateLineage"
+                                + " for the v3.0 signing block is missing.  Please provide"
+                                + " the oldest signer to enable v3.1 signing.");
+            }
+        }
+
+        List<ApkSigningBlockUtils.SignerConfig> processedConfigs = new ArrayList<>();
+
+        int rotationMinSdkVersion = getDevReleaseRotationMinSdkVersion();
         // we have our configs, now touch them up to appropriately cover all SDK levels since APK
         // signature scheme v3 was introduced
         int currentMinSdk = Integer.MAX_VALUE;
@@ -418,38 +443,47 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
     private List<ApkSigningBlockUtils.SignerConfig> createV3SignerConfigs(
             boolean apkSigningBlockPaddingSupported) throws InvalidKeyException {
-        // While the V3 signature scheme supports rotation, it is possible for a caller to specify
-        // a minimum SDK version for rotation that is >= the first SDK version that supports V3.1;
-        // in this case the V3.1 signing block will contain the rotated key, and the V3.0 block
-        // will use the original signing key.
-        if (mSigningCertificateLineage != null
-            && mRotationMinSdkVersion >= MIN_SDK_WITH_V31_SUPPORT
-            && mMinSdkVersion < mRotationMinSdkVersion) {
-            SigningCertificateLineage subLineage = mSigningCertificateLineage
-                .getSubLineage(mSignerConfigs.get(0).mCertificates.get(0));
-            if (subLineage.size() != 1) {
-                throw new IllegalArgumentException(
-                    "v3.1 signing enabled but the oldest signer in the SigningCertificateLineage"
-                        + " for the v3.0 signing block is missing.  Please provide"
-                        + " the oldest signer to enable v3.1 signing.");
-            }
-        }
-
         return processV3Configs(createSigningBlockSignerConfigs(apkSigningBlockPaddingSupported,
                 ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3));
     }
 
-    private ApkSigningBlockUtils.SignerConfig createV4SignerConfig() throws InvalidKeyException {
-        List<ApkSigningBlockUtils.SignerConfig> configs = createSigningBlockSignerConfigs(true,
+    private List<ApkSigningBlockUtils.SignerConfig> processV31SignerConfigs(
+            List<ApkSigningBlockUtils.SignerConfig> v3SignerConfigs) {
+        // If the signing key has been rotated, the caller has requested to use the rotated
+        // signing key starting from an SDK version where v3.1 is supported, and the minimum
+        // SDK version for the APK is less than the requested rotation minimum, then the APK
+        // should be signed with both the v3.1 signing scheme with the rotated key, and the v3.0
+        // scheme with the original signing key. If the APK's minSdkVersion is >= the requested
+        // SDK version for rotation then just use the v3.0 signing block for this.
+        if (!signingLineageHas31Support()) {
+            return null;
+        }
+
+        int rotationMinSdkVersion = getDevReleaseRotationMinSdkVersion();
+        List<ApkSigningBlockUtils.SignerConfig> v31SignerConfigs = new ArrayList<>();
+        Iterator<ApkSigningBlockUtils.SignerConfig> v3SignerIterator =
+                v3SignerConfigs.iterator();
+        while (v3SignerIterator.hasNext()) {
+            ApkSigningBlockUtils.SignerConfig signerConfig = v3SignerIterator.next();
+            // All signing configs with a min SDK version that supports v3.1 should be used
+            // in the v3.1 signing block and removed from the v3.0 block.
+            if (signerConfig.minSdkVersion >= rotationMinSdkVersion) {
+                v31SignerConfigs.add(signerConfig);
+                v3SignerIterator.remove();
+            }
+        }
+        return v31SignerConfigs;
+    }
+
+    private V4SchemeSigner.SignerConfig createV4SignerConfig() throws InvalidKeyException {
+        List<ApkSigningBlockUtils.SignerConfig> v4Configs = createSigningBlockSignerConfigs(true,
                 ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V4);
-        if (configs.size() != 1) {
-            // V4 only uses signer config to connect back to v3. Use the same filtering logic.
-            configs = processV3Configs(configs);
+        if (v4Configs.size() != 1) {
+            // V4 uses signer config to connect back to v3. Use the same filtering logic.
+            v4Configs = processV3Configs(v4Configs);
         }
-        if (configs.size() != 1) {
-            throw new InvalidKeyException("Only accepting one signer config for V4 Signature.");
-        }
-        return configs.get(0);
+        List<ApkSigningBlockUtils.SignerConfig> v41configs = processV31SignerConfigs(v4Configs);
+        return new V4SchemeSigner.SignerConfig(v4Configs, v41configs);
     }
 
     private ApkSigningBlockUtils.SignerConfig createSourceStampSignerConfig()
@@ -1045,32 +1079,9 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             invalidateV3Signature();
             List<ApkSigningBlockUtils.SignerConfig> v3SignerConfigs =
                     createV3SignerConfigs(apkSigningBlockPaddingSupported);
-            // If the signing key has been rotated, the caller has requested to use the rotated
-            // signing key starting from an SDK version where v3.1 is supported, and the minimum
-            // SDK version for the APK is less than the requested rotation minimum, then the APK
-            // should be signed with both the v3.1 signing scheme with the rotated key, and the v3.0
-            // scheme with the original signing key. If the APK's minSdkVersion is >= the requested
-            // SDK version for rotation then just use the v3.0 signing block for this.
-            // TODO (b/199793805): Once the T SDK is finalized use the mRotationMinSdkVersion as
-            // is; this is required during T development since the SDK version of devices running
-            // T is the SDK version of the previous release.
-            int rotationMinSdkVersion = mRotationMinSdkVersion == MIN_SDK_WITH_V31_SUPPORT
-                    ? DEV_RELEASE_ROTATION_MIN_SDK_VERSION : mRotationMinSdkVersion;
-            if (mSigningCertificateLineage != null
-                    && mRotationMinSdkVersion >= MIN_SDK_WITH_V31_SUPPORT
-                    && mMinSdkVersion < mRotationMinSdkVersion) {
-                List<ApkSigningBlockUtils.SignerConfig> v31SignerConfigs = new ArrayList<>();
-                Iterator<ApkSigningBlockUtils.SignerConfig> v3SignerIterator =
-                        v3SignerConfigs.iterator();
-                while (v3SignerIterator.hasNext()) {
-                    ApkSigningBlockUtils.SignerConfig signerConfig = v3SignerIterator.next();
-                    // All signing configs with a min SDK version that supports v3.1 should be used
-                    // in the v3.1 signing block and removed from the v3.0 block.
-                    if (signerConfig.minSdkVersion >= rotationMinSdkVersion) {
-                        v31SignerConfigs.add(signerConfig);
-                        v3SignerIterator.remove();
-                    }
-                }
+            List<ApkSigningBlockUtils.SignerConfig> v31SignerConfigs = processV31SignerConfigs(
+                    v3SignerConfigs);
+            if (v31SignerConfigs != null && v31SignerConfigs.size() > 0) {
                 ApkSigningBlockUtils.SigningSchemeBlockAndDigests
                         v31SigningSchemeBlockAndDigests =
                         new V3SchemeSigner.Builder(beforeCentralDir, zipCentralDirectory, eocd,
@@ -1086,10 +1097,8 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 zipCentralDirectory, eocd, v3SignerConfigs)
                 .setRunnablesExecutor(mExecutor)
                 .setBlockId(V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID);
-            if (mSigningCertificateLineage != null
-                    && mRotationMinSdkVersion >= MIN_SDK_WITH_V31_SUPPORT
-                    && mMinSdkVersion < mRotationMinSdkVersion) {
-                builder.setRotationMinSdkVersion(rotationMinSdkVersion);
+            if (signingLineageHas31Support()) {
+                builder.setRotationMinSdkVersion(getDevReleaseRotationMinSdkVersion());
             }
             v3SigningSchemeBlockAndDigests =
                 builder.build().generateApkSignatureSchemeV3BlockAndDigests();
@@ -1164,7 +1173,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             throw new SignatureException("Missing V4 output file.");
         }
         try {
-            ApkSigningBlockUtils.SignerConfig v4SignerConfig = createV4SignerConfig();
+            V4SchemeSigner.SignerConfig v4SignerConfig = createV4SignerConfig();
             V4SchemeSigner.generateV4Signature(dataSource, v4SignerConfig, outputFile);
         } catch (InvalidKeyException | IOException | NoSuchAlgorithmException e) {
             if (ignoreFailures) {
@@ -1181,7 +1190,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             throw new SignatureException("Missing V4 output streams.");
         }
         try {
-            ApkSigningBlockUtils.SignerConfig v4SignerConfig = createV4SignerConfig();
+            V4SchemeSigner.SignerConfig v4SignerConfig = createV4SignerConfig();
             Pair<V4Signature, byte[]> pair =
                     V4SchemeSigner.generateV4Signature(dataSource, v4SignerConfig);
             pair.getFirst().writeTo(sigOutput);

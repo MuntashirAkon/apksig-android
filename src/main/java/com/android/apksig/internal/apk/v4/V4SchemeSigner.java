@@ -22,11 +22,11 @@ import static com.android.apksig.internal.apk.v3.V3SchemeConstants.APK_SIGNATURE
 
 import com.android.apksig.apk.ApkUtils;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
-import com.android.apksig.internal.apk.ApkSigningBlockUtils.SignerConfig;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.SignatureInfo;
 import com.android.apksig.internal.apk.v2.V2SchemeVerifier;
+import com.android.apksig.internal.apk.v3.V3SchemeConstants;
 import com.android.apksig.internal.apk.v3.V3SchemeSigner;
 import com.android.apksig.internal.apk.v3.V3SchemeVerifier;
 import com.android.apksig.internal.util.Pair;
@@ -43,6 +43,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -61,13 +62,29 @@ import java.util.Set;
  * </p>
  * (optional) verityTree: integer size prepended bytes of the verity hash tree.
  * <p>
- * TODO(schfan): Add v4 unit tests
  */
 public abstract class V4SchemeSigner {
     /**
      * Hidden constructor to prevent instantiation.
      */
     private V4SchemeSigner() {
+    }
+
+    public static class SignerConfig {
+        final public ApkSigningBlockUtils.SignerConfig v4Config;
+        final public ApkSigningBlockUtils.SignerConfig v41Config;
+
+        public SignerConfig(List<ApkSigningBlockUtils.SignerConfig> v4Configs,
+                List<ApkSigningBlockUtils.SignerConfig> v41Configs) throws InvalidKeyException {
+            if (v4Configs == null || v4Configs.size() != 1) {
+                throw new InvalidKeyException("Only accepting one signer config for V4 Signature.");
+            }
+            if (v41Configs != null && v41Configs.size() != 1) {
+                throw new InvalidKeyException("Only accepting one signer config for V4.1 Signature.");
+            }
+            this.v4Config = v4Configs.get(0);
+            this.v41Config = v41Configs != null ? v41Configs.get(0) : null;
+        }
     }
 
     /**
@@ -149,10 +166,10 @@ public abstract class V4SchemeSigner {
         return Pair.of(signature, tree);
     }
 
-    private static V4Signature generateSignature(
-            SignerConfig signerConfig,
+    private static V4Signature.SigningInfo generateSigningInfo(
+            ApkSigningBlockUtils.SignerConfig signerConfig,
             V4Signature.HashingInfo hashingInfo,
-            byte[] apkDigest, byte[] additionaData, long fileSize)
+            byte[] apkDigest, byte[] additionalData, long fileSize)
             throws NoSuchAlgorithmException, InvalidKeyException, SignatureException,
             CertificateEncodingException {
         if (signerConfig.certificates.isEmpty()) {
@@ -169,7 +186,7 @@ public abstract class V4SchemeSigner {
         final byte[] encodedCertificate = encodedCertificates.get(0);
 
         final V4Signature.SigningInfo signingInfoNoSignature = new V4Signature.SigningInfo(apkDigest,
-                encodedCertificate, additionaData, publicKey.getEncoded(), -1, null);
+                encodedCertificate, additionalData, publicKey.getEncoded(), -1, null);
 
         final byte[] data = V4Signature.getSignedData(fileSize, hashingInfo,
                 signingInfoNoSignature);
@@ -184,12 +201,33 @@ public abstract class V4SchemeSigner {
         final int signatureAlgorithmId = signatures.get(0).getFirst();
         final byte[] signature = signatures.get(0).getSecond();
 
-        final V4Signature.SigningInfo signingInfo = new V4Signature.SigningInfo(apkDigest,
-                encodedCertificate, additionaData, publicKey.getEncoded(), signatureAlgorithmId,
+        return new V4Signature.SigningInfo(apkDigest,
+                encodedCertificate, additionalData, publicKey.getEncoded(), signatureAlgorithmId,
                 signature);
+    }
+
+    private static V4Signature generateSignature(
+            SignerConfig signerConfig,
+            V4Signature.HashingInfo hashingInfo,
+            byte[] apkDigest, byte[] additionalData, long fileSize)
+            throws NoSuchAlgorithmException, InvalidKeyException, SignatureException,
+            CertificateEncodingException {
+        final V4Signature.SigningInfo signingInfo = generateSigningInfo(signerConfig.v4Config,
+                hashingInfo, apkDigest, additionalData, fileSize);
+
+        final V4Signature.SigningInfos signingInfos;
+        if (signerConfig.v41Config != null) {
+            final V4Signature.SigningInfoBlock extSigningBlock = new V4Signature.SigningInfoBlock(
+                    V3SchemeConstants.APK_SIGNATURE_SCHEME_V31_BLOCK_ID,
+                    generateSigningInfo(signerConfig.v41Config, hashingInfo, apkDigest,
+                            additionalData, fileSize).toByteArray());
+            signingInfos = new V4Signature.SigningInfos(signingInfo, extSigningBlock);
+        } else {
+            signingInfos = new V4Signature.SigningInfos(signingInfo);
+        }
 
         return new V4Signature(V4Signature.CURRENT_VERSION, hashingInfo.toByteArray(),
-                signingInfo.toByteArray());
+                signingInfos.toByteArray());
     }
 
     // Get digest by parsing the V2/V3-signed apk and choosing the first digest of supported type.

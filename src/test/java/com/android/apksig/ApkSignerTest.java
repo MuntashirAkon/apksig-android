@@ -1858,7 +1858,6 @@ public class ApkSignerTest {
     }
 
     @Test
-    @Ignore("TODO(b/202011194): Re-enable once V4 supports V3.1")
     public void testV4_rotationMinSdkVersionT_signatureHasOrigAndRotatedKey() throws Exception {
         // When an APK is signed with a rotated key and the rotation-min-sdk-version X is set to T+,
         // a V3.1 block will be signed with the rotated signing key targeting X and later, and
@@ -1881,7 +1880,7 @@ public class ApkSignerTest {
                         .setV2SigningEnabled(true)
                         .setV3SigningEnabled(true)
                         .setV4SigningEnabled(true)
-                        .setMinSdkVersionForRotation(AndroidSdkVersion.P)
+                        .setMinSdkVersionForRotation(AndroidSdkVersion.T)
                         .setSigningCertificateLineage(lineage));
         ApkVerifier.Result result = verify(signedApk, null);
 
