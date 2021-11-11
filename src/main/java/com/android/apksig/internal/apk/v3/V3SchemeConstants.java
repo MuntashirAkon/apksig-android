@@ -35,9 +35,9 @@ public class V3SchemeConstants {
      * The v3.1 signature scheme is initially intended for the T development release, but until
      * the T SDK is finalized it is using the SDK version of the latest platform release. To support
      * testing of the v3.1 signature scheme and key rotation on the T development release, the
-     * rotation-min-sdk-version should use the SDK version of S in the v3.1 signer block.
+     * rotation-min-sdk-version should use the SDK version of Sv2 in the v3.1 signer block.
      */
-    public static final int DEV_RELEASE_ROTATION_MIN_SDK_VERSION = AndroidSdkVersion.S;
+    public static final int DEV_RELEASE_ROTATION_MIN_SDK_VERSION = AndroidSdkVersion.Sv2;
 
     /**
      * This attribute is intended to be written to the V3.0 signer block as an additional attribute

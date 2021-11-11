@@ -1590,7 +1590,7 @@ public class ApkSignerTest {
             SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
         // Since T is still under development, it is using the SDK version of the previous platform
         // release, so to test v3.1 on T the rotation-min-sdk-version must target the SDK version
-        // of S.
+        // of Sv2.
         assertV31SignerTargetsMinApiLevel(resultMinRotationT, SECOND_RSA_2048_SIGNER_RESOURCE_NAME,
             V3SchemeConstants.DEV_RELEASE_ROTATION_MIN_SDK_VERSION);
         assertVerified(resultMinRotationU);
@@ -1685,7 +1685,7 @@ public class ApkSignerTest {
 
         // Since T is still under development, it is using the SDK version of the previous platform
         // release, so to test v3.1 on T the rotation-min-sdk-version must target the SDK version
-        // of S.
+        // of Sv2.
         assertResultContainsSigners(result, true, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
                 SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
         assertV31SignerTargetsMinApiLevel(result, SECOND_RSA_2048_SIGNER_RESOURCE_NAME,
