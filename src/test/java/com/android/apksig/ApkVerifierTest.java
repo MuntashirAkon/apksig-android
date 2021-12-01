@@ -1455,6 +1455,30 @@ public class ApkVerifierTest {
                 SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
     }
 
+    @Test
+    public void verify31_minSdkVersionT_resultSuccessfullyVerified() throws Exception {
+        // When a min-sdk-version of 33 is explicitly specified, apksig will behave the same as a
+        // device running this API level and only verify a v3.1 signature if it exists. This test
+        // verifies this v3.1 signature is sufficient to report the APK as verified.
+        ApkVerifier.Result result = verifyForMinSdkVersion("v31-rsa-2048_2-tgt-33-1-tgt-28.apk",
+                33);
+
+        assertVerified(result);
+        assertTrue(result.isVerifiedUsingV31Scheme());
+    }
+
+    @Test
+    public void verify31_minSdkVersionTTargetSdk30_resultSuccessfullyVerified() throws Exception {
+        // This test verifies when a min-sdk-version of 33 is specified and the APK targets API
+        // level 30 or later, the v3.1 signature is sufficient to report the APK meets the
+        // requirement of a minimum v2 signature.
+        ApkVerifier.Result result = verifyForMinSdkVersion(
+                "v31-ec-p256-2-tgt-33-1-tgt-28-targetSdk-30.apk", 33);
+
+        assertVerified(result);
+        assertTrue(result.isVerifiedUsingV31Scheme());
+    }
+
     private ApkVerifier.Result verify(String apkFilenameInResources)
             throws IOException, ApkFormatException, NoSuchAlgorithmException {
         return verify(apkFilenameInResources, null, null);

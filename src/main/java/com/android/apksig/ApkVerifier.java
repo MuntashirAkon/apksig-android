@@ -561,7 +561,7 @@ public class ApkVerifier {
                         // Allow this case to fall through to the next as a signature satisfying a
                         // later scheme version will also satisfy this requirement.
                     case VERSION_APK_SIGNATURE_SCHEME_V3:
-                        if (result.isVerifiedUsingV3Scheme()) {
+                        if (result.isVerifiedUsingV3Scheme() || result.isVerifiedUsingV31Scheme()) {
                             break;
                         }
                         result.addError(Issue.MIN_SIG_SCHEME_FOR_TARGET_SDK_NOT_MET,
@@ -577,7 +577,10 @@ public class ApkVerifier {
 
         // Verified
         result.setVerified();
-        if (result.isVerifiedUsingV3Scheme()) {
+        if (result.isVerifiedUsingV31Scheme()) {
+            List<Result.V3SchemeSignerInfo> v31Signers = result.getV31SchemeSigners();
+            result.addSignerCertificate(v31Signers.get(v31Signers.size() - 1).getCertificate());
+        } else if (result.isVerifiedUsingV3Scheme()) {
             List<Result.V3SchemeSignerInfo> v3Signers = result.getV3SchemeSigners();
             result.addSignerCertificate(v3Signers.get(v3Signers.size() - 1).getCertificate());
         } else if (result.isVerifiedUsingV2Scheme()) {
