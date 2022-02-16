@@ -1313,6 +1313,123 @@ public class ApkVerifierTest {
     }
 
     @Test
+    public void verifySourceStamp_noTimestamp_returnsDefaultValue() throws Exception {
+        // A timestamp attribute was added to the source stamp, but verification of APKs that were
+        // generated prior to the addition of the timestamp should still complete successfully,
+        // returning a default value of 0 for the timestamp.
+        ApkVerifier.Result verificationResult = verifySourceStamp("v3-only-with-stamp.apk");
+
+        assertTrue(verificationResult.isSourceStampVerified());
+        assertEquals(
+                "A value of 0 should be returned for the timestamp when the attribute is not "
+                        + "present",
+                0, verificationResult.getSourceStampInfo().getTimestampEpochSeconds());
+    }
+
+    @Test
+    public void verifySourceStamp_validTimestamp_returnsExpectedValue() throws Exception {
+        // Once an APK is signed with a source stamp that contains a valid value for the timestamp
+        // attribute, verification of the source stamp should result in the same value for the
+        // timestamp returned to the verifier.
+        ApkVerifier.Result verificationResult = verifySourceStamp(
+                "stamp-valid-timestamp-value.apk");
+
+        assertTrue(verificationResult.isSourceStampVerified());
+        assertEquals(1644886584, verificationResult.getSourceStampInfo().getTimestampEpochSeconds());
+    }
+
+    @Test
+    public void verifySourceStamp_validTimestampLargerBuffer_returnsExpectedValue()
+            throws Exception {
+        // The source stamp timestamp attribute value is expected to be written to an 8 byte buffer
+        // as a little-endian long; while a larger buffer will not result in an error, any
+        // additional space after the buffer's initial 8 bytes will be ignored. This test verifies a
+        // valid timestamp value written to the first 8 bytes of a 16 byte buffer can still be read
+        // successfully.
+        ApkVerifier.Result verificationResult = verifySourceStamp(
+                "stamp-valid-timestamp-16-byte-buffer.apk");
+
+        assertTrue(verificationResult.isSourceStampVerified());
+        assertEquals(1645126786,
+                verificationResult.getSourceStampInfo().getTimestampEpochSeconds());
+    }
+
+    @Test
+    public void verifySourceStamp_invalidTimestampValueEqualsZero_verificationFails()
+            throws Exception {
+        // If the source stamp timestamp attribute exists and is <= 0, then a warning should be
+        // reported to notify the caller to the invalid attribute value. This test verifies a
+        // a warning is reported when the timestamp attribute value is 0.
+        ApkVerifier.Result verificationResult = verifySourceStamp(
+                "stamp-invalid-timestamp-value-zero.apk");
+
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
+        assertSourceStampVerificationFailure(verificationResult,
+                Issue.SOURCE_STAMP_INVALID_TIMESTAMP);
+    }
+
+    @Test
+    public void verifySourceStamp_invalidTimestampValueLessThanZero_verificationFails()
+            throws Exception {
+        // If the source stamp timestamp attribute exists and is <= 0, then a warning should be
+        // reported to notify the caller to the invalid attribute value. This test verifies a
+        // a warning is reported when the timestamp attribute value is < 0.
+        ApkVerifier.Result verificationResult = verifySourceStamp(
+                "stamp-invalid-timestamp-value-less-than-zero.apk");
+
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
+        assertSourceStampVerificationFailure(verificationResult,
+                Issue.SOURCE_STAMP_INVALID_TIMESTAMP);
+    }
+
+    @Test
+    public void verifySourceStamp_invalidTimestampZeroInFirst8BytesOfBuffer_verificationFails()
+            throws Exception {
+        // The source stamp's timestamp attribute value is expected to be written to the first 8
+        // bytes of the attribute's value buffer; if a larger buffer is used and the timestamp
+        // value is not written as a little-endian long to the first 8 bytes of the buffer, then
+        // an error should be reported for the timestamp attribute since the rest of the buffer will
+        // be ignored.
+        ApkVerifier.Result verificationResult = verifySourceStamp(
+                "stamp-timestamp-in-last-8-of-16-byte-buffer.apk");
+
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
+        assertSourceStampVerificationFailure(verificationResult,
+                Issue.SOURCE_STAMP_INVALID_TIMESTAMP);
+    }
+
+
+    @Test
+    public void verifySourceStamp_intTimestampValue_verificationFails() throws Exception {
+        // Since the source stamp timestamp attribute value is a long, an attribute value with
+        // insufficient space to hold a long value should result in a warning reported to the user.
+        ApkVerifier.Result verificationResult = verifySourceStamp(
+                "stamp-int-timestamp-value.apk");
+
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
+        assertSourceStampVerificationFailure(verificationResult,
+                Issue.SOURCE_STAMP_MALFORMED_ATTRIBUTE);
+    }
+
+    @Test
+    public void verifySourceStamp_modifiedTimestampValue_verificationFails() throws Exception {
+        // The source stamp timestamp attribute is part of the block's signed data; this test
+        // verifies if the value of the timestamp in the stamp block is modified then verification
+        // of the source stamp should fail.
+        ApkVerifier.Result verificationResult = verifySourceStamp(
+                "stamp-valid-timestamp-value-modified.apk");
+
+        assertSourceStampVerificationStatus(verificationResult,
+                SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED);
+        assertSourceStampVerificationFailure(verificationResult,
+                Issue.SOURCE_STAMP_DID_NOT_VERIFY);
+    }
+
+    @Test
     public void apkVerificationIssueAdapter_verifyAllBaseIssuesMapped() throws Exception {
         Field[] fields = ApkVerificationIssue.class.getFields();
         StringBuilder msg = new StringBuilder();
