@@ -426,7 +426,14 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             // at this point (and likely only one will be needed
             processedConfigs.add(config);
             currentMinSdk = config.minSdkVersion;
-            if (currentMinSdk <= mMinSdkVersion || currentMinSdk <= AndroidSdkVersion.P) {
+            // If the rotation is targeting a development release and this is the v3.1 signer, then
+            // the minSdkVersion of this signer should equal the maxSdkVersion of the next signer;
+            // this ensures a package with the minSdkVersion set to the rotationMinSdkVersion has
+            // a v3.0 block with the min / max SDK version set to this same minSdkVersion from the
+            // v3.1 block.
+            if ((mRotationTargetsDevRelease && currentMinSdk < mMinSdkVersion)
+                    || (!mRotationTargetsDevRelease && currentMinSdk <= mMinSdkVersion)
+                    || currentMinSdk <= AndroidSdkVersion.P) {
                 // this satisfies all we need, stop here
                 break;
             }
