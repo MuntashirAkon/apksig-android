@@ -1804,6 +1804,37 @@ public class ApkSignerTest {
     }
 
     @Test
+    public void testV31_rotationMinSdkVersionEqualsMinSdkVersion_v3SignerPresent()
+            throws Exception {
+        // The SDK version for Sv2 (32) is used as the minSdkVersion for the V3.1 signature
+        // scheme to allow rotation to target the T development platform; this will be updated
+        // to the real SDK version of T once its SDK is finalized. This test verifies if a
+        // package has Sv2 as its minSdkVersion, the signing can complete as expected with the
+        // v3 block signed by the original signer and targeting just Sv2, and the v3.1 block
+        // signed by the rotated signer and targeting the dev release of Sv2 and all later releases.
+        List<ApkSigner.SignerConfig> rsa2048SignerConfigWithLineage =
+                Arrays.asList(
+                        getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME),
+                        getDefaultSignerConfigFromResources(SECOND_RSA_2048_SIGNER_RESOURCE_NAME));
+        SigningCertificateLineage lineage =
+                Resources.toSigningCertificateLineage(
+                        ApkSignerTest.class, LINEAGE_RSA_2048_2_SIGNERS_RESOURCE_NAME);
+
+        File signedApk = sign("original-minSdk32.apk",
+                new ApkSigner.Builder(rsa2048SignerConfigWithLineage)
+                        .setV1SigningEnabled(true)
+                        .setV2SigningEnabled(true)
+                        .setV3SigningEnabled(true)
+                        .setV4SigningEnabled(false)
+                        .setMinSdkVersionForRotation(V3SchemeConstants.MIN_SDK_WITH_V31_SUPPORT)
+                        .setSigningCertificateLineage(lineage));
+        ApkVerifier.Result result = verify(signedApk, null);
+
+        assertVerified(result);
+        assertEquals(AndroidSdkVersion.Sv2, result.getV3SchemeSigners().get(0).getMaxSdkVersion());
+    }
+
+    @Test
     public void testV31_rotationMinSdkVersionTWithoutLineage_v30VerificationSucceeds()
             throws Exception {
         // apksig allows setting a rotation-min-sdk-version without providing a rotated signing
