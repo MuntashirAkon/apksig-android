@@ -49,6 +49,7 @@ import java.security.interfaces.ECKey;
 import java.security.interfaces.RSAKey;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 
 /**
@@ -63,6 +64,8 @@ public class ApkSignerTool {
     private static final String HELP_PAGE_VERIFY = "help_verify.txt";
     private static final String HELP_PAGE_ROTATE = "help_rotate.txt";
     private static final String HELP_PAGE_LINEAGE = "help_lineage.txt";
+    private static final String BEGIN_CERTIFICATE = "-----BEGIN CERTIFICATE-----";
+    private static final String END_CERTIFICATE = "-----END CERTIFICATE-----";
 
     private static MessageDigest sha256 = null;
     private static MessageDigest sha1 = null;
@@ -461,6 +464,7 @@ public class ApkSignerTool {
         int maxSdkVersion = Integer.MAX_VALUE;
         boolean maxSdkVersionSpecified = false;
         boolean printCerts = false;
+        boolean printCertsPem = false;
         boolean verbose = false;
         boolean warningsTreatedAsErrors = false;
         boolean verifySourceStamp = false;
@@ -479,6 +483,13 @@ public class ApkSignerTool {
                 maxSdkVersionSpecified = true;
             } else if ("print-certs".equals(optionName)) {
                 printCerts = optionsParser.getOptionalBooleanValue(true);
+            } else if ("print-certs-pem".equals(optionName)) {
+                printCertsPem = optionsParser.getOptionalBooleanValue(true);
+                // If the PEM output of the certs is requested, this implicitly implies the
+                // cert details should be printed.
+                if (printCertsPem && !printCerts) {
+                    printCerts = true;
+                }
             } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
                 verbose = optionsParser.getOptionalBooleanValue(true);
             } else if ("Werr".equals(optionName)) {
@@ -602,24 +613,25 @@ public class ApkSignerTool {
                                         + (signer.getRotationTargetsDevRelease()
                                         ? " (dev release=true)" : "")
                                         + ", maxSdkVersion=" + signer.getMaxSdkVersion() + ")",
-                                verbose);
+                                verbose, printCertsPem);
                     }
                     for (ApkVerifier.Result.V3SchemeSignerInfo signer : result.getV3SchemeSigners()) {
                         printCertificate(signer.getCertificate(),
                                 "Signer (minSdkVersion=" + signer.getMinSdkVersion()
                                         + ", maxSdkVersion=" + signer.getMaxSdkVersion() + ")",
-                                verbose);
+                                verbose, printCertsPem);
                     }
                 } else {
                     int signerNumber = 0;
                     for (X509Certificate signerCert : signerCerts) {
                         signerNumber++;
-                        printCertificate(signerCert, "Signer #" + signerNumber, verbose);
+                        printCertificate(signerCert, "Signer #" + signerNumber, verbose,
+                                printCertsPem);
                     }
                 }
                 if (sourceStampInfo != null) {
                     printCertificate(sourceStampInfo.getCertificate(), "Source Stamp Signer",
-                            verbose);
+                            verbose, printCertsPem);
                 }
             }
         } else {
@@ -844,6 +856,7 @@ public class ApkSignerTool {
 
         boolean verbose = false;
         boolean printCerts = false;
+        boolean printCertsPem = false;
         boolean lineageUpdated = false;
         File inputKeyLineage = null;
         File outputKeyLineage = null;
@@ -865,6 +878,13 @@ public class ApkSignerTool {
                 verbose = optionsParser.getOptionalBooleanValue(true);
             } else if ("print-certs".equals(optionName)) {
                 printCerts = optionsParser.getOptionalBooleanValue(true);
+            } else if ("print-certs-pem".equals(optionName)) {
+                printCertsPem = optionsParser.getOptionalBooleanValue(true);
+                // If the PEM output of the certs is requested, this implicitly implies the
+                // cert details should be printed.
+                if (printCertsPem && !printCerts) {
+                    printCerts = true;
+                }
             } else {
                 throw new ParameterException(
                         "Unsupported option: " + optionsParser.getOptionOriginalForm()
@@ -925,7 +945,8 @@ public class ApkSignerTool {
             for (int i = 0; i < signingCerts.size(); i++) {
                 X509Certificate signerCert = signingCerts.get(i);
                 SignerCapabilities signerCapabilities = lineage.getSignerCapabilities(signerCert);
-                printCertificate(signerCert, "Signer #" + (i + 1) + " in lineage", verbose);
+                printCertificate(signerCert, "Signer #" + (i + 1) + " in lineage", verbose,
+                        printCertsPem);
                 printCapabilities(signerCapabilities);
             }
         }
@@ -1057,19 +1078,29 @@ public class ApkSignerTool {
     }
 
     /**
+     * @see #printCertificate(X509Certificate, String, boolean, boolean)
+     */
+    public static void printCertificate(X509Certificate cert, String name, boolean verbose)
+            throws NoSuchAlgorithmException, CertificateEncodingException {
+        printCertificate(cert, name, verbose, false);
+    }
+
+    /**
      * Prints details from the provided certificate to stdout.
      *
      * @param cert    the certificate to be displayed.
      * @param name    the name to be used to identify the certificate.
      * @param verbose boolean indicating whether public key details from the certificate should be
      *                displayed.
+     * @param pemOutput boolean indicating whether the PEM encoding of the certificate should be
+     *                  displayed.
      * @throws NoSuchAlgorithmException     if an instance of MD5, SHA-1, or SHA-256 cannot be
      *                                      obtained.
      * @throws CertificateEncodingException if an error is encountered when encoding the
      *                                      certificate.
      */
-    public static void printCertificate(X509Certificate cert, String name, boolean verbose)
-            throws NoSuchAlgorithmException, CertificateEncodingException {
+    public static void printCertificate(X509Certificate cert, String name, boolean verbose,
+            boolean pemOutput) throws NoSuchAlgorithmException, CertificateEncodingException {
         if (cert == null) {
             throw new NullPointerException("cert == null");
         }
@@ -1113,6 +1144,18 @@ public class ApkSignerTool {
                     sha1.digest(encodedKey)));
             System.out.println(
                     name + " public key MD5 digest: " + HexEncoding.encode(md5.digest(encodedKey)));
+        }
+
+        if (pemOutput) {
+            System.out.println(BEGIN_CERTIFICATE);
+            final int lineWidth = 64;
+            String pemEncodedCert = Base64.getEncoder().encodeToString(cert.getEncoded());
+            for (int i = 0; i < pemEncodedCert.length(); i += lineWidth) {
+                System.out.println(pemEncodedCert.substring(i, i + lineWidth > pemEncodedCert.length()
+                        ? pemEncodedCert.length()
+                        : i + lineWidth));
+            }
+            System.out.println(END_CERTIFICATE);
         }
     }
 

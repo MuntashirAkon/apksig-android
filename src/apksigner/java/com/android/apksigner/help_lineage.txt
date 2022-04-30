@@ -19,6 +19,10 @@ has been migrated to the new signing certificate.
 --print-certs         Show information about the signing certificates and their capabilities
                       in the SigningCertificateLineage.
 
+--print-certs-pem     Show information about the signing certificates and their capabilities
+                      in the SigningCertificateLineage; prints the PEM encoding of each signing
+                      certificate to stdout.
+
 -v, --verbose         Verbose output mode.
 
 -h, --help            Show help about this command and exit.
