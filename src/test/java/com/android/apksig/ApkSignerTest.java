@@ -51,7 +51,6 @@ import com.android.apksig.zip.ZipFormatException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -1997,6 +1996,31 @@ public class ApkSignerTest {
 
         assertResultContainsV4Signers(result, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
                 SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
+    }
+
+    @Test
+    public void testSourceStampTimestamp_signWithSourceStamp_validTimestampValue()
+            throws Exception {
+        // Source stamps should include a timestamp attribute with the epoch time the stamp block
+        // was signed. This test verifies a standard signing with a source stamp includes a valid
+        // value for the source stamp timestamp attribute.
+        ApkSigner.SignerConfig rsa2048SignerConfig = getDefaultSignerConfigFromResources(
+                FIRST_RSA_2048_SIGNER_RESOURCE_NAME);
+        List<ApkSigner.SignerConfig> ecP256SignerConfig = Collections.singletonList(
+                getDefaultSignerConfigFromResources(EC_P256_SIGNER_RESOURCE_NAME));
+
+        File signedApk = sign("original.apk",
+                new ApkSigner.Builder(ecP256SignerConfig)
+                        .setV1SigningEnabled(true)
+                        .setV2SigningEnabled(true)
+                        .setV3SigningEnabled(true)
+                        .setV4SigningEnabled(false)
+                        .setSourceStampSignerConfig(rsa2048SignerConfig));
+        ApkVerifier.Result result = verify(signedApk, null);
+
+        assertSourceStampVerified(signedApk, result);
+        long timestamp = result.getSourceStampInfo().getTimestampEpochSeconds();
+        assertTrue("Invalid source stamp timestamp value: " + timestamp, timestamp > 0);
     }
 
     /**

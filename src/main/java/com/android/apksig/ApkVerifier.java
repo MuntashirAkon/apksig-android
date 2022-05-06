@@ -1767,6 +1767,8 @@ public class ApkVerifier {
 
             private final SourceStampVerificationStatus mSourceStampVerificationStatus;
 
+            private final long mTimestamp;
+
             private SourceStampInfo(ApkSignerInfo result) {
                 mCertificates = result.certs;
                 mCertificateLineage = result.certificateLineage;
@@ -1780,6 +1782,7 @@ public class ApkVerifier {
                     mSourceStampVerificationStatus =
                             SourceStampVerificationStatus.STAMP_VERIFICATION_FAILED;
                 }
+                mTimestamp = result.timestamp;
             }
 
             SourceStampInfo(SourceStampVerificationStatus sourceStampVerificationStatus) {
@@ -1788,6 +1791,7 @@ public class ApkVerifier {
                 mErrors = Collections.emptyList();
                 mWarnings = Collections.emptyList();
                 mSourceStampVerificationStatus = sourceStampVerificationStatus;
+                mTimestamp = 0;
             }
 
             /**
@@ -1826,6 +1830,14 @@ public class ApkVerifier {
              */
             public SourceStampVerificationStatus getSourceStampVerificationStatus() {
                 return mSourceStampVerificationStatus;
+            }
+
+            /**
+             * Returns the epoch timestamp in seconds representing the time this source stamp block
+             * was signed, or 0 if the timestamp is not available.
+             */
+            public long getTimestampEpochSeconds() {
+                return mTimestamp;
             }
         }
     }
@@ -3000,6 +3012,16 @@ public class ApkVerifier {
                 + "contains a proof-of-rotation record with signature(s) that did not verify."),
 
         /**
+         * The source stamp timestamp attribute has an invalid value (<= 0).
+         * <ul>
+         *     <li>Parameter 1: The invalid timestamp value.
+         * </ul>
+         */
+        SOURCE_STAMP_INVALID_TIMESTAMP(
+                "The source stamp"
+                        + " timestamp attribute has an invalid value: %1$d"),
+
+        /**
          * The APK could not be properly parsed due to a ZIP or APK format exception.
          * <ul>
          *     <li>Parameter 1: The {@code Exception} caught when attempting to parse the APK.
@@ -3295,6 +3317,8 @@ public class ApkVerifier {
                     Issue.JAR_SIG_NO_SIGNATURES);
             sVerificationIssueIdToIssue.put(ApkVerificationIssue.JAR_SIG_PARSE_EXCEPTION,
                     Issue.JAR_SIG_PARSE_EXCEPTION);
+            sVerificationIssueIdToIssue.put(ApkVerificationIssue.SOURCE_STAMP_INVALID_TIMESTAMP,
+                    Issue.SOURCE_STAMP_INVALID_TIMESTAMP);
         }
 
         /**

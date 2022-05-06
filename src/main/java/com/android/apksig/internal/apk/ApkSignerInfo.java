@@ -27,6 +27,7 @@ import java.util.List;
  */
 public class ApkSignerInfo {
     public int index;
+    public long timestamp;
     public List<X509Certificate> certs = new ArrayList<>();
     public List<X509Certificate> certificateLineage = new ArrayList<>();
 

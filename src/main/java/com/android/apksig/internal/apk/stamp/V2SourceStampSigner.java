@@ -35,6 +35,7 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -202,6 +203,22 @@ public abstract class V2SourceStampSigner {
 
     private static Map<Integer, byte[]> generateStampAttributes(SigningCertificateLineage lineage) {
         HashMap<Integer, byte[]> stampAttributes = new HashMap<>();
+
+        // Write the current epoch time as the timestamp for the source stamp.
+        long timestamp = Instant.now().getEpochSecond();
+        if (timestamp > 0) {
+            ByteBuffer attributeBuffer = ByteBuffer.allocate(8);
+            attributeBuffer.order(ByteOrder.LITTLE_ENDIAN);
+            attributeBuffer.putLong(timestamp);
+            stampAttributes.put(SourceStampConstants.STAMP_TIME_ATTR_ID, attributeBuffer.array());
+        } else {
+            // The epoch time should never be <= 0, and since security decisions can potentially
+            // be made based on the value in the timestamp, throw an Exception to ensure the issues
+            // with the environment are resolved before allowing the signing.
+            throw new IllegalStateException(
+                    "Received an invalid value from Instant#getTimestamp: " + timestamp);
+        }
+
         if (lineage != null) {
             stampAttributes.put(SourceStampConstants.PROOF_OF_ROTATION_ATTR_ID,
                     lineage.encodeSigningCertificateLineage());

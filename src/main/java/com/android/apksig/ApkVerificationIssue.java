@@ -116,6 +116,8 @@ public class ApkVerificationIssue {
     public static final int JAR_SIG_NO_SIGNATURES = 36;
     /** An exception was encountered when parsing the V1 / jar signer in the signature block. */
     public static final int JAR_SIG_PARSE_EXCEPTION = 37;
+    /** The source stamp timestamp attribute has an invalid value. */
+    public static final int SOURCE_STAMP_INVALID_TIMESTAMP = 38;
 
     private final int mIssueId;
     private final String mFormat;

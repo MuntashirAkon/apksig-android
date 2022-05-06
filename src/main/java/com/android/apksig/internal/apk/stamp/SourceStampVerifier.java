@@ -318,6 +318,15 @@ class SourceStampVerifier {
                 byte[] value = ByteBufferUtils.toByteArray(attribute);
                 if (id == SourceStampConstants.PROOF_OF_ROTATION_ATTR_ID) {
                     readStampCertificateLineage(value, sourceStampCertificate, result);
+                } else if (id == SourceStampConstants.STAMP_TIME_ATTR_ID) {
+                    long timestamp = ByteBuffer.wrap(value).order(
+                            ByteOrder.LITTLE_ENDIAN).getLong();
+                    if (timestamp > 0) {
+                        result.timestamp = timestamp;
+                    } else {
+                        result.addWarning(ApkVerificationIssue.SOURCE_STAMP_INVALID_TIMESTAMP,
+                                timestamp);
+                    }
                 } else {
                     result.addWarning(ApkVerificationIssue.SOURCE_STAMP_UNKNOWN_ATTRIBUTE, id);
                 }
