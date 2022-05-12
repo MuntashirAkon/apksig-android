@@ -22,7 +22,6 @@ import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERITY_PADDIN
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V2;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V3;
 import static com.android.apksig.internal.apk.ApkSigningBlockUtils.VERSION_JAR_SIGNATURE_SCHEME;
-import static com.android.apksig.internal.apk.v3.V3SchemeConstants.DEV_RELEASE_ROTATION_MIN_SDK_VERSION;
 import static com.android.apksig.internal.apk.v3.V3SchemeConstants.MIN_SDK_WITH_V31_SUPPORT;
 import static com.android.apksig.internal.apk.v3.V3SchemeConstants.MIN_SDK_WITH_V3_SUPPORT;
 
@@ -339,17 +338,6 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
         }
     }
 
-    private int getDevReleaseRotationMinSdkVersion() {
-        // TODO (b/199793805): Once the T SDK is finalized and T development releases are using
-        // the new SDK version, this should be removed and mRotationMinSdkVersion should be used
-        // as is for rotation SDK version targeting.
-        // To support targeting the development release use the API level of the previous
-        // platform release as this is the value returned from Build.Version.SDK_INT until
-        // the SDK is finalized.
-        return mRotationMinSdkVersion == MIN_SDK_WITH_V31_SUPPORT
-                ? DEV_RELEASE_ROTATION_MIN_SDK_VERSION : mRotationMinSdkVersion;
-    }
-
     private boolean signingLineageHas31Support() {
         return mSigningCertificateLineage != null
                 && mRotationMinSdkVersion >= MIN_SDK_WITH_V31_SUPPORT
@@ -375,7 +363,6 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
 
         List<ApkSigningBlockUtils.SignerConfig> processedConfigs = new ArrayList<>();
 
-        int rotationMinSdkVersion = getDevReleaseRotationMinSdkVersion();
         // we have our configs, now touch them up to appropriately cover all SDK levels since APK
         // signature scheme v3 was introduced
         int currentMinSdk = Integer.MAX_VALUE;
@@ -397,7 +384,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 // this needs to change
                 config.maxSdkVersion = Integer.MAX_VALUE;
             } else {
-                if (mRotationTargetsDevRelease && currentMinSdk == rotationMinSdkVersion) {
+                if (mRotationTargetsDevRelease && currentMinSdk == mRotationMinSdkVersion) {
                     // The currentMinSdk is both the SDK version for the active development release
                     // as well as the most recent released platform. To ensure the v3.0 signer will
                     // target the released platform, overlap the maxSdkVersion for the v3.0 signer
@@ -414,12 +401,12 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             // than that requested to support rotation.
             if (mSigningCertificateLineage != null
                     && ((mRotationTargetsDevRelease
-                        ? config.maxSdkVersion > rotationMinSdkVersion
-                        : config.maxSdkVersion >= rotationMinSdkVersion))) {
+                        ? config.maxSdkVersion > mRotationMinSdkVersion
+                        : config.maxSdkVersion >= mRotationMinSdkVersion))) {
                 config.mSigningCertificateLineage =
                         mSigningCertificateLineage.getSubLineage(config.certificates.get(0));
-                if (config.minSdkVersion < rotationMinSdkVersion) {
-                    config.minSdkVersion = rotationMinSdkVersion;
+                if (config.minSdkVersion < mRotationMinSdkVersion) {
+                    config.minSdkVersion = mRotationMinSdkVersion;
                 }
             }
             // we know that this config will be used, so add it to our result, order doesn't matter
@@ -428,7 +415,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             currentMinSdk = config.minSdkVersion;
             // If the rotation is targeting a development release and this is the v3.1 signer, then
             // the minSdkVersion of this signer should equal the maxSdkVersion of the next signer;
-            // this ensures a package with the minSdkVersion set to the rotationMinSdkVersion has
+            // this ensures a package with the minSdkVersion set to the mRotationMinSdkVersion has
             // a v3.0 block with the min / max SDK version set to this same minSdkVersion from the
             // v3.1 block.
             if ((mRotationTargetsDevRelease && currentMinSdk < mMinSdkVersion)
@@ -466,7 +453,6 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             return null;
         }
 
-        int rotationMinSdkVersion = getDevReleaseRotationMinSdkVersion();
         List<ApkSigningBlockUtils.SignerConfig> v31SignerConfigs = new ArrayList<>();
         Iterator<ApkSigningBlockUtils.SignerConfig> v3SignerIterator =
                 v3SignerConfigs.iterator();
@@ -474,7 +460,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
             ApkSigningBlockUtils.SignerConfig signerConfig = v3SignerIterator.next();
             // All signing configs with a min SDK version that supports v3.1 should be used
             // in the v3.1 signing block and removed from the v3.0 block.
-            if (signerConfig.minSdkVersion >= rotationMinSdkVersion) {
+            if (signerConfig.minSdkVersion >= mRotationMinSdkVersion) {
                 v31SignerConfigs.add(signerConfig);
                 v3SignerIterator.remove();
             }
@@ -1105,7 +1091,7 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 .setRunnablesExecutor(mExecutor)
                 .setBlockId(V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID);
             if (signingLineageHas31Support()) {
-                builder.setRotationMinSdkVersion(getDevReleaseRotationMinSdkVersion());
+                builder.setRotationMinSdkVersion(mRotationMinSdkVersion);
             }
             v3SigningSchemeBlockAndDigests =
                 builder.build().generateApkSignatureSchemeV3BlockAndDigests();
@@ -1822,13 +1808,6 @@ public class DefaultApkSignerEngine implements ApkSignerEngine {
                 throw new IllegalStateException(
                         "Multiple signing certificates provided for use with APK Signature Scheme"
                                 + " v3 without an accompanying SigningCertificateLineage");
-            }
-
-            if (mRotationMinSdkVersion == MIN_SDK_WITH_V31_SUPPORT) {
-                // To ensure the APK will install on the currently released platform with the
-                // original signing key, also set the rotation to target a dev release to ensure
-                // the original signing key block targets up through 31.
-                mRotationTargetsDevRelease = true;
             }
 
             return new DefaultApkSignerEngine(
