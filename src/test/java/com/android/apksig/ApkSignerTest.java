@@ -1608,11 +1608,8 @@ public class ApkSignerTest {
         assertTrue(resultMinRotationT.isVerifiedUsingV31Scheme());
         assertResultContainsSigners(resultMinRotationT, true, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
             SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
-        // Since T is still under development, it is using the SDK version of the previous platform
-        // release, so to test v3.1 on T the rotation-min-sdk-version must target the SDK version
-        // of Sv2.
         assertV31SignerTargetsMinApiLevel(resultMinRotationT, SECOND_RSA_2048_SIGNER_RESOURCE_NAME,
-            V3SchemeConstants.DEV_RELEASE_ROTATION_MIN_SDK_VERSION);
+            AndroidSdkVersion.T);
         assertVerified(resultMinRotationU);
         assertTrue(resultMinRotationU.isVerifiedUsingV31Scheme());
         assertResultContainsSigners(resultMinRotationU, true, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
@@ -1703,13 +1700,10 @@ public class ApkSignerTest {
                         .setSourceStampSignerConfig(rsa2048OriginalSignerConfig));
         ApkVerifier.Result result = verify(signedApk, null);
 
-        // Since T is still under development, it is using the SDK version of the previous platform
-        // release, so to test v3.1 on T the rotation-min-sdk-version must target the SDK version
-        // of Sv2.
         assertResultContainsSigners(result, true, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
                 SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
         assertV31SignerTargetsMinApiLevel(result, SECOND_RSA_2048_SIGNER_RESOURCE_NAME,
-                V3SchemeConstants.DEV_RELEASE_ROTATION_MIN_SDK_VERSION);
+                AndroidSdkVersion.T);
         assertSourceStampVerified(signedApk, result);
     }
 
@@ -1787,40 +1781,6 @@ public class ApkSignerTest {
         assertFalse(resultRotationOnQ.isVerifiedUsingV31Scheme());
         assertResultContainsSigners(resultRotationOnQ, true, FIRST_RSA_2048_SIGNER_RESOURCE_NAME,
                 SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
-    }
-
-    @Test
-    public void testV31_rotationMinSdkVersionT_v30SignerTargetsAtLeast31() throws Exception {
-        // The T development release is currently using the API level of S until its own SDK is
-        // finalized. This requires apksig to sign an APK targeting T for rotation with a V3.1
-        // block that targets API level 31. By default, apksig will decrement the SDK version for
-        // the current signer block and use that as the maxSdkVersion for the next signer; however
-        // this means the original signing key will only target through 30 which would prevent
-        // an APK signed with V3.1 targeting T from installing on a device running S. This test
-        // ensures targeting T will use the rotation-targets-dev-release option so that the APK
-        // can still install on devices with an API level of 31.
-        List<ApkSigner.SignerConfig> rsa2048SignerConfigWithLineage =
-                Arrays.asList(
-                        getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME),
-                        getDefaultSignerConfigFromResources(SECOND_RSA_2048_SIGNER_RESOURCE_NAME));
-        SigningCertificateLineage lineage =
-                Resources.toSigningCertificateLineage(
-                        ApkSignerTest.class, LINEAGE_RSA_2048_2_SIGNERS_RESOURCE_NAME);
-
-        File signedApk = sign("original.apk",
-                new ApkSigner.Builder(rsa2048SignerConfigWithLineage)
-                        .setV1SigningEnabled(true)
-                        .setV2SigningEnabled(true)
-                        .setV3SigningEnabled(true)
-                        .setV4SigningEnabled(false)
-                        .setMinSdkVersionForRotation(V3SchemeConstants.MIN_SDK_WITH_V31_SUPPORT)
-                        .setSigningCertificateLineage(lineage));
-        ApkVerifier.Result result = verify(signedApk, null);
-
-        assertVerified(result);
-        assertTrue(result.isVerifiedUsingV31Scheme());
-        assertTrue(result.getV31SchemeSigners().get(0).getRotationTargetsDevRelease());
-        assertTrue(result.getV3SchemeSigners().get(0).getMaxSdkVersion() >= AndroidSdkVersion.S);
     }
 
     @Test
@@ -1908,7 +1868,7 @@ public class ApkSignerTest {
         assertTrue(result.isVerifiedUsingV31Scheme());
         assertEquals(AndroidSdkVersion.Sv2, result.getV3SchemeSigners().get(0).getMaxSdkVersion());
         assertV31SignerTargetsMinApiLevel(result, SECOND_RSA_2048_SIGNER_RESOURCE_NAME,
-                V3SchemeConstants.DEV_RELEASE_ROTATION_MIN_SDK_VERSION);
+                AndroidSdkVersion.T);
     }
 
     @Test
