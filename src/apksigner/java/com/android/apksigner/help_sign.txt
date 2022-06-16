@@ -50,6 +50,8 @@ certificate.
                       APK, if found. By default, it is set to false. It has no
                       effect if no source stamp signer config is provided.
 
+--align-file-size     Produces APK file sized as multiples of 4K bytes.
+
 --verity-enabled      Whether to enable the verity signature algorithm for the
                       v2 and v3 signature schemes.
 
