@@ -393,7 +393,11 @@ public class ApkSignerTest {
                         .setV2SigningEnabled(true)
                         .setV3SigningEnabled(true)
                         .setVerityEnabled(true));
-
+        signGolden(
+                "original.apk",
+                new File(outDir, "golden-file-size-aligned.apk"),
+                new ApkSigner.Builder(rsa2048SignerConfig)
+                        .setAlignFileSize(true));
         signGolden(
                 "pinsapp-unsigned.apk",
                 new File(outDir, "golden-pinsapp-signed.apk"),
@@ -712,6 +716,19 @@ public class ApkSignerTest {
                         .setV2SigningEnabled(true)
                         .setV3SigningEnabled(true)
                         .setVerityEnabled(true));
+    }
+
+    @Test
+    public void testAlignFileSize_Golden() throws Exception {
+        List<ApkSigner.SignerConfig> rsaSignerConfig =
+                Collections.singletonList(
+                        getDefaultSignerConfigFromResources(FIRST_RSA_2048_SIGNER_RESOURCE_NAME));
+        String goldenOutput = "golden-file-size-aligned.apk";
+        assertGolden(
+                "original.apk",
+                goldenOutput,
+                new ApkSigner.Builder(rsaSignerConfig).setAlignFileSize(true));
+        assertTrue(Resources.toByteArray(getClass(), goldenOutput).length % 4096 == 0);
     }
 
     @Test
