@@ -24,12 +24,14 @@ import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodePublicK
 
 import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
+import com.android.apksig.internal.apk.ApkSigningBlockUtils.SigningSchemeBlockAndDigests;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils.SignerConfig;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.RunnablesExecutor;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -44,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 
 /**
  * APK Signature Scheme v3 signer.
@@ -56,13 +59,37 @@ import java.util.Map;
  *     SigningCertificateLineage}, which enables an APK to change its signing certificate as long as
  *     it can prove the new siging certificate was signed by the old.
  */
-public abstract class V3SchemeSigner {
+public class V3SchemeSigner {
     public static final int APK_SIGNATURE_SCHEME_V3_BLOCK_ID =
             V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
     public static final int PROOF_OF_ROTATION_ATTR_ID = V3SchemeConstants.PROOF_OF_ROTATION_ATTR_ID;
 
-    /** Hidden constructor to prevent instantiation. */
-    private V3SchemeSigner() {}
+    private final RunnablesExecutor mExecutor;
+    private final DataSource mBeforeCentralDir;
+    private final DataSource mCentralDir;
+    private final DataSource mEocd;
+    private final List<SignerConfig> mSignerConfigs;
+    private final int mBlockId;
+    private final OptionalInt mOptionalRotationMinSdkVersion;
+    private final boolean mRotationTargetsDevRelease;
+
+    private V3SchemeSigner(DataSource beforeCentralDir,
+            DataSource centralDir,
+            DataSource eocd,
+            List<SignerConfig> signerConfigs,
+            RunnablesExecutor executor,
+            int blockId,
+            OptionalInt optionalRotationMinSdkVersion,
+            boolean rotationTargetsDevRelease) {
+        mBeforeCentralDir = beforeCentralDir;
+        mCentralDir = centralDir;
+        mEocd = eocd;
+        mSignerConfigs = signerConfigs;
+        mExecutor = executor;
+        mBlockId = blockId;
+        mOptionalRotationMinSdkVersion = optionalRotationMinSdkVersion;
+        mRotationTargetsDevRelease = rotationTargetsDevRelease;
+    }
 
     /**
      * Gets the APK Signature Scheme v3 signature algorithms to be used for signing an APK using the
@@ -129,21 +156,18 @@ public abstract class V3SchemeSigner {
         }
     }
 
-    public static ApkSigningBlockUtils.SigningSchemeBlockAndDigests
-            generateApkSignatureSchemeV3Block(
-                    RunnablesExecutor executor,
-                    DataSource beforeCentralDir,
-                    DataSource centralDir,
-                    DataSource eocd,
-                    List<SignerConfig> signerConfigs)
-                    throws IOException, InvalidKeyException, NoSuchAlgorithmException,
-                            SignatureException {
-        Pair<List<SignerConfig>, Map<ContentDigestAlgorithm, byte[]>> digestInfo =
-                ApkSigningBlockUtils.computeContentDigests(
-                        executor, beforeCentralDir, centralDir, eocd, signerConfigs);
-        return new ApkSigningBlockUtils.SigningSchemeBlockAndDigests(
-                generateApkSignatureSchemeV3Block(digestInfo.getFirst(), digestInfo.getSecond()),
-                digestInfo.getSecond());
+    public static SigningSchemeBlockAndDigests generateApkSignatureSchemeV3Block(
+            RunnablesExecutor executor,
+            DataSource beforeCentralDir,
+            DataSource centralDir,
+            DataSource eocd,
+            List<SignerConfig> signerConfigs)
+            throws IOException, InvalidKeyException, NoSuchAlgorithmException, SignatureException {
+        return new V3SchemeSigner.Builder(beforeCentralDir, centralDir, eocd, signerConfigs)
+                .setRunnablesExecutor(executor)
+                .setBlockId(V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID)
+                .build()
+                .generateApkSignatureSchemeV3BlockAndDigests();
     }
 
     public static byte[] generateV3SignerAttribute(
@@ -162,14 +186,62 @@ public abstract class V3SchemeSigner {
         return result.array();
     }
 
-    private static Pair<byte[], Integer> generateApkSignatureSchemeV3Block(
-            List<SignerConfig> signerConfigs, Map<ContentDigestAlgorithm, byte[]> contentDigests)
+    private static byte[] generateV3RotationMinSdkVersionStrippingProtectionAttribute(
+            int rotationMinSdkVersion) {
+        // FORMAT (little endian):
+        // * length-prefixed bytes: attribute pair
+        //   * uint32: ID
+        //   * bytes: value - int32 representing minimum SDK version for rotation
+        int payloadSize = 4 + 4 + 4;
+        ByteBuffer result = ByteBuffer.allocate(payloadSize);
+        result.order(ByteOrder.LITTLE_ENDIAN);
+        result.putInt(payloadSize - 4);
+        result.putInt(V3SchemeConstants.ROTATION_MIN_SDK_VERSION_ATTR_ID);
+        result.putInt(rotationMinSdkVersion);
+        return result.array();
+    }
+
+    private static byte[] generateV31RotationTargetsDevReleaseAttribute() {
+        // FORMAT (little endian):
+        // * length-prefixed bytes: attribute pair
+        //   * uint32: ID
+        //   * bytes: value - No value is used for this attribute
+        int payloadSize = 4 + 4;
+        ByteBuffer result = ByteBuffer.allocate(payloadSize);
+        result.order(ByteOrder.LITTLE_ENDIAN);
+        result.putInt(payloadSize - 4);
+        result.putInt(V3SchemeConstants.ROTATION_ON_DEV_RELEASE_ATTR_ID);
+        return result.array();
+    }
+
+    /**
+     * Generates and returns a new {@link SigningSchemeBlockAndDigests} containing the V3.x
+     * signing scheme block and digests based on the parameters provided to the {@link Builder}.
+     *
+     * @throws IOException if an I/O error occurs
+     * @throws NoSuchAlgorithmException if a required cryptographic algorithm implementation is
+     *         missing
+     * @throws InvalidKeyException if the X.509 encoded form of the public key cannot be obtained
+     * @throws SignatureException if an error occurs when computing digests or generating
+     *         signatures
+     */
+    public SigningSchemeBlockAndDigests generateApkSignatureSchemeV3BlockAndDigests()
+            throws IOException, InvalidKeyException, NoSuchAlgorithmException, SignatureException {
+        Pair<List<SignerConfig>, Map<ContentDigestAlgorithm, byte[]>> digestInfo =
+                ApkSigningBlockUtils.computeContentDigests(
+                        mExecutor, mBeforeCentralDir, mCentralDir, mEocd, mSignerConfigs);
+        return new SigningSchemeBlockAndDigests(
+                generateApkSignatureSchemeV3Block(digestInfo.getSecond()), digestInfo.getSecond());
+    }
+
+    private Pair<byte[], Integer> generateApkSignatureSchemeV3Block(
+            Map<ContentDigestAlgorithm, byte[]> contentDigests)
             throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
         // FORMAT:
         // * length-prefixed sequence of length-prefixed signer blocks.
-        List<byte[]> signerBlocks = new ArrayList<>(signerConfigs.size());
+        List<byte[]> signerBlocks = new ArrayList<>(mSignerConfigs.size());
         int signerNumber = 0;
-        for (SignerConfig signerConfig : signerConfigs) {
+        for (SignerConfig signerConfig : mSignerConfigs) {
             signerNumber++;
             byte[] signerBlock;
             try {
@@ -187,10 +259,10 @@ public abstract class V3SchemeSigner {
                         new byte[][] {
                             encodeAsSequenceOfLengthPrefixedElements(signerBlocks),
                         }),
-                V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID);
+                mBlockId);
     }
 
-    private static byte[] generateSignerBlock(
+    private byte[] generateSignerBlock(
             SignerConfig signerConfig, Map<ContentDigestAlgorithm, byte[]> contentDigests)
             throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
         if (signerConfig.certificates.isEmpty()) {
@@ -240,7 +312,7 @@ public abstract class V3SchemeSigner {
         return encodeSigner(signer);
     }
 
-    private static byte[] encodeSigner(V3SignatureSchemeBlock.Signer signer) {
+    private byte[] encodeSigner(V3SignatureSchemeBlock.Signer signer) {
         byte[] signedData = encodeAsLengthPrefixedElement(signer.signedData);
         byte[] signatures =
                 encodeAsLengthPrefixedElement(
@@ -269,7 +341,7 @@ public abstract class V3SchemeSigner {
         return result.array();
     }
 
-    private static byte[] encodeSignedData(V3SignatureSchemeBlock.SignedData signedData) {
+    private byte[] encodeSignedData(V3SignatureSchemeBlock.SignedData signedData) {
         byte[] digests =
                 encodeAsLengthPrefixedElement(
                         encodeAsSequenceOfLengthPrefixedPairsOfIntAndLengthPrefixedBytes(
@@ -305,11 +377,26 @@ public abstract class V3SchemeSigner {
         return result.array();
     }
 
-    private static byte[] generateAdditionalAttributes(SignerConfig signerConfig) {
-        if (signerConfig.mSigningCertificateLineage == null) {
-            return new byte[0];
+    private byte[] generateAdditionalAttributes(SignerConfig signerConfig) {
+        if (signerConfig.mSigningCertificateLineage != null) {
+            byte[] lineageAttr = generateV3SignerAttribute(signerConfig.mSigningCertificateLineage);
+            // If this rotation is not targeting a development release, or if this is not a v3.1
+            // signer block then just return the lineage attribute.
+            if (!mRotationTargetsDevRelease
+                    || mBlockId != V3SchemeConstants.APK_SIGNATURE_SCHEME_V31_BLOCK_ID) {
+                return lineageAttr;
+            }
+            byte[] devReleaseRotationAttr = generateV31RotationTargetsDevReleaseAttribute();
+            byte[] attributes = new byte[lineageAttr.length + devReleaseRotationAttr.length];
+            System.arraycopy(lineageAttr, 0, attributes, 0, lineageAttr.length);
+            System.arraycopy(devReleaseRotationAttr, 0, attributes, lineageAttr.length,
+                    devReleaseRotationAttr.length);
+            return attributes;
+        } else if (mOptionalRotationMinSdkVersion.isPresent()) {
+            return generateV3RotationMinSdkVersionStrippingProtectionAttribute(
+                    mOptionalRotationMinSdkVersion.getAsInt());
         }
-        return generateV3SignerAttribute(signerConfig.mSigningCertificateLineage);
+        return new byte[0];
     }
 
     private static final class V3SignatureSchemeBlock {
@@ -327,6 +414,99 @@ public abstract class V3SchemeSigner {
             public int minSdkVersion;
             public int maxSdkVersion;
             public byte[] additionalAttributes;
+        }
+    }
+
+    /** Builder of {@link V3SchemeSigner} instances. */
+    public static class Builder {
+        private final DataSource mBeforeCentralDir;
+        private final DataSource mCentralDir;
+        private final DataSource mEocd;
+        private final List<SignerConfig> mSignerConfigs;
+
+        private RunnablesExecutor mExecutor = RunnablesExecutor.MULTI_THREADED;
+        private int mBlockId = V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
+        private OptionalInt mOptionalRotationMinSdkVersion = OptionalInt.empty();
+        private boolean mRotationTargetsDevRelease = false;
+
+        /**
+         * Instantiates a new {@code Builder} with an APK's {@code beforeCentralDir}, {@code
+         * centralDir}, and {@code eocd}, along with a {@link List} of {@code signerConfigs} to
+         * be used to sign the APK.
+         */
+        public Builder(DataSource beforeCentralDir, DataSource centralDir, DataSource eocd,
+                List<SignerConfig> signerConfigs) {
+            mBeforeCentralDir = beforeCentralDir;
+            mCentralDir = centralDir;
+            mEocd = eocd;
+            mSignerConfigs = signerConfigs;
+        }
+
+        /**
+         * Sets the {@link RunnablesExecutor} to be used when computing the APK's content digests.
+         */
+        public Builder setRunnablesExecutor(RunnablesExecutor executor) {
+            mExecutor = executor;
+            return this;
+        }
+
+        /**
+         * Sets the {@code blockId} to be used for the V3 signature block.
+         *
+         * <p>This {@code V3SchemeSigner} currently supports the block IDs for the {@link
+         * V3SchemeConstants#APK_SIGNATURE_SCHEME_V3_BLOCK_ID v3.0} and {@link
+         * V3SchemeConstants#APK_SIGNATURE_SCHEME_V31_BLOCK_ID v3.1} signature schemes.
+         */
+        public Builder setBlockId(int blockId) {
+            mBlockId = blockId;
+            return this;
+        }
+
+        /**
+         * Sets the {@code rotationMinSdkVersion} to be written as an additional attribute in each
+         * signer's block.
+         *
+         * <p>This value provides stripping protection to ensure a v3.1 signing block with rotation
+         * is not modified or removed from the APK's signature block.
+         */
+        public Builder setRotationMinSdkVersion(int rotationMinSdkVersion) {
+            mOptionalRotationMinSdkVersion = OptionalInt.of(rotationMinSdkVersion);
+            return this;
+        }
+
+        /**
+         * Sets whether the minimum SDK version of a signer is intended to target a development
+         * release; this is primarily required after the T SDK is finalized, and an APK needs to
+         * target U during its development cycle for rotation.
+         *
+         * <p>This is only required after the T SDK is finalized since S and earlier releases do
+         * not know about the V3.1 block ID, but once T is released and work begins on U, U will
+         * use the SDK version of T during development. A signer with a minimum SDK version of T's
+         * SDK version along with setting {@code enabled} to true will allow an APK to use the
+         * rotated key on a device running U while causing this to be bypassed for T.
+         *
+         * <p><em>Note:</em>If the rotation-min-sdk-version is less than or equal to 32 (Android
+         * Sv2), then the rotated signing key will be used in the v3.0 signing block and this call
+         * will be a noop.
+         */
+        public Builder setRotationTargetsDevRelease(boolean enabled) {
+            mRotationTargetsDevRelease = enabled;
+            return this;
+        }
+
+        /**
+         * Returns a new {@link V3SchemeSigner} built with the configuration provided to this
+         * {@code Builder}.
+         */
+        public V3SchemeSigner build() {
+            return new V3SchemeSigner(mBeforeCentralDir,
+                    mCentralDir,
+                    mEocd,
+                    mSignerConfigs,
+                    mExecutor,
+                    mBlockId,
+                    mOptionalRotationMinSdkVersion,
+                    mRotationTargetsDevRelease);
         }
     }
 }

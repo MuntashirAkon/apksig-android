@@ -43,9 +43,16 @@ used in some situations on the platform even though the APK is now being signed
 by a newer signing certificate. By default, the new signer will have all
 capabilities, but the capability options can be specified for the new signer
 during rotation to act as a default level of trust when moving to a newer
-signing certificate.The capability options accept an optional boolean value of
+signing certificate. The capability options accept an optional boolean value of
 true or false; if this value is not specified then the option will default to
 true.
+
+Prior to Android 12, if multiple apps shared a common signer in their signing lineage
+with distinct capabilities assigned, a bug in the platform would cause the capabilities
+declared for this signer in one of the app's signing lineage to be assigned to this same
+common signer in the lineage of the rest of the apps. Apps that use the default capabilities,
+or that assign the same capabilities to a common signer in their lineage, are not impacted
+by this bug.
 
 
 --ks                  Load private key and certificate chain from the Java

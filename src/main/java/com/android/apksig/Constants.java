@@ -32,6 +32,7 @@ public class Constants {
     public static final int VERSION_JAR_SIGNATURE_SCHEME = 1;
     public static final int VERSION_APK_SIGNATURE_SCHEME_V2 = 2;
     public static final int VERSION_APK_SIGNATURE_SCHEME_V3 = 3;
+    public static final int VERSION_APK_SIGNATURE_SCHEME_V31 = 31;
     public static final int VERSION_APK_SIGNATURE_SCHEME_V4 = 4;
 
     public static final String MANIFEST_ENTRY_NAME = V1SchemeConstants.MANIFEST_ENTRY_NAME;
@@ -41,6 +42,8 @@ public class Constants {
 
     public static final int APK_SIGNATURE_SCHEME_V3_BLOCK_ID =
             V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
+    public static final int APK_SIGNATURE_SCHEME_V31_BLOCK_ID =
+            V3SchemeConstants.APK_SIGNATURE_SCHEME_V31_BLOCK_ID;
     public static final int PROOF_OF_ROTATION_ATTR_ID = V3SchemeConstants.PROOF_OF_ROTATION_ATTR_ID;
 
     public static final int V1_SOURCE_STAMP_BLOCK_ID =
