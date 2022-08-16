@@ -397,6 +397,21 @@ public class SigningCertificateLineageTest {
         assertLineageContainsExpectedSigners(lineageFromApk, expectedSigners);
     }
 
+    @Test
+    public void testLineageFromAPKWithV31BlockContainsExpectedSigners() throws Exception {
+        SignerConfig firstSigner = getSignerConfigFromResources(
+                FIRST_RSA_2048_SIGNER_RESOURCE_NAME);
+        SignerConfig secondSigner = getSignerConfigFromResources(
+                SECOND_RSA_2048_SIGNER_RESOURCE_NAME);
+        List<SignerConfig> expectedSigners = Arrays.asList(firstSigner, secondSigner);
+        DataSource apkDataSource = Resources.toDataSource(getClass(),
+                "v31-rsa-2048_2-tgt-34-1-tgt-28.apk");
+        SigningCertificateLineage lineageFromApk = SigningCertificateLineage.readFromApkDataSource(
+                apkDataSource);
+        assertLineageContainsExpectedSigners(lineageFromApk, expectedSigners);
+
+    }
+
     @Test(expected = ApkFormatException.class)
     public void testLineageFromAPKWithInvalidZipCDSizeFails() throws Exception {
         // This test verifies that attempting to read the lineage from an APK where the zip
@@ -535,7 +550,20 @@ public class SigningCertificateLineageTest {
         return lineage.spawnDescendant(oldSignerConfig, newSignerConfig);
     }
 
-    private void assertLineageContainsExpectedSigners(SigningCertificateLineage lineage,
+    /**
+     * Asserts the provided {@code lineage} contains the {@code expectedSigners} from the test's
+     * resources.
+     */
+    static void assertLineageContainsExpectedSigners(SigningCertificateLineage lineage,
+            String... expectedSigners) throws Exception {
+        List<SignerConfig> signers = new ArrayList<>();
+        for (String expectedSigner : expectedSigners) {
+            signers.add(getSignerConfigFromResources(expectedSigner));
+        }
+        assertLineageContainsExpectedSigners(lineage, signers);
+    }
+
+    private static void assertLineageContainsExpectedSigners(SigningCertificateLineage lineage,
             List<SignerConfig> signers) {
         assertEquals("The lineage does not contain the expected number of signers",
                 signers.size(), lineage.size());

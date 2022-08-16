@@ -24,4 +24,11 @@ public class SourceStampConstants {
     public static final int V2_SOURCE_STAMP_BLOCK_ID = 0x6dff800d;
     public static final String SOURCE_STAMP_CERTIFICATE_HASH_ZIP_ENTRY_NAME = "stamp-cert-sha256";
     public static final int PROOF_OF_ROTATION_ATTR_ID = 0x9d6303f7;
+    /**
+     * The source stamp timestamp attribute value is an 8-byte little-endian encoded long
+     * representing the epoch time in seconds when the stamp block was signed. The first 8 bytes
+     * of the attribute value buffer will be used to read the timestamp, and any additional buffer
+     * space will be ignored.
+     */
+    public static final int STAMP_TIME_ATTR_ID = 0xe43c5946;
 }

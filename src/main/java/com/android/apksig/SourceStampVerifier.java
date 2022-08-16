@@ -730,6 +730,8 @@ public class SourceStampVerifier {
             private final List<ApkVerificationIssue> mErrors = new ArrayList<>();
             private final List<ApkVerificationIssue> mWarnings = new ArrayList<>();
 
+            private final long mTimestamp;
+
             /*
              * Since this utility is intended just to verify the source stamp, and the source stamp
              * currently only logs warnings to prevent failing the APK signature verification, treat
@@ -744,6 +746,7 @@ public class SourceStampVerifier {
                 mCertificateLineage = result.certificateLineage;
                 mErrors.addAll(result.getErrors());
                 mWarnings.addAll(result.getWarnings());
+                mTimestamp = result.timestamp;
             }
 
             /**
@@ -793,6 +796,14 @@ public class SourceStampVerifier {
              */
             public List<ApkVerificationIssue> getWarnings() {
                 return mWarnings;
+            }
+
+            /**
+             * Returns the epoch timestamp in seconds representing the time this source stamp block
+             * was signed, or 0 if the timestamp is not available.
+             */
+            public long getTimestampEpochSeconds() {
+                return mTimestamp;
             }
         }
     }

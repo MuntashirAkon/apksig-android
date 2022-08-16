@@ -21,6 +21,7 @@ import static com.android.apksig.internal.apk.ApkSigningBlockUtilsLite.readLengt
 import static com.android.apksig.internal.apk.ApkSigningBlockUtilsLite.toHex;
 
 import com.android.apksig.ApkVerificationIssue;
+import com.android.apksig.Constants;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.internal.apk.ApkSignerInfo;
 import com.android.apksig.internal.apk.ApkSupportedSignature;
@@ -137,6 +138,13 @@ class SourceStampVerifier {
 
         for (Map.Entry<Integer, byte[]> signatureSchemeApkDigest :
                 signatureSchemeApkDigests.entrySet()) {
+            // TODO(b/192301300): Should the new v3.1 be included in the source stamp, or since a
+            // v3.0 block must always be present with a v3.1 block is it sufficient to just use the
+            // v3.0 block?
+            if (signatureSchemeApkDigest.getKey()
+                    == Constants.VERSION_APK_SIGNATURE_SCHEME_V31) {
+                continue;
+            }
             if (!signedSignatureSchemeData.containsKey(signatureSchemeApkDigest.getKey())) {
                 result.addWarning(ApkVerificationIssue.SOURCE_STAMP_NO_SIGNATURE);
                 return;
@@ -310,6 +318,15 @@ class SourceStampVerifier {
                 byte[] value = ByteBufferUtils.toByteArray(attribute);
                 if (id == SourceStampConstants.PROOF_OF_ROTATION_ATTR_ID) {
                     readStampCertificateLineage(value, sourceStampCertificate, result);
+                } else if (id == SourceStampConstants.STAMP_TIME_ATTR_ID) {
+                    long timestamp = ByteBuffer.wrap(value).order(
+                            ByteOrder.LITTLE_ENDIAN).getLong();
+                    if (timestamp > 0) {
+                        result.timestamp = timestamp;
+                    } else {
+                        result.addWarning(ApkVerificationIssue.SOURCE_STAMP_INVALID_TIMESTAMP,
+                                timestamp);
+                    }
                 } else {
                     result.addWarning(ApkVerificationIssue.SOURCE_STAMP_UNKNOWN_ATTRIBUTE, id);
                 }

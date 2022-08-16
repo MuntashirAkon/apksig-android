@@ -22,6 +22,7 @@ import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.SigningCertificateLineage.SignerCapabilities;
 import com.android.apksig.apk.ApkFormatException;
 import com.android.apksig.apk.MinSdkVersionException;
+import com.android.apksig.internal.apk.v3.V3SchemeConstants;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.DataSources;
 
@@ -48,6 +49,7 @@ import java.security.interfaces.ECKey;
 import java.security.interfaces.RSAKey;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 
 /**
@@ -62,6 +64,8 @@ public class ApkSignerTool {
     private static final String HELP_PAGE_VERIFY = "help_verify.txt";
     private static final String HELP_PAGE_ROTATE = "help_rotate.txt";
     private static final String HELP_PAGE_LINEAGE = "help_lineage.txt";
+    private static final String BEGIN_CERTIFICATE = "-----BEGIN CERTIFICATE-----";
+    private static final String END_CERTIFICATE = "-----END CERTIFICATE-----";
 
     private static MessageDigest sha256 = null;
     private static MessageDigest sha1 = null;
@@ -148,6 +152,8 @@ public class ApkSignerTool {
         int minSdkVersion = 1;
         boolean minSdkVersionSpecified = false;
         int maxSdkVersion = Integer.MAX_VALUE;
+        int rotationMinSdkVersion = V3SchemeConstants.DEFAULT_ROTATION_MIN_SDK_VERSION;
+        boolean rotationTargetsDevRelease = false;
         List<SignerParams> signers = new ArrayList<>(1);
         SignerParams signerParams = new SignerParams();
         SigningCertificateLineage lineage = null;
@@ -176,7 +182,13 @@ public class ApkSignerTool {
                 minSdkVersionSpecified = true;
             } else if ("max-sdk-version".equals(optionName)) {
                 maxSdkVersion = optionsParser.getRequiredIntValue("Maximum API Level");
-            } else if ("v1-signing-enabled".equals(optionName)) {
+            } else if ("rotation-min-sdk-version".equals(optionName)) {
+                rotationMinSdkVersion = optionsParser.getRequiredIntValue(
+                        "Minimum API Level for Rotation");
+            } else if ("rotation-targets-dev-release".equals(optionName)) {
+                rotationTargetsDevRelease = optionsParser.getOptionalBooleanValue(true);
+            }
+            else if ("v1-signing-enabled".equals(optionName)) {
                 v1SigningEnabled = optionsParser.getOptionalBooleanValue(true);
             } else if ("v2-signing-enabled".equals(optionName)) {
                 v2SigningEnabled = optionsParser.getOptionalBooleanValue(true);
@@ -366,7 +378,9 @@ public class ApkSignerTool {
                         .setVerityEnabled(verityEnabled)
                         .setV4ErrorReportingEnabled(v4SigningEnabled && v4SigningFlagFound)
                         .setDebuggableApkPermitted(debuggableApkPermitted)
-                        .setSigningCertificateLineage(lineage);
+                        .setSigningCertificateLineage(lineage)
+                        .setMinSdkVersionForRotation(rotationMinSdkVersion)
+                        .setRotationTargetsDevRelease(rotationTargetsDevRelease);
         if (minSdkVersionSpecified) {
             apkSignerBuilder.setMinSdkVersion(minSdkVersion);
         }
@@ -454,6 +468,7 @@ public class ApkSignerTool {
         int maxSdkVersion = Integer.MAX_VALUE;
         boolean maxSdkVersionSpecified = false;
         boolean printCerts = false;
+        boolean printCertsPem = false;
         boolean verbose = false;
         boolean warningsTreatedAsErrors = false;
         boolean verifySourceStamp = false;
@@ -472,6 +487,13 @@ public class ApkSignerTool {
                 maxSdkVersionSpecified = true;
             } else if ("print-certs".equals(optionName)) {
                 printCerts = optionsParser.getOptionalBooleanValue(true);
+            } else if ("print-certs-pem".equals(optionName)) {
+                printCertsPem = optionsParser.getOptionalBooleanValue(true);
+                // If the PEM output of the certs is requested, this implicitly implies the
+                // cert details should be printed.
+                if (printCertsPem && !printCerts) {
+                    printCerts = true;
+                }
             } else if (("v".equals(optionName)) || ("verbose".equals(optionName))) {
                 verbose = optionsParser.getOptionalBooleanValue(true);
             } else if ("Werr".equals(optionName)) {
@@ -572,6 +594,9 @@ public class ApkSignerTool {
                         "Verified using v3 scheme (APK Signature Scheme v3): "
                                 + result.isVerifiedUsingV3Scheme());
                 System.out.println(
+                        "Verified using v3.1 scheme (APK Signature Scheme v3.1): "
+                                + result.isVerifiedUsingV31Scheme());
+                System.out.println(
                         "Verified using v4 scheme (APK Signature Scheme v4): "
                                 + result.isVerifiedUsingV4Scheme());
                 System.out.println("Verified for SourceStamp: " + result.isSourceStampVerified());
@@ -580,14 +605,37 @@ public class ApkSignerTool {
                 }
             }
             if (printCerts) {
-                int signerNumber = 0;
-                for (X509Certificate signerCert : signerCerts) {
-                    signerNumber++;
-                    printCertificate(signerCert, "Signer #" + signerNumber, verbose);
+                // The v3.1 signature scheme allows key rotation to target T+ while the original
+                // signing key can still be used with v3.0; if a v3.1 block is present then also
+                // include the target SDK versions for both rotation and the original signing key.
+                if (result.isVerifiedUsingV31Scheme()) {
+                    for (ApkVerifier.Result.V3SchemeSignerInfo signer :
+                            result.getV31SchemeSigners()) {
+
+                        printCertificate(signer.getCertificate(),
+                                "Signer (minSdkVersion=" + signer.getMinSdkVersion()
+                                        + (signer.getRotationTargetsDevRelease()
+                                        ? " (dev release=true)" : "")
+                                        + ", maxSdkVersion=" + signer.getMaxSdkVersion() + ")",
+                                verbose, printCertsPem);
+                    }
+                    for (ApkVerifier.Result.V3SchemeSignerInfo signer : result.getV3SchemeSigners()) {
+                        printCertificate(signer.getCertificate(),
+                                "Signer (minSdkVersion=" + signer.getMinSdkVersion()
+                                        + ", maxSdkVersion=" + signer.getMaxSdkVersion() + ")",
+                                verbose, printCertsPem);
+                    }
+                } else {
+                    int signerNumber = 0;
+                    for (X509Certificate signerCert : signerCerts) {
+                        signerNumber++;
+                        printCertificate(signerCert, "Signer #" + signerNumber, verbose,
+                                printCertsPem);
+                    }
                 }
                 if (sourceStampInfo != null) {
                     printCertificate(sourceStampInfo.getCertificate(), "Source Stamp Signer",
-                            verbose);
+                            verbose, printCertsPem);
                 }
             }
         } else {
@@ -636,6 +684,20 @@ public class ApkSignerTool {
                 warningsEncountered = true;
                 warningsOut.println(
                         "WARNING: APK Signature Scheme v3 " + signerName + ": " + warning);
+            }
+        }
+        for (ApkVerifier.Result.V3SchemeSignerInfo signer : result.getV31SchemeSigners()) {
+            String signerName = "signer #" + (signer.getIndex() + 1) + "(minSdkVersion="
+                    + signer.getMinSdkVersion() + ", maxSdkVersion=" + signer.getMaxSdkVersion()
+                    + ")";
+            for (ApkVerifier.IssueWithParams error : signer.getErrors()) {
+                System.err.println(
+                        "ERROR: APK Signature Scheme v3.1 " + signerName + ": " + error);
+            }
+            for (ApkVerifier.IssueWithParams warning : signer.getWarnings()) {
+                warningsEncountered = true;
+                warningsOut.println(
+                        "WARNING: APK Signature Scheme v3.1 " + signerName + ": " + warning);
             }
         }
 
@@ -798,6 +860,7 @@ public class ApkSignerTool {
 
         boolean verbose = false;
         boolean printCerts = false;
+        boolean printCertsPem = false;
         boolean lineageUpdated = false;
         File inputKeyLineage = null;
         File outputKeyLineage = null;
@@ -819,6 +882,13 @@ public class ApkSignerTool {
                 verbose = optionsParser.getOptionalBooleanValue(true);
             } else if ("print-certs".equals(optionName)) {
                 printCerts = optionsParser.getOptionalBooleanValue(true);
+            } else if ("print-certs-pem".equals(optionName)) {
+                printCertsPem = optionsParser.getOptionalBooleanValue(true);
+                // If the PEM output of the certs is requested, this implicitly implies the
+                // cert details should be printed.
+                if (printCertsPem && !printCerts) {
+                    printCerts = true;
+                }
             } else {
                 throw new ParameterException(
                         "Unsupported option: " + optionsParser.getOptionOriginalForm()
@@ -879,7 +949,8 @@ public class ApkSignerTool {
             for (int i = 0; i < signingCerts.size(); i++) {
                 X509Certificate signerCert = signingCerts.get(i);
                 SignerCapabilities signerCapabilities = lineage.getSignerCapabilities(signerCert);
-                printCertificate(signerCert, "Signer #" + (i + 1) + " in lineage", verbose);
+                printCertificate(signerCert, "Signer #" + (i + 1) + " in lineage", verbose,
+                        printCertsPem);
                 printCapabilities(signerCapabilities);
             }
         }
@@ -1011,19 +1082,29 @@ public class ApkSignerTool {
     }
 
     /**
+     * @see #printCertificate(X509Certificate, String, boolean, boolean)
+     */
+    public static void printCertificate(X509Certificate cert, String name, boolean verbose)
+            throws NoSuchAlgorithmException, CertificateEncodingException {
+        printCertificate(cert, name, verbose, false);
+    }
+
+    /**
      * Prints details from the provided certificate to stdout.
      *
      * @param cert    the certificate to be displayed.
      * @param name    the name to be used to identify the certificate.
      * @param verbose boolean indicating whether public key details from the certificate should be
      *                displayed.
+     * @param pemOutput boolean indicating whether the PEM encoding of the certificate should be
+     *                  displayed.
      * @throws NoSuchAlgorithmException     if an instance of MD5, SHA-1, or SHA-256 cannot be
      *                                      obtained.
      * @throws CertificateEncodingException if an error is encountered when encoding the
      *                                      certificate.
      */
-    public static void printCertificate(X509Certificate cert, String name, boolean verbose)
-            throws NoSuchAlgorithmException, CertificateEncodingException {
+    public static void printCertificate(X509Certificate cert, String name, boolean verbose,
+            boolean pemOutput) throws NoSuchAlgorithmException, CertificateEncodingException {
         if (cert == null) {
             throw new NullPointerException("cert == null");
         }
@@ -1067,6 +1148,18 @@ public class ApkSignerTool {
                     sha1.digest(encodedKey)));
             System.out.println(
                     name + " public key MD5 digest: " + HexEncoding.encode(md5.digest(encodedKey)));
+        }
+
+        if (pemOutput) {
+            System.out.println(BEGIN_CERTIFICATE);
+            final int lineWidth = 64;
+            String pemEncodedCert = Base64.getEncoder().encodeToString(cert.getEncoded());
+            for (int i = 0; i < pemEncodedCert.length(); i += lineWidth) {
+                System.out.println(pemEncodedCert.substring(i, i + lineWidth > pemEncodedCert.length()
+                        ? pemEncodedCert.length()
+                        : i + lineWidth));
+            }
+            System.out.println(END_CERTIFICATE);
         }
     }
 
