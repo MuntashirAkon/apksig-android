@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2022 Muntashir Al-Islam
  * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +18,7 @@
 package com.android.apksig.internal.asn1;
 
 import com.android.apksig.internal.asn1.ber.BerEncoding;
+import com.android.apksig.internal.util.ClassCompat;
 
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Field;
@@ -53,7 +55,7 @@ public final class Asn1DerEncoder {
      */
     public static byte[] encode(Object container) throws Asn1EncodingException {
         Class<?> containerClass = container.getClass();
-        Asn1Class containerAnnotation = containerClass.getDeclaredAnnotation(Asn1Class.class);
+        Asn1Class containerAnnotation = ClassCompat.getDeclaredAnnotation(containerClass, Asn1Class.class);
         if (containerAnnotation == null) {
             throw new Asn1EncodingException(
                     containerClass.getName() + " not annotated with " + Asn1Class.class.getName());
@@ -216,7 +218,7 @@ public final class Asn1DerEncoder {
         Field[] declaredFields = containerClass.getDeclaredFields();
         List<AnnotatedField> result = new ArrayList<>(declaredFields.length);
         for (Field field : declaredFields) {
-            Asn1Field annotation = field.getDeclaredAnnotation(Asn1Field.class);
+            Asn1Field annotation = field.getAnnotation(Asn1Field.class);
             if (annotation == null) {
                 continue;
             }
@@ -561,7 +563,7 @@ public final class Asn1DerEncoder {
                 case SEQUENCE:
                 {
                     Asn1Class containerAnnotation =
-                            sourceType.getDeclaredAnnotation(Asn1Class.class);
+                            ClassCompat.getDeclaredAnnotation(sourceType, Asn1Class.class);
                     if ((containerAnnotation != null)
                             && (containerAnnotation.type() == Asn1Type.SEQUENCE)) {
                         return toSequence(source);
@@ -571,7 +573,7 @@ public final class Asn1DerEncoder {
                 case CHOICE:
                 {
                     Asn1Class containerAnnotation =
-                            sourceType.getDeclaredAnnotation(Asn1Class.class);
+                            ClassCompat.getDeclaredAnnotation(sourceType, Asn1Class.class);
                     if ((containerAnnotation != null)
                             && (containerAnnotation.type() == Asn1Type.CHOICE)) {
                         return toChoice(source);

@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2022 Muntashir Al-Islam
  * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +22,7 @@ import com.android.apksig.internal.asn1.ber.BerDataValueFormatException;
 import com.android.apksig.internal.asn1.ber.BerDataValueReader;
 import com.android.apksig.internal.asn1.ber.BerEncoding;
 import com.android.apksig.internal.asn1.ber.ByteBufferBerDataValueReader;
+import com.android.apksig.internal.util.ClassCompat;
 import com.android.apksig.internal.util.ByteBufferUtils;
 
 import java.lang.reflect.Field;
@@ -311,7 +313,7 @@ public final class Asn1BerParser {
 
     private static Asn1Type getContainerAsn1Type(Class<?> containerClass)
             throws Asn1DecodingException {
-        Asn1Class containerAnnotation = containerClass.getDeclaredAnnotation(Asn1Class.class);
+        Asn1Class containerAnnotation = ClassCompat.getDeclaredAnnotation(containerClass, Asn1Class.class);
         if (containerAnnotation == null) {
             throw new Asn1DecodingException(
                     containerClass.getName() + " is not annotated with "
@@ -332,7 +334,10 @@ public final class Asn1BerParser {
 
     private static Class<?> getElementType(Field field)
             throws Asn1DecodingException, ClassNotFoundException {
-        String type = field.getGenericType().getTypeName();
+        String type;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            type = field.getGenericType().getTypeName();
+        } else type = field.getGenericType().toString();
         int delimiterIndex =  type.indexOf('<');
         if (delimiterIndex == -1) {
             throw new Asn1DecodingException("Not a container type: " + field.getGenericType());
@@ -530,7 +535,7 @@ public final class Asn1BerParser {
         Field[] declaredFields = containerClass.getDeclaredFields();
         List<AnnotatedField> result = new ArrayList<>(declaredFields.length);
         for (Field field : declaredFields) {
-            Asn1Field annotation = field.getDeclaredAnnotation(Asn1Field.class);
+            Asn1Field annotation = field.getAnnotation(Asn1Field.class);
             if (annotation == null) {
                 continue;
             }
@@ -639,13 +644,13 @@ public final class Asn1BerParser {
                         } else {
                             result = true;
                         }
-                        return (T) new Boolean(result);
+                        return (T) Boolean.valueOf(result);
                     }
                     break;
                 case SEQUENCE:
                 {
                     Asn1Class containerAnnotation =
-                            targetType.getDeclaredAnnotation(Asn1Class.class);
+                            ClassCompat.getDeclaredAnnotation(targetType, Asn1Class.class);
                     if ((containerAnnotation != null)
                             && (containerAnnotation.type() == Asn1Type.SEQUENCE)) {
                         return parseSequence(dataValue, targetType);
@@ -655,7 +660,7 @@ public final class Asn1BerParser {
                 case CHOICE:
                 {
                     Asn1Class containerAnnotation =
-                            targetType.getDeclaredAnnotation(Asn1Class.class);
+                            ClassCompat.getDeclaredAnnotation(targetType, Asn1Class.class);
                     if ((containerAnnotation != null)
                             && (containerAnnotation.type() == Asn1Type.CHOICE)) {
                         return parseChoice(dataValue, targetType);
