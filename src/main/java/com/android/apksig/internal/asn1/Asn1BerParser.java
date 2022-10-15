@@ -22,7 +22,7 @@ import com.android.apksig.internal.asn1.ber.BerDataValueFormatException;
 import com.android.apksig.internal.asn1.ber.BerDataValueReader;
 import com.android.apksig.internal.asn1.ber.BerEncoding;
 import com.android.apksig.internal.asn1.ber.ByteBufferBerDataValueReader;
-import com.android.apksig.internal.util.ClassCompat;
+import com.android.apksig.internal.compat.ClassCompat;
 import com.android.apksig.internal.util.ByteBufferUtils;
 
 import java.lang.reflect.Field;

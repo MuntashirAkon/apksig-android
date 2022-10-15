@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.apksig.internal.util;
+package com.android.apksig.internal.compat;
 
 import java.lang.annotation.Annotation;
 import java.util.Objects;

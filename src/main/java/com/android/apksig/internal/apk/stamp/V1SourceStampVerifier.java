@@ -133,7 +133,7 @@ public abstract class V1SourceStampVerifier {
                 apkContentDigests.entrySet()) {
             digests.add(Pair.of(apkContentDigest.getKey().getId(), apkContentDigest.getValue()));
         }
-        Collections.sort(digests, Comparator.comparing(Pair::getFirst));
+        Collections.sort(digests, (o1, o2) -> o1.getFirst().compareTo(o2.getFirst()));
         return digests;
     }
 }

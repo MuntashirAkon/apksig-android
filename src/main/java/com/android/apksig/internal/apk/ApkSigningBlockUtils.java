@@ -30,6 +30,7 @@ import com.android.apksig.internal.asn1.Asn1DecodingException;
 import com.android.apksig.internal.asn1.Asn1DerEncoder;
 import com.android.apksig.internal.asn1.Asn1EncodingException;
 import com.android.apksig.internal.asn1.Asn1OpaqueObject;
+import com.android.apksig.internal.compat.SupplierCompat;
 import com.android.apksig.internal.pkcs7.AlgorithmIdentifier;
 import com.android.apksig.internal.pkcs7.ContentInfo;
 import com.android.apksig.internal.pkcs7.EncapsulatedContentInfo;
@@ -82,7 +83,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 
 import javax.security.auth.x500.X500Principal;
 
@@ -513,7 +513,7 @@ public class ApkSigningBlockUtils {
      * are NOT concatenated. Only the next call to get() will fetch from the
      * next {@link DataSource} in the input {@link DataSource} array.
      */
-    private static class ChunkSupplier implements Supplier<ChunkSupplier.Chunk> {
+    private static class ChunkSupplier implements SupplierCompat<ChunkSupplier.Chunk> {
         private final DataSource[] dataSources;
         private final int[] chunkCounts;
         private final int totalChunkCount;

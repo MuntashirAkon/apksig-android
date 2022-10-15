@@ -18,7 +18,7 @@
 package com.android.apksig.internal.asn1;
 
 import com.android.apksig.internal.asn1.ber.BerEncoding;
-import com.android.apksig.internal.util.ClassCompat;
+import com.android.apksig.internal.compat.ClassCompat;
 
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Field;

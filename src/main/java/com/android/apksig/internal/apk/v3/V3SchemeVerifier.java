@@ -28,6 +28,7 @@ import com.android.apksig.internal.apk.ApkSigningBlockUtils.SignatureNotFoundExc
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
 import com.android.apksig.internal.apk.SignatureInfo;
+import com.android.apksig.internal.compat.OptionalIntCompat;
 import com.android.apksig.internal.util.ByteBufferUtils;
 import com.android.apksig.internal.util.GuaranteedEncodedFormX509Certificate;
 import com.android.apksig.internal.util.X509CertificateUtils;
@@ -54,7 +55,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.OptionalInt;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -77,7 +77,7 @@ public class V3SchemeVerifier {
     private final int mMinSdkVersion;
     private final int mMaxSdkVersion;
     private final int mBlockId;
-    private final OptionalInt mOptionalRotationMinSdkVersion;
+    private final OptionalIntCompat mOptionalRotationMinSdkVersion;
     private final boolean mFullVerification;
 
     private ByteBuffer mApkSignatureSchemeV3Block;
@@ -91,7 +91,7 @@ public class V3SchemeVerifier {
             int minSdkVersion,
             int maxSdkVersion,
             int blockId,
-            OptionalInt optionalRotationMinSdkVersion,
+            OptionalIntCompat optionalRotationMinSdkVersion,
             boolean fullVerification) {
         mExecutor = executor;
         mApk = apk;
@@ -618,7 +618,7 @@ public class V3SchemeVerifier {
         private int mMaxSdkVersion;
         private int mBlockId = V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
         private boolean mFullVerification = true;
-        private OptionalInt mOptionalRotationMinSdkVersion = OptionalInt.empty();
+        private OptionalIntCompat mOptionalRotationMinSdkVersion = OptionalIntCompat.empty();
 
         /**
          * Instantiates a new {@code Builder} for a {@code V3SchemeVerifier} that can be used to
@@ -674,7 +674,7 @@ public class V3SchemeVerifier {
          * v3.1 signing block, the minimum SDK version from all the signers should be used.
          */
         public Builder setRotationMinSdkVersion(int rotationMinSdkVersion) {
-            mOptionalRotationMinSdkVersion = OptionalInt.of(rotationMinSdkVersion);
+            mOptionalRotationMinSdkVersion = OptionalIntCompat.of(rotationMinSdkVersion);
             return this;
         }
 

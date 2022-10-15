@@ -216,8 +216,12 @@ public class ApkVerifier {
                             .build()
                             .verify();
                     foundApkSigSchemeIds.add(ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V31);
-                    rotationMinSdkVersion = v31Result.signers.stream().mapToInt(
-                            signer -> signer.minSdkVersion).min().orElse(0);
+                    rotationMinSdkVersion = v31Result.signers.isEmpty() ? 0 : Integer.MAX_VALUE;
+                    for (ApkSigningBlockUtils.Result.SignerInfo signerInfo : v31Result.signers) {
+                        if (rotationMinSdkVersion > signerInfo.minSdkVersion) {
+                            rotationMinSdkVersion = signerInfo.minSdkVersion;
+                        }
+                    }
                     result.mergeFrom(v31Result);
                     signatureSchemeApkContentDigests.put(
                             ApkSigningBlockUtils.VERSION_APK_SIGNATURE_SCHEME_V31,
@@ -1597,9 +1601,14 @@ public class ApkVerifier {
                 mContentDigests = result.contentDigests;
                 mMinSdkVersion = result.minSdkVersion;
                 mMaxSdkVersion = result.maxSdkVersion;
-                mRotationTargetsDevRelease = result.additionalAttributes.stream().mapToInt(
-                        attribute -> attribute.getId()).anyMatch(
-                        attrId -> attrId == V3SchemeConstants.ROTATION_ON_DEV_RELEASE_ATTR_ID);
+                boolean rotationTargetsDevRelease = false;
+                for (ApkSigningBlockUtils.Result.SignerInfo.AdditionalAttribute attribute : result.additionalAttributes) {
+                    if (attribute.getId() == V3SchemeConstants.ROTATION_ON_DEV_RELEASE_ATTR_ID) {
+                        rotationTargetsDevRelease = true;
+                        break;
+                    }
+                }
+                mRotationTargetsDevRelease = rotationTargetsDevRelease;
             }
 
             /**

@@ -21,7 +21,6 @@ import com.android.apksig.util.DataSource;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 
 /** Pseudo {@link DataSource} that chains the given {@link DataSource} as a continuous one. */
 public class ChainedDataSource implements DataSource {
@@ -31,7 +30,11 @@ public class ChainedDataSource implements DataSource {
 
     public ChainedDataSource(DataSource... sources) {
         mSources = sources;
-        mTotalSize = Arrays.stream(sources).mapToLong(src -> src.size()).sum();
+        long size = 0L;
+        for (DataSource source : sources) {
+            size += source.size();
+        }
+        mTotalSize = size;
     }
 
     @Override

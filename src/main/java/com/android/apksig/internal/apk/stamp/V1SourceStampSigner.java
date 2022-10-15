@@ -65,7 +65,7 @@ public abstract class V1SourceStampSigner {
         for (Map.Entry<ContentDigestAlgorithm, byte[]> digest : digestInfo.entrySet()) {
             digests.add(Pair.of(digest.getKey().getId(), digest.getValue()));
         }
-        Collections.sort(digests, Comparator.comparing(Pair::getFirst));
+        Collections.sort(digests, (o1, o2) -> o1.getFirst().compareTo(o2.getFirst()));
 
         SourceStampBlock sourceStampBlock = new SourceStampBlock();
 

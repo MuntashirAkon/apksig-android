@@ -24,10 +24,11 @@ import static com.android.apksig.internal.apk.ApkSigningBlockUtils.encodePublicK
 
 import com.android.apksig.SigningCertificateLineage;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils;
-import com.android.apksig.internal.apk.ApkSigningBlockUtils.SigningSchemeBlockAndDigests;
 import com.android.apksig.internal.apk.ApkSigningBlockUtils.SignerConfig;
+import com.android.apksig.internal.apk.ApkSigningBlockUtils.SigningSchemeBlockAndDigests;
 import com.android.apksig.internal.apk.ContentDigestAlgorithm;
 import com.android.apksig.internal.apk.SignatureAlgorithm;
+import com.android.apksig.internal.compat.OptionalIntCompat;
 import com.android.apksig.internal.util.Pair;
 import com.android.apksig.util.DataSource;
 import com.android.apksig.util.RunnablesExecutor;
@@ -46,7 +47,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalInt;
 
 /**
  * APK Signature Scheme v3 signer.
@@ -70,7 +70,7 @@ public class V3SchemeSigner {
     private final DataSource mEocd;
     private final List<SignerConfig> mSignerConfigs;
     private final int mBlockId;
-    private final OptionalInt mOptionalRotationMinSdkVersion;
+    private final OptionalIntCompat mOptionalRotationMinSdkVersion;
     private final boolean mRotationTargetsDevRelease;
 
     private V3SchemeSigner(DataSource beforeCentralDir,
@@ -79,7 +79,7 @@ public class V3SchemeSigner {
             List<SignerConfig> signerConfigs,
             RunnablesExecutor executor,
             int blockId,
-            OptionalInt optionalRotationMinSdkVersion,
+            OptionalIntCompat optionalRotationMinSdkVersion,
             boolean rotationTargetsDevRelease) {
         mBeforeCentralDir = beforeCentralDir;
         mCentralDir = centralDir;
@@ -426,7 +426,7 @@ public class V3SchemeSigner {
 
         private RunnablesExecutor mExecutor = RunnablesExecutor.MULTI_THREADED;
         private int mBlockId = V3SchemeConstants.APK_SIGNATURE_SCHEME_V3_BLOCK_ID;
-        private OptionalInt mOptionalRotationMinSdkVersion = OptionalInt.empty();
+        private OptionalIntCompat mOptionalRotationMinSdkVersion = OptionalIntCompat.empty();
         private boolean mRotationTargetsDevRelease = false;
 
         /**
@@ -470,7 +470,7 @@ public class V3SchemeSigner {
          * is not modified or removed from the APK's signature block.
          */
         public Builder setRotationMinSdkVersion(int rotationMinSdkVersion) {
-            mOptionalRotationMinSdkVersion = OptionalInt.of(rotationMinSdkVersion);
+            mOptionalRotationMinSdkVersion = OptionalIntCompat.of(rotationMinSdkVersion);
             return this;
         }
 
